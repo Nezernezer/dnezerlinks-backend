@@ -1,0 +1,53 @@
+
+<script>
+const userEmail = localStorage.getItem('userEmail'); 
+
+async function fetchMyVirtualAccount() {
+    console.log("Fetching account for:", userEmail);
+    try {
+        const response = await fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: userEmail })
+        });
+
+        const data = await response.json();
+
+        if (data.account_number) {
+            // Update the UI with real data from Render/Billstack
+            if(document.getElementById('bankName')) document.getElementById('bankName').innerText = data.bank_name;
+            if(document.getElementById('accNumber')) document.getElementById('accNumber').innerText = data.account_number;
+            if(document.getElementById('accName')) document.getElementById('accName').innerText = data.account_name;
+        } else {
+            console.error("Backend error:", data.error);
+        }
+    } catch (error) {
+        console.error("Connection to Render failed:", error);
+    }
+}
+
+if (userEmail) {
+    fetchMyVirtualAccount();
+} else {
+    console.warn("No userEmail found in localStorage. Please log in.");
+}
+</script>
+<script>
+const userEmail = localStorage.getItem('userEmail'); 
+async function loadAcc() {
+    try {
+        const res = await fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: userEmail })
+        });
+        const data = await res.json();
+        if (data.account_number) {
+            document.getElementById('bankName').innerText = data.bank_name;
+            document.getElementById('accNumber').innerText = data.account_number;
+            document.getElementById('accName').innerText = data.account_name;
+        }
+    } catch (e) { console.log("Offline or Loading..."); }
+}
+if (userEmail) loadAcc();
+</script>
