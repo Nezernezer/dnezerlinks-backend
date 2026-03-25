@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dnezerlinks | Access</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --main: #0d47a1; --warn: #f57c00; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
+        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 380px; }
+        h2 { color: var(--main); text-align: center; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: var(--main); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:disabled { opacity: 0.5; }
+        .link { text-align: center; font-size: 13px; color: var(--main); cursor: pointer; margin-top: 15px; font-weight: 600; }
+        .hidden { display: none; }
+        .loading { width: 100%; height: 3px; background: #eee; margin: 10px 0; display: none; overflow: hidden; }
+        .bar { width: 100%; height: 100%; background: var(--warn); animation: pulse 1.2s infinite linear; }
+        @keyframes pulse { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    </style>
+</head>
+<body>
+<div class="card" id="loginBox">
+    <h2>Dnezerlinks</h2>
+    <input type="email" id="lEmail" placeholder="Email">
+    <input type="password" id="lPass" placeholder="Password">
+    <div class="loading" id="lLoad"><div class="bar"></div></div>
+    <button id="lBtn" onclick="handleLogin()">Login</button>
+    <div class="link" onclick="toggle('regBox')">Create Account</div>
+    <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888;">Forgot Password?</div>
+</div>
+<div class="card hidden" id="regBox">
+    <h2>Join Us</h2>
+    <input type="text" id="rName" placeholder="Full Name">
+    <input type="tel" id="rPhone" placeholder="Phone Number">
+    <input type="text" id="rAddress" placeholder="Home Address">
+    <input type="email" id="rEmail" placeholder="Email">
+    <input type="password" id="rPass" placeholder="Password (min 6 chars)">
+    <div class="loading" id="rLoad"><div class="bar"></div></div>
+    <button id="rBtn" onclick="handleRegister()">Sign Up</button>
+    <div class="link" onclick="toggle('loginBox')">Back to Login</div>
+</div>
+<div class="card hidden" id="forgotBox">
+    <h2>Reset</h2>
+    <input type="email" id="fEmail" placeholder="Your Email">
+    <div class="loading" id="fLoad"><div class="bar"></div></div>
+    <button onclick="handleReset()">Send Reset Link</button>
+    <div class="link" onclick="toggle('loginBox')">Back</div>
+</div>
+<script>
+    const config = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks"
+    };
+    firebase.initializeApp(config);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    function toggle(id) {
+        document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    async function handleLogin() {
+        const email = document.getElementById('lEmail').value.trim();
+        const pass = document.getElementById('lPass').value;
+        if(!email || !pass) return alert("Fill fields");
+        document.getElementById('lLoad').style.display = 'block';
+        document.getElementById('lBtn').disabled = true;
+        try {
+            await auth.signInWithEmailAndPassword(email, pass);
+            window.location.href = "home.html";
+        } catch (err) {
+            try {
+                const snap = await db.ref('users').orderByChild('email').equalTo(email).once('value');
+                const data = snap.val();
+                if (data) {
+                    const uid = Object.keys(data)[0];
+                    if (data[uid].temp_password === pass) {
+                        alert("Temp access! Please reset via email link.");
+                        toggle('forgotBox');
+                        document.getElementById('fEmail').value = email;
+                    } else { alert("Invalid Credentials"); }
+                } else { alert("User not found"); }
+            } catch (e) { alert("Error: " + err.message); }
+            document.getElementById('lLoad').style.display = 'none';
+            document.getElementById('lBtn').disabled = false;
+        }
+    }
+
+    async function handleRegister() {
+        const name = document.getElementById('rName').value.trim();
+        const phone = document.getElementById('rPhone').value.trim();
+        const address = document.getElementById('rAddress').value.trim();
+        const email = document.getElementById('rEmail').value.trim();
+        const pass = document.getElementById('rPass').value;
+        if(!name || !phone || !address || !email || pass.length < 6) return alert("Valid data required");
+        document.getElementById('rLoad').style.display = 'block';
+        document.getElementById('rBtn').disabled = true;
+        try {
+            const res = await auth.createUserWithEmailAndPassword(email, pass);
+            await db.ref('users/' + res.user.uid).set({
+                name, email, phone, address, balance: 0, account_status: "active",
+                cooldown_timer: 0, kyc: { status: "not-submitted" }, joined: Date.now()
+            });
+            window.location.href = "home.html";
+        } catch (e) {
+            alert(e.message);
+            document.getElementById('rLoad').style.display = 'none';
+            document.getElementById('rBtn').disabled = false;
+        }
+    }
+
+    async function handleReset() {
+        const email = document.getElementById('fEmail').value.trim();
+        if(!email) return alert("Enter email");
+        document.getElementById('fLoad').style.display = 'block';
+        try {
+            await auth.sendPasswordResetEmail(email);
+            alert("Reset link sent!");
+            toggle('loginBox');
+        } catch (e) { alert(e.message); }
+        document.getElementById('fLoad').style.display = 'none';
+    }
+</script>
+</body>
+</html>

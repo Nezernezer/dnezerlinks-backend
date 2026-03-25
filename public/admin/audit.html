@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Forensic Audit | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --warn: #ff9800; --danger: #d32f2f; --success: #2e7d32; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding: 0; }
+        .header { background: var(--primary); color: white; padding: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .content { padding: 10px; }
+        .log-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-top: 5px solid #ccc; }
+
+        .badge { font-size: 10px; padding: 3px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; }
+        .delivered { background: #e8f5e9; color: var(--success); }
+        .failed { background: #ffebee; color: var(--danger); }
+        .pending { background: #fff3e0; color: var(--warn); }
+
+        .user-info { font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: flex-start; }
+        .email-text { font-size: 11px; color: #666; display: block; margin-top: 2px; }
+        .target-box { background: #f8f9fa; padding: 8px; border-radius: 6px; margin: 10px 0; border: 1px dashed #ddd; font-size: 13px; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: #555; margin-top: 5px; }
+        .uid-tag { font-family: monospace; font-size: 9px; color: #999; margin-top: 10px; display: block; border-top: 1px solid #eee; padding-top: 5px; word-break: break-all; }
+        #searchBar { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 15px; box-sizing: border-box; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
+        .modal-content { background: white; margin: 15% auto; padding: 20px; border-radius: 10px; width: 85%; max-width: 400px; font-size: 13px; line-height: 1.6; }
+        .close-btn { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 5px; float: right; margin-top: 10px; }
+        #status { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <a href="index.html" style="color:white; text-decoration:none; font-size:12px;">← BACK</a>
+            <div style="display:flex; gap:5px;">
+                <button onclick="exportToCSV()" style="background:#2e7d32; color:white; border:none; padding:5px 10px; border-radius:5px; font-size:10px; font-weight:bold;">EXPORT</button>
+                <button onclick="document.getElementById('helpModal').style.display='block'" style="background:#ffab00; color:black; border:none; padding:5px 10px; border-radius:5px; font-size:10px; font-weight:bold;">GUIDE</button>
+                <button onclick="loadData()" style="background:white; color:var(--primary); border:none; padding:5px 10px; border-radius:5px; font-size:10px; font-weight:bold;">REFRESH</button>
+            </div>
+        </div>
+        <h2 style="margin:10px 0 0 0;">Forensic Audit Hub</h2>
+    </div>
+
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:var(--primary);">Audit Guide</div>
+            <b>🟢 Green Top:</b> Successfully Processed/Delivered.<br>
+            <b>🟡 Orange Top:</b> Pending or Processing.<br>
+            <b>🔴 Red Top:</b> Failed or Error.<br><br>
+            <i>Note: If a user is debited but status is Green, check your API provider.</i>
+            <button class="close-btn" onclick="document.getElementById('helpModal').style.display='none'">Close</button>
+            <div style="clear:both;"></div>
+        </div>
+    </div>
+
+    <div class="content">
+        <div id="status" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px;">Loading forensic data...</div>
+        <div id="summaryBox" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px; display:none;"></div>
+        <div id="livePanel" style="margin-top:8px; background:#ffffff; padding:8px; border-radius:8px; font-size:12px; border-left:4px solid #0d47a1; display:none;">
+            <b>📡 Live Monitor</b><br>
+            <span id="liveCount">Transactions: 0</span> |
+            <span id="liveRevenue">Revenue: ₦0</span> |
+            <span id="liveStatus">Idle</span>
+        </div>
+        <input type="text" id="searchBar" placeholder="Search Email, Phone, or Name..." onkeyup="filterLogs()" style="display:none;">
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        const config = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks"
+        };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        const auth = firebase.auth();
+        const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+        let currentLogs = [];
+        let numberCount = {};
+        let userCount = {};
+        let liveStats = { count: 0, revenue: 0 };
+        let analytics = { total: 0, success: 0, failed: 0, pending: 0, revenue: 0 };
+        let userCache = {};
+
+        auth.onAuthStateChanged(user => {
+            if (user && user.uid === MASTER_ADMIN_UID) {
+                loadData();
+            } else {
+                window.location.href = "../login.html";
+            }
+        });
+
+        function parseTimestamp(ts) {
+            if (!ts) return "Unknown Date";
+            if (typeof ts === "object" && ts.seconds) {
+                return new Date(ts.seconds * 1000).toLocaleString();
+            }
+            if (!isNaN(ts)) {
+                return new Date(Number(ts)).toLocaleString();
+            }
+            let d = new Date(ts);
+            return isNaN(d.getTime()) ? "Unknown Date" : d.toLocaleString();
+        }
+
+        async function getUserInfo(uid) {
+            if (userCache[uid]) return userCache[uid];
+
+            try {
+                const snap = await db.ref(`users/${uid}`).once('value');
+                if (snap.exists()) {
+                    const u = snap.val();
+                    const info = {
+                        name: u.fullName || u.name || u.displayName || u.username || `User-${uid.slice(0,6)}`,
+                        email: u.email || u.userEmail || u.mail || "No Email"
+                    };
+                    userCache[uid] = info;
+                    return info;
+                }
+            } catch (e) {
+                console.warn("Failed to load user", uid, e);
+            }
+            const fallback = { name: `User-${uid.slice(0,6)}`, email: "No Email" };
+            userCache[uid] = fallback;
+            return fallback;
+        }
+
+        async function loadData() {
+            const logsDiv = document.getElementById('logs');
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = "Fetching recent transactions...";
+            logsDiv.innerHTML = "";
+
+            try {
+                const snap = await db.ref('transactions')
+                    .orderByChild('processedAt')
+                    .limitToLast(600)
+                    .once('value');
+
+                if (!snap.exists()) {
+                    statusDiv.textContent = "No transaction data found";
+                    return;
+                }
+
+                currentLogs = [];
+                liveStats = { count: 0, revenue: 0 };
+                numberCount = {};
+                userCount = {};
+
+                const uniqueUids = new Set();
+
+                snap.forEach(userFolder => {
+                    const uid = userFolder.key;
+                    uniqueUids.add(uid);
+                    userFolder.forEach(transaction => {
+                        let val = transaction.val();
+                        val.uid = uid;
+                        currentLogs.push(val);
+                        liveStats.count++;
+                        liveStats.revenue += Number(val.amount || 0);
+                    });
+                });
+
+                statusDiv.textContent = "Loading user names & emails...";
+
+                const uidArray = Array.from(uniqueUids);
+                await Promise.all(
+                    uidArray.map(async uid => {
+                        await getUserInfo(uid);
+                    })
+                );
+
+                currentLogs.sort((a, b) => {
+                    const ta = b.processedAt || b.timestamp || 0;
+                    const tb = a.processedAt || a.timestamp || 0;
+                    return ta - tb || (b.amount || 0) - (a.amount || 0);
+                });
+
+                if (currentLogs.length > 5000) currentLogs = currentLogs.slice(0, 5000);
+
+                renderLogs();
+                generateSummary(currentLogs);
+                updateLivePanel();
+
+                document.getElementById('summaryBox').style.display = 'block';
+                document.getElementById('livePanel').style.display = 'block';
+                document.getElementById('searchBar').style.display = 'block';
+                statusDiv.textContent = `Loaded ${currentLogs.length} recent transactions`;
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerHTML = `Error: ${err.message || 'Could not load data'}`;
+            }
+        }
+
+        function renderLogs() {
+            const div = document.getElementById('logs');
+            div.innerHTML = "";
+
+            currentLogs.forEach(act => {
+                const rawStatus = (act.status || 'failed').toUpperCase();
+
+                numberCount[act.phone || 'unknown'] = (numberCount[act.phone || 'unknown'] || 0) + 1;
+                userCount[act.uid] = (userCount[act.uid] || 0) + 1;
+
+                let flags = [];
+                if (numberCount[act.phone || 'unknown'] > 5) flags.push("⚠️ Repeated Number");
+                if (userCount[act.uid] > 20) flags.push("🚨 High User Activity");
+                if ((act.amount || 0) > 5000) flags.push("💰 High Amount");
+
+                let isSuccessful = ["SUCCESS","DELIVERED","PROCESSED","COMPLETED"].includes((act.status || "").toUpperCase());
+                if (!isSuccessful && (act.type || "").toUpperCase() === "DEBIT") {
+                    flags.push("❌ Debited but Not Delivered");
+                }
+
+                let statusClass = 'failed';
+                let borderColor = 'var(--danger)';
+
+                if (['SUCCESS', 'DELIVERED', 'PROCESSED', 'COMPLETED'].includes(rawStatus)) {
+                    statusClass = 'delivered';
+                    borderColor = 'var(--success)';
+                } else if (['PENDING', 'PROCESSING'].includes(rawStatus)) {
+                    statusClass = 'pending';
+                    borderColor = 'var(--warn)';
+                }
+
+                const userInfo = userCache[act.uid] || {};
+                const name = userInfo.name 
+                          || act.fullName || act.fullname || act.name || act.userName || act.displayName || act.username 
+                          || `User-${act.uid.substring(0,6)}`;
+
+                const email = userInfo.email 
+                           || act.email || act.userEmail || act.mail 
+                           || "No Email";
+
+                const target = act.phone || act.recipient || 'N/A';
+                const dateStr = parseTimestamp(act.processedAt || act.completedAt || act.timestamp || act.time || act.date);
+
+                let flagHtml = flags.length ? `<div style="margin-top:8px; color:#d32f2f; font-size:11px;">${flags.join(" • ")}</div>` : '';
+
+                div.innerHTML += `
+                    <div class="log-card" style="border-top-color: ${borderColor}" data-search="${email} ${target} ${name} ${act.uid} ${act.network||''} ${act.type||''}">
+                        <div class="user-info">
+                            <div>
+                                <span>${name}</span>
+                                <span class="email-text">${email}</span>
+                            </div>
+                            <div style="font-size:1.1rem; font-weight:800; color:${borderColor}">₦${act.amount || 0}</div>
+                        </div>
+
+                        <div class="target-box">
+                            <b>Target:</b> ${target} <br>
+                            <b>Service:</b> ${act.service || 'Transaction'}
+                        </div>
+
+                        <div class="meta-grid">
+                            <span>Type: <b>${act.type || 'DEBIT'}</b></span>
+                            <span>Status: <span class="badge ${statusClass}">${rawStatus}</span></span>
+                            <span>Network: ${act.network || 'N/A'}</span>
+                            <span>Date: ${dateStr}</span>
+                        </div>
+
+                        ${flagHtml}
+
+                        <span class="uid-tag">UID: ${act.uid}</span>
+                    </div>`;
+            });
+        }
+
+        function generateSummary(logs) {
+            analytics = { total: 0, success: 0, failed: 0, pending: 0, revenue: 0 };
+            const today = new Date().toDateString();
+
+            logs.forEach(log => {
+                const status = (log.status || "").toUpperCase();
+                const amount = Number(log.amount || 0);
+                const logDate = new Date(log.processedAt || log.timestamp || log.time || 0).toDateString();
+
+                if (logDate !== today) return;
+
+                analytics.total++;
+
+                if (["SUCCESS","DELIVERED","PROCESSED","COMPLETED"].includes(status)) {
+                    analytics.success++;
+                    analytics.revenue += amount;
+                } else if (["PENDING","PROCESSING"].includes(status)) {
+                    analytics.pending++;
+                } else {
+                    analytics.failed++;
+                }
+            });
+
+            let successRate = analytics.total ? ((analytics.success / analytics.total) * 100).toFixed(1) : 0;
+
+            document.getElementById("summaryBox").innerHTML = `
+                <b>📊 Today Summary</b><br>
+                📦 Total: ${analytics.total}<br>
+                ✅ Success: ${analytics.success}<br>
+                ⏳ Pending: ${analytics.pending}<br>
+                ❌ Failed: ${analytics.failed}<br>
+                📈 Success Rate: ${successRate}%<br>
+                💰 Revenue: ₦${analytics.revenue.toLocaleString()}
+            `;
+        }
+
+        function updateLivePanel() {
+            document.getElementById("liveCount").innerText = "Transactions: " + liveStats.count;
+            document.getElementById("liveRevenue").innerText = "Revenue: ₦" + liveStats.revenue.toLocaleString();
+            document.getElementById("liveStatus").innerText = liveStats.count ? "🟢 Active" : "Idle";
+        }
+
+        function filterLogs() {
+            let val = document.getElementById('searchBar').value.toLowerCase();
+            let cards = document.getElementsByClassName('log-card');
+            for (let card of cards) {
+                let text = card.getAttribute('data-search') || "";
+                card.style.display = text.toLowerCase().includes(val) ? "" : "none";
+            }
+        }
+
+        function exportToCSV() {
+            if (currentLogs.length === 0) return alert("No data to export");
+            let csv = "Date,Name,Email,Target,Amount,Type,Status,Network,Service,UID\n";
+            currentLogs.forEach(log => {
+                const date = parseTimestamp(log.processedAt || log.timestamp || log.time);
+                const userInfo = userCache[log.uid] || {};
+                const name = userInfo.name || log.fullName || log.name || '';
+                const email = userInfo.email || log.email || log.userEmail || '';
+                csv += `"${date.replace(/"/g,'""')}","${name.replace(/"/g,'""')}","${email.replace(/"/g,'""')}","${(log.phone || log.recipient || '').replace(/"/g,'""')}","${log.amount || 0}","${log.type || 'DEBIT'}","${log.status || ''}","${log.network || ''}","${log.service || ''}","${log.uid}"\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `Dnezerlinks_Audit_${new Date().toISOString().split('T')[0]}.csv`);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

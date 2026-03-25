@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Wallet - Dnezerlinks</title>
+    <script type="text/javascript" src="https://sdk-v2.monnify.com/plugin/monnify.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        .header { background: var(--primary); color: white; padding: 15px 20px; display: flex; align-items: center; width: 100%; box-sizing: border-box; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .back-link { color: white; text-decoration: none; margin-right: 15px; font-size: 24px; font-weight: bold; }
+        .container { padding: 20px; max-width: 450px; width: 95%; margin-top: 20px; }
+        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; font-size: 14px; }
+        input { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; outline: none; }
+        input:read-only { background-color: #eee; }
+        button { width: 100%; padding: 15px; background-color: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        /* Progress Bar Animation */
+        .progress-container { width: 100%; background: #eee; height: 4px; border-radius: 2px; margin-top: -10px; margin-bottom: 15px; display: none; overflow: hidden; }
+        .progress-bar { width: 100%; height: 100%; background: var(--primary); animation: loading 1.5s infinite linear; }
+        @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        
+        .loader-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: var(--primary); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="loader" class="loader-overlay">
+        <p>Updating Wallet Balance...</p>
+    </div>
+
+    <div class="header">
+        <a href="home.html" class="back-link">⬅</a>
+        <h2 style="margin:0; font-size: 18px;">Fund Your Wallet</h2>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <form id="payForm">
+                <label>User Email</label>
+                <input type="email" id="email-address" readonly />
+
+                <label>Amount (NGN)</label>
+                <input type="number" id="amount" placeholder="Min 100" min="100" required />
+                
+                <div class="progress-container" id="payLoad"> <div class="progress-bar"></div> </div>
+
+                <button type="submit" id="payBtn">Pay with Monnify</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        let customerName = "Dnezerlinks Customer";
+        let isVerified = false;
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                document.getElementById('email-address').value = user.email;
+                database.ref('users/' + user.uid).once('value').then(snap => {
+                    const data = snap.val();
+                    if (data) {
+                        customerName = data.name || "User";
+                        isVerified = data.kyc_status === "VERIFIED";
+                    }
+                });
+            } else {
+                setTimeout(() => { if(!auth.currentUser) window.location.href = "login.html"; }, 2000);
+            }
+        });
+
+        document.getElementById('payForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!isVerified) {
+                alert("Please complete your KYC verification first.");
+                window.location.href = "kyc_status.html";
+                return;
+            }
+
+            const amount = parseFloat(document.getElementById('amount').value);
+            const email = document.getElementById('email-address').value;
+            const payBtn = document.getElementById('payBtn');
+            const payLoad = document.getElementById('payLoad');
+
+            payBtn.disabled = true;
+            payBtn.innerText = "Please wait...";
+            payLoad.style.display = 'block';
+
+            MonnifySDK.initialize({
+                amount: amount,
+                currency: "NGN",
+                reference: "DNEZ_" + Date.now(),
+                customerFullName: customerName,
+                customerEmail: email,
+                apiKey: "MK_TEST_9LWZY7GU15", 
+                contractCode: "2057613223",
+                paymentDescription: "Wallet Funding",
+                onComplete: function(response) {
+                    if (response.status === 'SUCCESS' || response.paymentStatus === 'PAID') {
+                        document.getElementById('loader').style.display = 'flex';
+                        const user = auth.currentUser;
+
+                        // 1. Update Balance
+                        database.ref('users/' + user.uid + '/balance').transaction(curr => (curr || 0) + amount)
+                        .then((result) => {
+                            // 2. Add Transaction Record
+                            return database.ref('transactions/' + user.uid).push({
+                                type: 'Wallet Funding',
+                                amount: amount,
+                                date: new Date().toLocaleString(),
+                                status: 'Success',
+                                ref: response.transactionReference
+                            });
+                        })
+                        .then(() => {
+                            // 3. PUSH IN-APP NOTIFICATION
+                            return database.ref('notifications/' + user.uid).push({
+                                message: `💰 Wallet Funded: Your account has been credited with ₦${amount.toLocaleString()}. Payment Ref: ${response.transactionReference}`,
+                                timestamp: Date.now(),
+                                read: false
+                            });
+                        })
+                        .then(() => {
+                            window.location.href = "paysuccess.html";
+                        })
+                        .catch(err => {
+                            alert("Database Error: " + err.message);
+                        });
+                    } else {
+                        window.location.href = "payfailed.html";
+                    }
+                },
+                onClose: function() {
+                    payBtn.disabled = false;
+                    payBtn.innerText = "Pay with Monnify";
+                    payLoad.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

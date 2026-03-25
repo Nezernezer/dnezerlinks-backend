@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "dnezerlinks"
+  },
+  "targets": {
+    "dnezerlinks": {
+      "hosting": {
+        "dnezerlinks": [
+          "dnezerlinks"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

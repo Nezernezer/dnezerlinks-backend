@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction History - Dnezerlinks</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; margin: 0; padding-bottom: 20px; }
+        .header { background: #0d47a1; color: white; padding: 20px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .container { padding: 20px; max-width: 600px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #0d47a1; }
+        .status-success { color: #2e7d32; font-weight: bold; font-size: 14px; background: #e8f5e9; padding: 4px 8px; border-radius: 4px; }
+        .amount { font-size: 18px; font-weight: bold; color: #333; display: block; margin-top: 10px; }
+        .ref { font-family: monospace; font-size: 12px; color: #777; margin-top: 5px; display: block; }
+        .btn-home { display: block; text-align: center; background: #0d47a1; color: white; padding: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 20px; }
+        .no-history { text-align: center; color: #999; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0;">Transaction History</h2>
+</div>
+
+<div class="container" id="history-list">
+    <div id="new-payment-alert" style="display:none;" class="card">
+        <span class="status-success">SUCCESSFUL</span>
+        <span class="amount" id="new-amount">Wallet Funding</span>
+        <span class="ref" id="new-ref"></span>
+        <small style="color:#888;">Just now</small>
+    </div>
+
+    <div class="no-history" id="empty-msg">No recent transactions found.</div>
+</div>
+
+<div class="container">
+    <a href="home.html" class="btn-home">Back to Dashboard</a>
+</div>
+
+<script type="module">
+  // Firebase modular SDK imports (CDN - version 10.14.1 is stable & widely used)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getFirestore, collection, query, orderBy, limit, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  // ──────────────────────────────────────────────────────────────
+  //           PASTE YOUR REAL FIREBASE CONFIG HERE
+  const firebaseConfig = {
+    apiKey:            "AIzaSyYourApiKeyHereXXXXXXXXXXXXXXXXXXXXX",
+    authDomain:        "your-project-id.firebaseapp.com",
+    projectId:         "your-project-id",
+    storageBucket:     "your-project-id.appspot.com",
+    messagingSenderId: "123456789012",
+    appId:             "1:123456789012:web:abcdef1234567890abcdef"
+  };
+  // ──────────────────────────────────────────────────────────────
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const historyList = document.getElementById("history-list");
+  const emptyMsg = document.getElementById("empty-msg");
+  const newAlert = document.getElementById("new-payment-alert");
+
+  // Show Paystack success banner if coming from payment redirect
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get("reference");
+  if (ref) {
+    document.getElementById("empty-msg").style.display = "none";
+    newAlert.style.display = "block";
+    document.getElementById("new-ref").innerText = "Ref: " + ref;
+  }
+
+  // Listen to auth state and load transactions
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      emptyMsg.textContent = "Please sign in to view transaction history.";
+      emptyMsg.style.display = "block";
+      historyList.innerHTML = "";
+      return;
+    }
+
+    try {
+      const txRef = collection(db, `users/${user.uid}/transactions`);
+      const q = query(
+        txRef,
+        orderBy("createdAt", "desc"),
+        limit(40)
+      );
+
+      const snapshot = await getDocs(q);
+
+      // Clear old cards (keep the new-alert if present)
+      const existingCards = historyList.querySelectorAll(".card:not(#new-payment-alert)");
+      existingCards.forEach(card => card.remove());
+
+      if (snapshot.empty) {
+        emptyMsg.style.display = "block";
+        return;
+      }
+
+      emptyMsg.style.display = "none";
+
+      snapshot.forEach(doc => {
+        const tx = doc.data();
+
+        let dateDisplay = "—";
+        if (tx.createdAt && tx.createdAt instanceof Timestamp) {
+          dateDisplay = tx.createdAt.toDate().toLocaleString("en-NG", {
+            dateStyle: "medium",
+            timeStyle: "short"
+          });
+        }
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <span class="status-success">${(tx.type || "TRANSACTION").toUpperCase()}</span>
+          <span class="amount">
+            ${tx.signedAmount > 0 ? "+" : "-"}${Number(tx.amount || 0).toLocaleString("en-NG")} NGN
+          </span>
+          <div style="margin: 6px 0; color: #555;">${tx.description || "—"}</div>
+          <span class="ref">Ref: ${tx.reference || "—"}</span>
+          <small style="color:#888;">${dateDisplay}</small>
+        `;
+
+        historyList.appendChild(card);
+      });
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      emptyMsg.textContent = "Error loading transactions. Check console.";
+      emptyMsg.style.display = "block";
+    }
+  });
+</script>
+
+</body>
+</html>

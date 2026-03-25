@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Home</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
+
+        .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); position: relative; }
+        .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
+
+        /* Notification Icon & Badge */
+        .notif-container { position: absolute; top: 15px; left: 15px; cursor: pointer; z-index: 101; }
+        .notif-badge { position: absolute; top: -5px; right: -5px; background: var(--accent); color: black; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; font-weight: bold; display: none; align-items: center; justify-content: center; border: 2px solid var(--primary); }
+
+        /* Notification Modal */
+        #notifModal { display: none; position: fixed; top: 60px; left: 15px; width: 280px; background: white; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); z-index: 1000; overflow: hidden; border: 1px solid #ddd; }
+        .notif-header { background: var(--primary); color: white; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .notif-list { max-height: 300px; overflow-y: auto; padding: 5px; }
+        .notif-item { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; cursor: pointer; transition: 0.2s; }
+        .notif-item.unread { background: #fff9e6; border-left: 4px solid var(--accent); font-weight: bold; }
+        .notif-time { font-size: 10px; color: #999; margin-top: 5px; }
+
+        .news-ticker { background: #e3f2fd; padding: 8px 0; border-bottom: 1px solid #bbdefb; overflow: hidden; white-space: nowrap; }
+        .news-ticker marquee { font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; }
+
+        .services-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; }
+        .financial-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 0 20px 20px 20px; }
+        .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; border: 1px solid #eee; transition: 0.2s; }
+        .service-item:active { transform: scale(0.95); }
+        .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
+        
+        .admin-switch { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 6px 12px; border-radius: 15px; font-size: 10px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #ddd; z-index: 100; }
+        .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
+        .nav-link.active { color: var(--primary); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="notif-container" onclick="toggleNotifs()">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <div id="notifBadge" class="notif-badge">0</div>
+    </div>
+
+    <div id="adminContainer"></div>
+    <div id="userName" style="font-size: 14px; opacity: 0.9;">Loading user...</div>
+    <div class="balance-amount">₦<span id="balDisplay">0.00</span></div>
+    <div style="font-size: 11px; opacity: 0.8; letter-spacing: 1px;">WALLET BALANCE</div>
+</div>
+
+<div id="notifModal">
+    <div class="notif-header">
+        <span>Alerts</span>
+        <span onclick="toggleNotifs()" style="cursor:pointer; font-size: 20px;">&times;</span>
+    </div>
+    <div id="notifList" class="notif-list">
+        <p style="text-align:center; color:#999; padding:20px; font-size:12px;">No new notifications</p>
+    </div>
+    <div style="padding: 8px; text-align: center; border-top: 1px solid #eee;">
+        <button onclick="clearAllNotifs()" style="border:none; background:none; color:var(--primary); font-size:11px; font-weight:bold; cursor:pointer;">CLEAR ALL</button>
+    </div>
+</div>
+
+<div class="news-ticker">
+    <marquee id="globalUpdate">Connecting to update server...</marquee>
+</div>
+
+<div class="services-grid">
+    <div class="service-item" onclick="location.href='airtime/'">📱<span>Airtime</span></div>
+    <div class="service-item" onclick="location.href='data/'">📶<span>Data</span></div>
+    <div class="service-item" onclick="location.href='cable/'">📺<span>Cable TV</span></div>
+    <div class="service-item" onclick="location.href='exampin/'">🎓<span>Exam Pin</span></div>
+    <div class="service-item" onclick="location.href='bulksms/'">✉️<span>Bulk SMS</span></div>
+    <div class="service-item" onclick="location.href='recharge-pin/'">🎫<span>Recharge PIN</span></div>
+    <div class="service-item" onclick="location.href='electricity/'">💡<span>Electricity</span></div>
+    <div class="service-item" onclick="location.href='airtime-to-cash/'">♻️<span>Swap</span></div>
+</div>
+
+<div style="padding: 0 20px; font-size: 16px; font-weight: bold; color: var(--primary);">Wallet Actions</div>
+<div class="financial-grid">
+    <div class="service-item" onclick="location.href='fund.html'" style="border: 2px solid var(--accent); background: #fffde7;">
+        💰<span style="color: #f57c00;">Fund Wallet</span>
+    </div>
+    <div class="service-item" onclick="location.href='history.html'">
+        📊<span>History</span>
+    </div>
+</div>
+
+<div class="bottom-nav">
+    <a href="home.html" class="nav-link active">🏠<br>HOME</a>
+    <a href="profile.html" class="nav-link">👤<br>PROFILE</a>
+    <a href="account.html" class="nav-link">⚙️<br>ACCOUNT</a>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            if (user.uid === MASTER_ADMIN_UID) {
+                document.getElementById('adminContainer').innerHTML = `
+                    <button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️</button>
+                `;
+            }
+
+            database.ref('settings/global_update').on('value', snap => {
+                document.getElementById('globalUpdate').innerText = snap.val() || "Welcome to Dnezerlinks VTU!";
+            });
+
+            database.ref('users/' + user.uid).on('value', snap => {
+                const data = snap.val();
+                if(data){
+                    document.getElementById('balDisplay').innerText = parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('userName').innerText = "Hello, " + (data.name || "User");
+                }
+            });
+
+            // Notification Real-time Listener
+            database.ref('notifications/' + user.uid).on('value', snap => {
+                const list = document.getElementById('notifList');
+                const badge = document.getElementById('notifBadge');
+                const data = snap.val();
+                
+                if (data) {
+                    list.innerHTML = "";
+                    let unreadCount = 0;
+                    const messages = Object.entries(data).reverse();
+
+                    messages.forEach(([key, val]) => {
+                        if (!val.read) unreadCount++;
+                        const item = document.createElement('div');
+                        item.className = `notif-item ${val.read ? '' : 'unread'}`;
+                        item.innerHTML = `
+                            <div>${val.message}</div>
+                            <div class="notif-time">${new Date(val.timestamp).toLocaleTimeString()}</div>
+                        `;
+                        item.onclick = () => {
+                            database.ref(`notifications/${user.uid}/${key}`).update({ read: true });
+                        };
+                        list.appendChild(item);
+                    });
+
+                    if (unreadCount > 0) {
+                        badge.innerText = unreadCount;
+                        badge.style.display = "flex";
+                    } else {
+                        badge.style.display = "none";
+                    }
+                } else {
+                    list.innerHTML = '<p style="text-align:center; color:#999; padding:20px; font-size:12px;">No messages.</p>';
+                    badge.style.display = "none";
+                }
+            });
+
+        } else {
+            location.href = 'index.html';
+        }
+    });
+
+    function toggleNotifs() {
+        const modal = document.getElementById('notifModal');
+        modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function clearAllNotifs() {
+        if(confirm("Delete all notifications?")) {
+            const user = auth.currentUser;
+            database.ref('notifications/' + user.uid).remove();
+            toggleNotifs();
+        }
+    }
+</script>
+</body>
+</html>

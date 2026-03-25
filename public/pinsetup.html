@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PIN Setup | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --bg: #f8f9fa; --error: #d32f2f; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; }
+        .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 350px; width: 100%; text-align: center; }
+        h2 { color: var(--primary); margin-bottom: 10px; }
+        p { font-size: 14px; color: #666; margin-bottom: 20px; }
+        label { display: block; text-align: left; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 5px; }
+        input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 18px; text-align: center; letter-spacing: 5px; outline: none; }
+        input:focus { border-color: var(--primary); }
+        button { width: 100%; padding: 12px; border-radius: 6px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .lock-notice { background: #ffebee; color: var(--error); padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; display: none; border: 1px solid var(--error); }
+        .back-link { margin-top: 15px; display: block; color: var(--primary); text-decoration: none; font-size: 14px; }
+    </script>
+</head>
+<body>
+
+    <div class="card">
+        <h2 id="pageTitle">Set Transaction PIN</h2>
+        <div id="lockNotice" class="lock-notice">
+            ⚠️ <b>Account Locked</b><br>
+            You cannot change your PIN while your account is locked. Please contact support.
+        </div>
+        <p id="instruction">Secure your wallet with a 4-digit PIN.</p>
+
+        <div id="oldPinContainer" style="display: none;">
+            <label>Current PIN</label>
+            <input type="password" id="oldPin" maxlength="4" placeholder="****" inputmode="numeric">
+        </div>
+
+        <label>New 4-Digit PIN</label>
+        <input type="password" id="newPin" maxlength="4" placeholder="****" inputmode="numeric">
+
+        <label>Confirm New PIN</label>
+        <input type="password" id="confirmPin" maxlength="4" placeholder="****" inputmode="numeric">
+
+        <button id="saveBtn" disabled>Loading...</button>
+        <a href="home.html" class="back-link">← Return to Home</a>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        const saveBtn = document.getElementById('saveBtn');
+        const lockNotice = document.getElementById('lockNotice');
+        let isLocked = false;
+        let hasPin = false;
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                const snap = await database.ref('users/' + user.uid).once('value');
+                const data = snap.val() || {};
+                
+                // 1. Check Lock Status
+                if (data.status === "locked") {
+                    isLocked = true;
+                    lockNotice.style.display = "block";
+                    saveBtn.disabled = true;
+                    saveBtn.innerText = "Locked";
+                    // Disable inputs
+                    document.querySelectorAll('input').forEach(i => i.disabled = true);
+                } else {
+                    saveBtn.disabled = false;
+                    saveBtn.innerText = data.transaction_pin ? "Update PIN" : "Save PIN";
+                }
+
+                // 2. Check if PIN exists
+                if (data.transaction_pin) {
+                    hasPin = true;
+                    document.getElementById('pageTitle').innerText = "Change PIN";
+                    document.getElementById('oldPinContainer').style.display = "block";
+                }
+            } else {
+                window.location.href = "login.html";
+            }
+        });
+
+        saveBtn.onclick = async () => {
+            const user = auth.currentUser;
+            const oldP = document.getElementById('oldPin').value;
+            const newP = document.getElementById('newPin').value;
+            const confP = document.getElementById('confirmPin').value;
+
+            if (newP.length !== 4 || isNaN(newP)) return alert("PIN must be 4 digits.");
+            if (newP !== confP) return alert("New PINs do not match.");
+
+            saveBtn.disabled = true;
+            saveBtn.innerText = "Saving...";
+
+            const userRef = database.ref('users/' + user.uid);
+            const snap = await userRef.once('value');
+            const data = snap.val();
+
+            // Verify Old PIN if changing
+            if (hasPin && String(oldP) !== String(data.transaction_pin)) {
+                alert("Incorrect current PIN.");
+                saveBtn.disabled = false;
+                saveBtn.innerText = "Update PIN";
+                return;
+            }
+
+            // Perform Update
+            userRef.update({
+                transaction_pin: newP,
+                failed_attempts: 0, // Reset failures on successful manual change
+                last_failed_time: 0
+            }).then(() => {
+                alert("PIN updated successfully!");
+                window.location.href = "home.html";
+            }).catch(() => {
+                alert("Error saving PIN.");
+                saveBtn.disabled = false;
+            });
+        };
+    </script>
+</body>
+</html>

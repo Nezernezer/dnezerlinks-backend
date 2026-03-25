@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Update Profile</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="js/modals.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --danger: #d32f2f; --success: #2e7d32; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; padding: 20px; margin: 0; }
+        .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width: 450px; margin: auto; margin-bottom: 20px; }
+        h3 { color: var(--primary); text-align: center; margin-bottom: 20px; margin-top: 0; }
+        label { display: block; margin-top: 15px; color: #666; font-weight: bold; }
+        input, select, button { width:100%; padding:14px; margin:8px 0; border-radius:10px; border:1px solid #ddd; box-sizing: border-box; font-size: 16px; outline: none; }
+        .btn-save { background: var(--primary); color:#fff; border:none; font-weight:bold; cursor: pointer; transition: 0.3s; }
+        .btn-pass { background: var(--danger); color:#fff; border:none; font-weight:bold; cursor: pointer; }
+        .btn-pin { background: var(--success); color:#fff; border:none; font-weight:bold; cursor: pointer; }
+        .btn-save:active, .btn-pass:active, .btn-pin:active { transform: scale(0.98); }
+        .btn-save:disabled, .btn-pass:disabled, .btn-pin:disabled { opacity: 0.6; }
+        .btn-back { background:#f4f4f4; color:#555; border:1px solid #ddd; margin-top:10px; cursor: pointer; }
+        input[readonly] { background: #f9f9f9; color: #999; border: 1px dashed #ccc; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 25px 0; }
+        .pin-input { letter-spacing: 8px; text-align: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h3>My Profile Info</h3>
+    <label><small>Full Name (Locked)</small></label>
+    <input type="text" id="profName" readonly>
+
+    <label><small>Gender</small></label>
+    <select id="profGender">
+        <option value="Male">Male</option>
+        <option value="Female">Female</option>
+    </select>
+
+    <label><small>Phone Number</small></label>
+    <input type="tel" id="profPhone" placeholder="e.g., 08012345678">
+
+    <label><small>Home Address</small></label>
+    <input type="text" id="profAddress" placeholder="Enter your full address">
+
+    <button id="saveBtn" class="btn-save" onclick="save()">Save Updates</button>
+
+    <hr>
+
+    <h3>Transaction PIN</h3>
+    <p style="font-size: 12px; color: #777; text-align: center; margin-top: -10px;">Used for approving Data/Airtime purchases.</p>
+    
+    <label><small>New 4-Digit PIN</small></label>
+    <input type="password" id="newPin" class="pin-input" maxlength="4" inputmode="numeric" placeholder="****">
+
+    <label><small>Confirm New PIN</small></label>
+    <input type="password" id="confirmPin" class="pin-input" maxlength="4" inputmode="numeric" placeholder="****">
+
+    <button id="pinBtn" class="btn-pin" onclick="changePin()">Update Transaction PIN</button>
+
+    <hr>
+
+    <h3>Account Security</h3>
+    <label><small>New Account Password</small></label>
+    <input type="password" id="newPass" placeholder="At least 6 characters">
+    <button id="passBtn" class="btn-pass" onclick="changePassword()">Update Password</button>
+
+    <button class="btn-back" onclick="location.href='home.html'">Back to Dashboard</button>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            database.ref('users/' + user.uid).on('value', snapshot => {
+                const d = snapshot.val();
+                if(d) {
+                    document.getElementById('profName').value = d.name || d.fullName || "User";
+                    document.getElementById('profGender').value = d.gender || "Male";
+                    document.getElementById('profPhone').value = d.phone || "";
+                    document.getElementById('profAddress').value = d.address || "";
+                }
+            });
+        } else {
+            location.href = 'login.html';
+        }
+    });
+
+    async function save() {
+        const btn = document.getElementById('saveBtn');
+        const user = auth.currentUser;
+        if (!user) return;
+
+        btn.innerText = "Saving...";
+        btn.disabled = true;
+
+        const profileData = {
+            gender: document.getElementById('profGender').value,
+            phone: document.getElementById('profPhone').value.trim(),
+            address: document.getElementById('profAddress').value.trim(),
+            lastUpdated: Date.now()
+        };
+
+        try {
+            await database.ref('users/' + user.uid).update(profileData);
+            DnezerPopup.alert("Success", "Profile details updated!", "success");
+        } catch (e) {
+            DnezerPopup.alert("Error", e.message, "error");
+        } finally {
+            btn.innerText = "Save Updates";
+            btn.disabled = false;
+        }
+    }
+
+    async function changePin() {
+        const pin = document.getElementById('newPin').value;
+        const confirm = document.getElementById('confirmPin').value;
+        const btn = document.getElementById('pinBtn');
+        const user = auth.currentUser;
+
+        if (pin.length !== 4 || isNaN(pin)) {
+            return DnezerPopup.alert("Invalid PIN", "PIN must be exactly 4 digits.", "error");
+        }
+        if (pin !== confirm) {
+            return DnezerPopup.alert("Mismatch", "PINs do not match!", "error");
+        }
+
+        btn.innerText = "Updating PIN...";
+        btn.disabled = true;
+
+        try {
+            await database.ref('users/' + user.uid).update({ 
+                transaction_pin: pin,
+                failed_attempts: 0,
+                status: "active" 
+            });
+            await database.ref('notifications/' + user.uid).push({
+                message: "🛡️ Transaction PIN updated successfully.",
+                timestamp: Date.now(),
+                read: false
+            });
+            DnezerPopup.alert("Success", "Transaction PIN updated!", "success");
+            document.getElementById('newPin').value = "";
+            document.getElementById('confirmPin').value = "";
+        } catch (e) {
+            DnezerPopup.alert("Error", e.message, "error");
+        } finally {
+            btn.innerText = "Update Transaction PIN";
+            btn.disabled = false;
+        }
+    }
+
+    async function changePassword() {
+        const passInput = document.getElementById('newPass');
+        const btn = document.getElementById('passBtn');
+        const newPassword = passInput.value;
+
+        if (newPassword.length < 6) {
+            return DnezerPopup.alert("Weak Password", "Must be at least 6 characters.", "error");
+        }
+
+        btn.innerText = "Updating...";
+        btn.disabled = true;
+
+        try {
+            await auth.currentUser.updatePassword(newPassword);
+            await database.ref('notifications/' + auth.currentUser.uid).push({
+                message: "🔐 Account password changed successfully.",
+                timestamp: Date.now(),
+                read: false
+            });
+            DnezerPopup.alert("Success", "Password updated!", "success");
+            passInput.value = "";
+        } catch (e) {
+            if (e.code === 'auth/requires-recent-login') {
+                DnezerPopup.alert("Security", "Please log out and log back in to change password.", "error");
+            } else {
+                DnezerPopup.alert("Error", e.message, "error");
+            }
+        } finally {
+            btn.innerText = "Update Password";
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

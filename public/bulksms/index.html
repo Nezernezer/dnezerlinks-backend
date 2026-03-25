@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Bulk SMS</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
+        .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; }
+        .back-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; margin-right: 15px; }
+        .card { background:#fff; border-radius:15px; padding:20px; margin:15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
+        input, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; font-family: inherit; outline: none; }
+        .char-count { font-size: 11px; color: #888; text-align: right; margin-top: 5px; }
+        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        .buy-btn:active { transform: scale(0.98); background: #1565c0; }
+        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; }
+        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="header-card">
+    <button class="back-btn" onclick="location.href='../home.html'">←</button>
+    <h3 style="margin:0;">Send Bulk SMS</h3>
+</div>
+
+<div class="card">
+    <div class="form-group">
+        <label>Sender ID (Max 11 Chars)</label>
+        <input type="text" id="senderId" placeholder="e.g., POLY_IDAH" maxlength="11">
+    </div>
+
+    <div class="form-group">
+        <label>Recipients (Comma separated)</label>
+        <textarea id="recipients" rows="3" placeholder="08012345678, 07087654321"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Message Content</label>
+        <textarea id="message" rows="5" placeholder="Type your message here..." oninput="updateCount()"></textarea>
+        <div class="char-count"><span id="chars">0</span> characters | <span id="pages">0</span> SMS unit(s)</div>
+    </div>                                                                    
+    <button class="buy-btn" id="procBtn">SEND MESSAGE</button>                
+</div>
+
+<div class="bottom-nav">
+    <a class="nav-item" href="../home.html">🏠<br>HOME</a>
+    <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>                  
+    <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>               
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    const PRICE_PER_UNIT = 4.50; 
+
+    function updateCount() {
+        const msg = document.getElementById('message').value;
+        const charCount = msg.length;
+        const units = charCount === 0 ? 0 : Math.ceil(charCount / 160);
+        document.getElementById('chars').innerText = charCount;
+        document.getElementById('pages').innerText = units;
+        return units;
+    }
+
+    document.getElementById('procBtn').onclick = async () => {
+        const user = auth.currentUser;
+        if (!user) return alert("Please login first");
+
+        const units = updateCount();
+        const recList = document.getElementById('recipients').value.split(',').filter(n => n.trim().length >= 10);
+        const totalUnits = units * recList.length;
+        const totalCost = totalUnits * PRICE_PER_UNIT;
+
+        if (totalUnits === 0) return alert("Please enter recipients and message");
+        if (!confirm(`Total Units: ${totalUnits}\nTotal Cost: ₦${totalCost.toFixed(2)}\n\nProceed to send?`)) return;
+
+        const btn = document.getElementById('procBtn');
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+
+        const userRef = database.ref('users/' + user.uid);
+
+        // Atomic transaction to deduct from Realtime Database balance
+        userRef.child('balance').transaction((currentBal) => {
+            if (currentBal === null || currentBal < totalCost) {
+                return; // Abort if balance is too low
+            }
+            return currentBal - totalCost;
+        }, (error, committed) => {
+            if (error) {
+                alert("Error: " + error.message);
+                resetBtn();
+            } else if (!committed) {
+                alert(`Insufficient Balance! You need ₦${totalCost.toFixed(2)}`);
+                resetBtn();
+            } else {
+                // Log to the centralized transaction node
+                database.ref('transactions/' + user.uid).push({
+                    type: 'Bulk SMS',
+                    service: "SMS (" + totalUnits + " units)",
+                    amount: totalCost,
+                    date: new Date().toLocaleString(),
+                    status: "Sent"
+                }).then(() => {
+                    alert("Bulk SMS Sent Successfully!");
+                    location.href = '../home.html';
+                });
+            }
+        });
+    };
+
+    function resetBtn() {
+        const btn = document.getElementById('procBtn');
+        btn.disabled = false;
+        btn.innerText = "SEND MESSAGE";
+    }
+</script>
+</body>
+</html>

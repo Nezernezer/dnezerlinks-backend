@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buy Data | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="../js/modals.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --bg: #f4f4f4; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: var(--bg); display: flex; flex-direction: column; align-items: center; }
+        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; width: 100%; margin-top: 20px; }
+        h2 { color: var(--primary); margin-bottom: 20px; text-align: center; }
+        label { font-size: 14px; font-weight: 600; color: #555; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0 20px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; outline: none; }
+        button { background: var(--primary); color: white; font-weight: bold; border: none; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .back-link { color: var(--primary); text-decoration: none; font-size: 14px; font-weight: bold; align-self: flex-start; max-width: 400px; }
+    </style>
+</head>
+<body>
+
+    <a href="../home.html" class="back-link">← Back to Dashboard</a>
+
+    <div class="card">
+        <h2>📶 Data Subscription</h2>
+
+        <label for="network">Select Network</label>
+        <select id="network" onchange="updatePlans()">
+            <option value="">Choose Network</option>
+            <option value="mtn">MTN</option>
+            <option value="glo">Glo</option>
+            <option value="airtel">Airtel</option>
+            <option value="etisalat">9mobile</option>
+        </select>
+
+        <label for="variation">Select Plan</label>
+        <select id="variation">
+            <option value="">Choose Plan</option>
+        </select>
+
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone" placeholder="e.g. 08123456789">
+
+        <button id="buyBtn" onclick="initiateDataPurchase()">Subscribe Now</button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        const dataPlans = {
+            "mtn": [{ id: "m500", name: "500MB SME - ₦150", price: 150 }, { id: "m1gb", name: "1GB SME - ₦260", price: 260 }],
+            "glo": [{ id: "g1gb", name: "1GB Corporate - ₦240", price: 240 }],
+            "airtel": [{ id: "a1gb", name: "1GB CG - ₦280", price: 280 }],
+            "etisalat": [{ id: "e1gb", name: "1GB - ₦450", price: 450 }]
+        };
+
+        function updatePlans() {
+            const network = document.getElementById('network').value;
+            const variationSelect = document.getElementById('variation');
+            variationSelect.innerHTML = '<option value="">Choose Plan</option>';
+            if (network && dataPlans[network]) {
+                dataPlans[network].forEach(plan => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify({ price: plan.price, name: plan.name });
+                    option.textContent = plan.name;
+                    variationSelect.appendChild(option);
+                });
+            }
+        }
+
+        function initiateDataPurchase() {
+            const network = document.getElementById('network').value;
+            const variationData = document.getElementById('variation').value;
+            const phone = document.getElementById('phone').value;
+            if (!network || !variationData || phone.length < 11) {
+                return DnezerPopup.alert("Missing Info", "Please fill all fields correctly.", "error");
+            }
+            DnezerPopup.promptPin((enteredPin) => {
+                verifyAndProcess(enteredPin);
+            });
+        }
+
+        async function verifyAndProcess(enteredPin) {
+            const user = auth.currentUser;
+            const buyBtn = document.getElementById('buyBtn');
+            const variationData = JSON.parse(document.getElementById('variation').value);
+            const price = variationData.price;
+            
+            buyBtn.disabled = true;
+            buyBtn.innerText = "Verifying...";
+
+            const userRef = database.ref('users/' + user.uid);
+            
+            userRef.once('value', (snap) => {
+                const data = snap.val();
+                let attempts = data.failed_attempts || 0;
+
+                // 1. Check if Blocked
+                if (data.status === "locked") {
+                    DnezerPopup.alert("Account Locked", "Too many wrong PIN attempts. Contact Admin to unlock.", "error");
+                    resetBtn();
+                    return;
+                }
+
+                // 2. Verify PIN
+                if (enteredPin === data.transaction_pin) {
+                    // Success Path
+                    userRef.update({ failed_attempts: 0 }); 
+                    processFinalPayment(price, variationData.name);
+                } else {
+                    // Failure Path
+                    attempts++;
+                    if (attempts >= 3) {
+                        userRef.update({ failed_attempts: attempts, status: "locked" });
+                        DnezerPopup.alert("Locked!", "3 wrong attempts. Your transactions are now disabled.", "error");
+                    } else {
+                        userRef.update({ failed_attempts: attempts });
+                        DnezerPopup.alert("Wrong PIN", `Incorrect PIN. You have ${3 - attempts} tries left.`, "error");
+                    }
+                    resetBtn();
+                }
+            });
+        }
+
+        function processFinalPayment(price, planName) {
+            const user = auth.currentUser;
+            const userRef = database.ref('users/' + user.uid);
+            const phone = document.getElementById('phone').value;
+
+            userRef.child('balance').transaction(currentBal => {
+                if (currentBal === null || currentBal < price) return;
+                return currentBal - price;
+            }, (error, committed) => {
+                if (!committed) {
+                    DnezerPopup.alert("Failed", "Insufficient balance.", "error");
+                    resetBtn();
+                } else {
+                    database.ref('transactions/' + user.uid).push({
+                        type: 'Data',
+                        plan: planName,
+                        phone: phone,
+                        amount: price,
+                        status: 'Successful',
+                        date: new Date().toLocaleString()
+                    }).then(() => {
+                        DnezerPopup.alert("Success!", "Data subscription successful.", "success");
+                        setTimeout(() => window.location.href = "../home.html", 2500);
+                    });
+                }
+            });
+        }
+
+        function resetBtn() {
+            const buyBtn = document.getElementById('buyBtn');
+            buyBtn.disabled = false;
+            buyBtn.innerText = "Subscribe Now";
+        }
+    </script>
+</body>
+</html>

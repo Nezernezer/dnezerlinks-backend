@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>User Control | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --danger: #d32f2f; --success: #2e7d32; --warning: #ffa000; --info: #00838f; }
+        body { font-family: 'Segoe UI', sans-serif; background: #fff; margin: 0; padding: 0; }
+        .header-top { background: var(--primary); color: white; padding: 20px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .header-top h2 { margin: 0; font-size: 1.4rem; }
+        .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
+        .filter-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+        .f-btn { white-space: nowrap; padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); color: white; font-size: 12px; font-weight: bold; cursor: pointer; }
+        .f-btn.active { background: white; color: var(--primary); border-color: white; }
+        .content-area { background: white; padding: 10px; }
+        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
+        th { background: #f4f7f6; color: #555; padding: 12px; text-align: left; border-bottom: 2px solid #eee; }
+        td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .uid { font-family: monospace; color: #999; font-size: 10px; display: block; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+        .status-VERIFIED { background: #e8f5e9; color: var(--success); }
+        .status-PENDING { background: #fff3e0; color: var(--warning); }
+        .status-DECLINED { background: #ffebee; color: var(--danger); }
+        .status-NOT-SUBMITTED { background: #f5f5f5; color: #777; }
+        .btn-group { display: flex; gap: 4px; flex-wrap: wrap; max-width: 180px; }
+        .action-btn { border: none; padding: 7px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 10px; cursor: pointer; transition: 0.2s; }
+        .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-v { background: var(--success); }
+        .btn-d { background: var(--danger); }
+        .btn-msg { background: #0288d1; }
+        .btn-b { background: #455a64; }
+        .btn-u { background: #9e9e9e; }
+        .btn-del { background: #212121; }
+        .btn-reset { background: #546e7a; }
+        .btn-timer { background: var(--info); }
+        
+        .doc-detail { line-height: 1.4; }
+        .doc-label { font-weight: bold; color: #666; font-size: 10px; text-transform: uppercase; margin-right: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="header-top">
+    <div class="nav-links">
+        <a href="index.html">← ADMIN HUB</a>
+        <span id="stats">Checking Auth...</span>
+    </div>
+    <h2>Customer Management</h2>
+    <div class="filter-scroll">
+        <button class="f-btn active" onclick="setFilter('ALL', this)">All Customers</button>
+        <button class="f-btn" onclick="setFilter('PENDING', this)">Pending KYC</button>
+        <button class="f-btn" onclick="setFilter('VERIFIED', this)">Verified</button>
+    </div>
+</div>
+
+<div class="content-area">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Customer / UID</th>
+                    <th>KYC Submission Details</th>
+                    <th>Wallet & Activity</th>
+                    <th>Status</th>
+                    <th>Operations</th>
+                </tr>
+            </thead>
+            <tbody id="userTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const config = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks"
+    };
+    firebase.initializeApp(config);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    const ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+    let currentFilter = 'ALL';
+    let usersData = {};
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            if (user.uid === ADMIN_UID) {
+                document.getElementById('stats').innerText = "Admin Verified. Syncing...";
+                startSync();
+            } else {
+                alert("ACCESS DENIED");
+                auth.signOut().then(() => { window.location.href = "../login.html"; });
+            }
+        } else {
+            window.location.href = "../login.html";
+        }
+    });
+
+    function startSync() {
+        db.ref('users').once('value').then(snap => {
+            usersData = snap.val() || {};
+            render();
+            db.ref('users').on('value', s => {
+                usersData = s.val() || {};
+                render();
+            });
+        }).catch(error => {
+            alert("Error: " + error.message);
+        });
+    }
+
+    function setFilter(f, btn) {
+        currentFilter = f;
+        document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+    }
+
+    function render() {
+        const tbody = document.getElementById('userTable');
+        tbody.innerHTML = "";
+        let count = 0;
+
+        Object.keys(usersData).forEach(uid => {
+            const u = usersData[uid];
+            let status = u.kyc_status || 'NOT-SUBMITTED';
+            if(currentFilter !== 'ALL' && status !== currentFilter) return;
+            count++;
+
+            const isBlocked = u.account_status === 'BLOCKED';
+            
+            // ADJUSTED: Matching the exact fields from your KYC form
+            const idType = u.id_type || "N/A";
+            const idNum = u.id_number || "N/A";
+            const dob = u.dob || "N/A";
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>
+                        <b>${u.name || 'Unknown'}</b><br>
+                        <small>${u.email || ''}</small>
+                        <span class="uid">${uid}</span>
+                    </td>
+                    <td class="doc-detail">
+                        <span class="doc-label">ID Type:</span> ${idType}<br>
+                        <span class="doc-label">ID Number:</span> <b>${idNum}</b><br>
+                        <span class="doc-label">DOB:</span> <span style="color:#e65100;">${dob}</span>
+                    </td>
+                    <td>
+                        <small>V: ${u.approve_count || 0} | D: ${u.decline_count || 0}<br>
+                        <b>Bal: ₦${Number(u.balance || 0).toLocaleString()}</b></small>
+                    </td>
+                    <td><span class="badge status-${status}">${status}</span></td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
+                            <button class="action-btn btn-d" onclick="decline('${uid}', this)">Decline</button>
+                            <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Reset Timer</button>
+                            <button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>
+                            <button class="action-btn btn-reset" onclick="resetPassword('${uid}', '${u.name}', this)">Pass Reset</button>
+                            <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}',${isBlocked}, this)">
+                                ${isBlocked ? 'Unblock' : 'Block'}
+                            </button>
+                            <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+        document.getElementById('stats').innerText = count + " Users Found";
+    }
+
+    async function resetTimer(uid, btn) {
+        if(!confirm("Reset submission timer?")) return;
+        btn.disabled = true;
+        try {
+            await db.ref('users/' + uid + '/last_action_time').set(0);
+            alert("✅ Timer reset!");
+        } catch (e) { alert("Error: " + e.message); }
+        finally { btn.disabled = false; }
+    }
+
+    async function approve(uid, btn) {
+        btn.disabled = true;
+        try {
+            await db.ref('users/'+uid).update({ kyc_status: 'VERIFIED', last_action_time: Date.now() });
+            await db.ref('notifications/'+uid).push({ message: "✅ KYC Verified!", timestamp: Date.now(), read: false });
+        } catch (e) { alert("Error: " + e.message); }
+        finally { btn.disabled = false; }
+    }
+
+    async function decline(uid, btn) {
+        const r = prompt("Reason:");
+        if(!r) return;
+        btn.disabled = true;
+        try {
+            await db.ref('users/'+uid).update({ kyc_status: 'DECLINED', last_action_time: Date.now() });
+            await db.ref('notifications/'+uid).push({ message: "❌ KYC Declined: " + r, timestamp: Date.now(), read: false });
+        } catch (e) { alert("Error: " + e.message); }
+        finally { btn.disabled = false; }
+    }
+
+    async function sendMsg(uid, btn) {
+        const m = prompt("Message:");
+        if(!m) return;
+        btn.disabled = true;
+        try {
+            await db.ref('notifications/'+uid).push({ message: m, timestamp: Date.now(), read: false });
+            alert("Sent!");
+        } catch (e) { alert("Error: " + e.message); }
+        finally { btn.disabled = false; }
+    }
+
+    async function toggleB(uid, isBlocked, btn) {
+        btn.disabled = true;
+        try {
+            await db.ref('users/'+uid).update({ account_status: isBlocked ? 'ACTIVE' : 'BLOCKED' });
+        } catch (e) { alert("Error: " + e.message); }
+        finally { btn.disabled = false; }
+    }
+
+    async function delAccount(uid, btn) {
+        if(!confirm("Delete permanently?")) return;
+        btn.disabled = true;
+        try {
+            await db.ref('users/'+uid).remove();
+            alert("Deleted.");
+        } catch (e) { alert("Error: " + e.message); btn.disabled = false; }
+    }
+</script>
+<script src="auth.js"></script>
+</body>
+</html>

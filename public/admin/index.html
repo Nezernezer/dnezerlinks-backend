@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Admin | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root {
+            --primary: #0d47a1;
+            --accent: #ffab00;
+            --bg: #f4f7f6;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: var(--bg);
+            margin: 0;
+        }
+        .status-header {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        h1 {
+            color: #333;
+            font-size: 1.3rem;
+            margin: 0;
+        }
+        #adminStatus {
+            font-size: 0.75rem;
+            color: #4caf50;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 500px;
+            margin: auto;
+        }
+        .card {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60px;
+        }
+        .card:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+        /* Mobile Specific Colors */
+        .btn-wallet { background: var(--accent); color: black; }
+        .btn-broadcast { background: #2e7d32; }
+        .btn-history { background: #607d8b; }
+        <a href="audit.html" class="card btn-history" style="background: #e91e63;">Audit History</a>
+        .btn-exit { background: #444; margin-top: 10px; }
+
+        .footer-info {
+            margin-top: 30px;
+            font-size: 0.7rem;
+            color: #888;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="status-header">
+        <h1>Master Admin Hub</h1>
+        <div id="adminStatus">Verifying Secure Session...</div>
+    </div>
+
+    <div class="grid">
+        <a href="users.html" class="card">Manage Verifications</a>
+        <a href="wallet.html" class="card btn-wallet">Wallet Manager</a>
+        <a href="broadcast.html" class="card btn-broadcast">Broadcast & Marquee</a>
+        <a href="history.html" class="card btn-history">Transaction History</a>
+        <a href="audit.html" class="card btn-history" style="background: #e91e63;">Audit History</a>
+        <a href="../home.html" class="card btn-exit">Exit Admin</a>
+    </div>
+
+    <div class="footer-info">
+        DNEZERLINKS BUSINESS MANAGER v2.0
+    </div>
+
+    <script>
+        const config = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks"
+        };
+        firebase.initializeApp(config);
+        
+        const auth = firebase.auth();
+        const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+        // Secure Session Guard
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                if (user.uid !== MASTER_ADMIN_UID) {
+                    alert("Unauthorized Access");
+                    window.location.href = "../home.html";
+                } else {
+                    document.getElementById('adminStatus').innerText = "● MASTER SESSION ACTIVE";
+                }
+            } else {
+                window.location.href = "../login.html";
+            }
+        });
+
+        // Anti-Timeout Token Refresh (Every 10 minutes)
+        setInterval(() => {
+            const user = auth.currentUser;
+            if (user && user.uid === MASTER_ADMIN_UID) {
+                user.getIdToken(true).then(() => {
+                    console.log("Admin Token Refreshed Automatically");
+                }).catch(() => {
+                    window.location.reload(); // Reload if refresh fails to force new login
+                });
+            }
+        }, 600000);
+
+        // Instant Error Handling for Permission Denied
+        firebase.database().ref('.info/connected').on('value', (snap) => {
+            if (snap.val() === false) {
+                console.log("Database Disconnected");
+            }
+        }, (error) => {
+            if (error.code === "PERMISSION_DENIED") {
+                console.warn("Session Expired. Refreshing Master Key...");
+                location.reload();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "rules": {
+    // 1. GLOBAL ADMIN OVERRIDE (Master Key)
+    ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
+    ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
+
+    "users": {
+      "$uid": {
+        // 2. Individual User Permissions
+        ".read": "auth.uid === $uid",
+        ".write": "auth.uid === $uid",
+
+        "balance": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "kyc_status": {
+          ".validate": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || newData.val() === 'PENDING' || newData.val() === 'UNVERIFIED'"
+        }
+      }
+    },
+    "transactions": {
+      "$uid": {
+        ".read": "auth.uid === $uid",
+        ".write": "auth.uid === $uid"
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth.uid === $uid",
+        ".write": "auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+      }
+    },
+    "settings": {
+      ".read": "true",
+      ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+    }
+  }
+}

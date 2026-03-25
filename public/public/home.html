@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Home</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <script src="js/modals.js"></script>
+
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
+        
+        /* Header & Balance */
+        .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
+        .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
+        
+        /* Marquee Ticker */
+        .news-ticker { background: #e3f2fd; padding: 10px 0; border-bottom: 1px solid #bbdefb; overflow: hidden; white-space: nowrap; cursor: pointer; }
+        .ticker-text { display: inline-block; padding-left: 100%; font-size: 13px; font-weight: 700; color: var(--primary); animation: ticker 25s linear infinite; }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+        
+        /* Services */
+        .services-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; }
+        .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; border: 1px solid #eee; transition: 0.2s; }
+        .service-item:active { transform: scale(0.95); }
+        .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
+        
+        /* Navigation */
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #ddd; z-index: 100; }
+        .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
+        .nav-link.active { color: var(--primary); font-weight: bold; }
+        
+        .admin-switch { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 6px 12px; border-radius: 15px; font-size: 10px; }
+        
+        /* Alert Styling */
+        .pin-alert { color: #d32f2f !important; animation: blink 1.5s infinite !important; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div id="adminContainer"></div>
+    <div id="userName" style="font-size: 14px;">Loading...</div>
+    <div class="balance-amount">₦<span id="balDisplay">0.00</span></div>
+    <div style="font-size: 11px; opacity: 0.8;">WALLET BALANCE</div>
+</div>
+
+<div class="news-ticker" id="tickerBar">
+    <div class="ticker-text" id="globalUpdate">Connecting to server...</div>
+</div>
+
+<div class="services-grid">
+    <div class="service-item" onclick="location.href='airtime/'">📱<span>Airtime</span></div>
+    <div class="service-item" onclick="location.href='data/'">📶<span>Data</span></div>
+    <div class="service-item" onclick="location.href='cable/'">📺<span>Cable TV</span></div>
+    <div class="service-item" onclick="location.href='exampin/'">🎓<span>Exam Pin</span></div>
+    <div class="service-item" onclick="location.href='bulksms/'">✉️<span>Bulk SMS</span></div>
+    <div class="service-item" onclick="location.href='recharge-pin/'">🎫<span>Recharge PIN</span></div>
+    <div class="service-item" onclick="location.href='electricity/'">💡<span>Electricity</span></div>
+    <div class="service-item" onclick="location.href='airtime-to-cash/'">♻️<span>Swap</span></div>
+</div>
+
+<div class="bottom-nav">
+    <a href="home.html" class="nav-link active">🏠<br>HOME</a>
+    <a href="profile.html" class="nav-link">👤<br>PROFILE</a>
+    <a href="account.html" class="nav-link">⚙️<br>ACCOUNT</a>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+            // Listen to User Data
+            db.ref('users/' + user.uid).on('value', snap => {
+                const data = snap.val();
+                if (data) {
+                    // Update Balance with commas
+                    document.getElementById('balDisplay').innerText = parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('userName').innerText = "Hello, " + (data.name || "User");
+
+                    // Check for PIN Security
+                    const tickerText = document.getElementById('globalUpdate');
+                    const tickerBar = document.getElementById('tickerBar');
+                    
+                    if (!data.transaction_pin) {
+                        tickerText.innerText = "⚠️ SECURITY ALERT: CLICK HERE TO SET YOUR TRANSACTION PIN";
+                        tickerText.classList.add('pin-alert');
+                        tickerBar.onclick = () => location.href = 'security.html';
+                    } else {
+                        tickerText.classList.remove('pin-alert');
+                        tickerBar.onclick = null;
+                        syncMarquee();
+                    }
+                }
+                
+                // Master Admin Check
+                if (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2") {
+                    document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️</button>`;
+                }
+            });
+        } else {
+            window.location.href = 'login.html';
+        }
+    });
+
+    function syncMarquee() {
+        const tickerEl = document.getElementById('globalUpdate');
+        // Only fetch if not currently showing the PIN alert
+        db.ref('system_settings/global_update').on('value', s => {
+            if (s.val() && !tickerEl.classList.contains('pin-alert')) {
+                tickerEl.innerText = s.val();
+            }
+        });
+    }
+</script>
+</body>
+</html>

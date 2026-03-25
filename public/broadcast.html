@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Broadcast | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background: #fff; margin: 0; padding: 0; }
+        .header-top { background: var(--primary); color: white; padding: 20px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
+        .header-top h2 { margin: 0; font-size: 1.4rem; }
+        .status-bar { font-size: 10px; color: #4caf50; font-weight: bold; }
+        .content-area { padding: 20px 15px; }
+        .section { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #eee; }
+        h4 { margin: 0 0 10px 0; color: var(--primary); }
+        textarea, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-marquee { background: var(--primary); color: white; }
+        .btn-global { background: var(--accent); color: #000; }
+        .btn:disabled { opacity: 0.5; }
+    </style>
+</head>
+<body>
+<div class="header-top">
+    <div class="nav-links">
+        <a href="index.html">← ADMIN HUB</a>
+        <span id="authStatus" class="status-bar">Verifying...</span>
+    </div>
+    <h2>Broadcast Center</h2>
+</div>
+<div class="content-area">
+    <div class="section">
+        <h4>Live Site Marquee</h4>
+        <input type="text" id="marqueeText" placeholder="Scrolling text...">
+        <button class="btn btn-marquee" id="marqueeBtn" onclick="updateMarquee()">Update Marquee</button>
+    </div>
+    <div class="section">
+        <h4>Global In-App Message</h4>
+        <textarea id="globalMsg" rows="3" placeholder="Message to all users..."></textarea>
+        <button class="btn btn-global" id="globalBtn" onclick="sendGlobal()">Send to All Accounts</button>
+    </div>
+</div>
+<script>
+    const config = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks"
+    };
+    firebase.initializeApp(config);
+    const db = firebase.database();
+    const auth = firebase.auth();
+    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+    auth.onAuthStateChanged(user => {
+        if (user && user.uid === MASTER_ADMIN_UID) {
+            document.getElementById('authStatus').innerText = "Session Active ●";
+            // Sync current values from the database
+            db.ref('system_settings/global_update').once('value', s => {
+                document.getElementById('marqueeText').value = s.val() || "";
+            });
+        } else {
+            window.location.href = "../login.html";
+        }
+    });
+
+    function updateMarquee() {
+        const text = document.getElementById('marqueeText').value;
+        const btn = document.getElementById('marqueeBtn');
+        btn.disabled = true;
+
+        // DIRECT PATH WRITING
+        // We update BOTH paths to ensure the Home Page multi-path check definitely sees it
+        const updates = {};
+        updates['system_settings/global_update'] = text;
+        updates['settings/global_update'] = text;
+
+        db.ref().update(updates)
+        .then(() => alert("✅ Marquee updated on all paths!"))
+        .catch(error => alert("❌ FAILED: " + error.message))
+        .finally(() => btn.disabled = false);
+    }
+
+    async function sendGlobal() {
+        const msg = document.getElementById('globalMsg').value;
+        const btn = document.getElementById('globalBtn');
+        if(!msg) return alert("Please enter a message.");
+        btn.disabled = true;
+        try {
+            const usersSnap = await db.ref('users').once('value');
+            const updates = {};
+            usersSnap.forEach(u => {
+                const uid = u.key;
+                const notifKey = db.ref('notifications').child(uid).push().key;
+                updates["/notifications/" + uid + "/" + notifKey] = {
+                    message: msg,
+                    timestamp: Date.now(),
+                    read: false
+                };
+            });
+            await db.ref().update(updates);
+            alert("✅ Global message delivered!");
+            document.getElementById('globalMsg').value = "";
+        } catch (error) {
+            alert("❌ FAILED: " + error.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

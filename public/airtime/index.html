@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buy Airtime | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --bg: #f8f9fa; --error: #d32f2f; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: var(--bg); display: flex; flex-direction: column; align-items: center; }
+        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; width: 100%; margin-top: 20px; }
+        h2 { color: var(--primary); margin-bottom: 20px; text-align: center; }
+        label { font-size: 14px; font-weight: 600; color: #555; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0 20px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; outline: none; }
+        button { background: var(--primary); color: white; font-weight: bold; border: none; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        #pinModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 320px; text-align: center; }
+        .pin-input { font-size: 32px; letter-spacing: 15px; text-align: center; border: 2px solid var(--primary); margin: 15px 0; }
+        .cancel-btn { background: #f44336; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <a href="../home.html" style="color: var(--primary); text-decoration: none; font-weight: bold;">← Back to Dashboard</a>
+
+    <div class="card">
+        <h2>📱 Airtime Purchase</h2>
+        <label>Network</label>
+        <select id="network">
+            <option value="MTN">MTN</option>
+            <option value="GLO">Glo</option>
+            <option value="AIRTEL">Airtel</option>
+            <option value="9MOBILE">9mobile</option>
+        </select>
+
+        <label>Phone Number</label>
+        <input type="tel" id="phone" placeholder="08012345678">
+
+        <label>Amount (₦)</label>
+        <input type="number" id="amount" placeholder="Min ₦100" min="100">
+
+        <button id="buyBtn" onclick="openPinModal()">Purchase Now</button>
+    </div>
+
+    <div id="pinModal">
+        <div class="modal-content">
+            <h3>Enter PIN</h3>
+            <p>Confirm with your 4-digit PIN</p>
+            <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="****" inputmode="numeric">
+            <button id="confirmBtn" onclick="verifyAndPay()">Confirm Payment</button>
+            <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        function openPinModal() {
+            const phone = document.getElementById('phone').value;
+            const amount = document.getElementById('amount').value;
+            if (phone.length < 11 || amount < 100) return alert("Check phone and amount!");
+            
+            document.getElementById('pinModal').style.display = 'flex';
+            document.getElementById('txnPin').value = '';
+            document.getElementById('txnPin').focus();
+        }
+
+        function closePinModal() {
+            document.getElementById('pinModal').style.display = 'none';
+        }
+
+        async function verifyAndPay() {
+            const enteredPin = document.getElementById('txnPin').value;
+            const user = auth.currentUser;
+            const confirmBtn = document.getElementById('confirmBtn');
+
+            if (enteredPin.length < 4) return alert("Enter complete PIN");
+
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = "Verifying...";
+
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const userData = snap.val();
+            const now = Date.now();
+
+            // 1. BLOCK CHECK: Is account already locked?
+            if (userData.status === "locked") {
+                alert("This account is locked from transactions. Please contact admin.");
+                closePinModal();
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = "Confirm Payment";
+                return;
+            }
+
+            // 2. PIN VERIFICATION
+            if (String(enteredPin) === String(userData.transaction_pin)) {
+                // SUCCESS: Reset failure data
+                await database.ref('users/' + user.uid).update({ failed_attempts: 0, last_failed_time: 0 });
+                executePurchase(userData.balance, user.uid);
+            } else {
+                // FAILURE: Logic for 3 tries in 5 minutes
+                let attempts = userData.failed_attempts || 0;
+                let lastFail = userData.last_failed_time || 0;
+                let fiveMinutes = 5 * 60 * 1000;
+
+                // If the last failure was more than 5 mins ago, reset the count to 1
+                if (now - lastFail > fiveMinutes) {
+                    attempts = 1;
+                } else {
+                    attempts++;
+                }
+
+                let updateData = {
+                    failed_attempts: attempts,
+                    last_failed_time: now
+                };
+
+                if (attempts >= 3) {
+                    updateData.status = "locked";
+                    alert("SECURITY ALERT: 3 consecutive wrong attempts. Your transactions are now locked. Contact Admin.");
+                } else {
+                    alert(`Wrong PIN. ${3 - attempts} tries left within the 5-minute window.`);
+                }
+
+                await database.ref('users/' + user.uid).update(updateData);
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = "Confirm Payment";
+                if (attempts >= 3) closePinModal();
+            }
+        }
+
+        function executePurchase(balance, uid) {
+            const amount = parseFloat(document.getElementById('amount').value);
+            const network = document.getElementById('network').value;
+            const phone = document.getElementById('phone').value;
+            const networkMap = { "MTN": "1", "GLO": "2", "9MOBILE": "3", "AIRTEL": "4" };
+
+            if (balance < amount) {
+                alert("Insufficient Balance");
+                return closePinModal();
+            }
+
+            database.ref('users/' + uid + '/balance').transaction(cur => {
+                if (cur === null) return cur;
+                return cur - amount;
+            }, (err, commit) => {
+                if (commit) {
+                    fetch("https://script.google.com/macros/s/AKfycbwb-risEmjl_tZ1VaP6T9knrjEJZKlyMPGRxBwjis0GTnxJki4lxb2Cr2TQUDj3cCSt/exec", {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({ phone, amount, networkID: networkMap[network] })
+                    });
+                    database.ref('transactions/' + uid).push({
+                        type: 'Airtime', network, phone, amount,
+                        status: 'Successful', date: new Date().toLocaleString()
+                    });
+                    alert("Success! Airtime Sent.");
+                    window.location.href = "../home.html";
+                }
+            });
+        }
+    </script>
+</body>
+</html>

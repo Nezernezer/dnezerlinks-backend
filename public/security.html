@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction PIN | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .card { background: white; width: 90%; max-width: 400px; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+        .icon { font-size: 50px; margin-bottom: 10px; }
+        h2 { color: var(--primary); margin: 10px 0; }
+        p { color: #666; font-size: 14px; margin-bottom: 25px; }
+        input { width: 100%; padding: 15px; margin: 10px 0; border: 2px solid #eee; border-radius: 10px; font-size: 24px; text-align: center; letter-spacing: 10px; box-sizing: border-box; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--primary); }
+        .btn { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        .btn:active { transform: scale(0.98); }
+        .back-link { display: block; margin-top: 20px; color: #888; text-decoration: none; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="icon">🔐</div>
+    <h2 id="title">Create Transaction PIN</h2>
+    <p id="instruction">Set a 4-digit PIN to authorize your payments.</p>
+    
+    <input type="password" id="pin1" maxlength="4" placeholder="••••" inputmode="numeric">
+    <input type="password" id="pin2" maxlength="4" placeholder="••••" inputmode="numeric">
+    
+    <button class="btn" onclick="handlePin()">SAVE SECURITY PIN</button>
+    <a href="home.html" class="back-link">Return to Home</a>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    firebase.auth().onAuthStateChanged(user => {
+        if (!user) window.location.href = 'login.html';
+        
+        db.ref('users/' + user.uid + '/transaction_pin').once('value', snap => {
+            if (snap.exists()) {
+                document.getElementById('title').innerText = "Change PIN";
+                document.getElementById('instruction').innerText = "Enter a new 4-digit PIN below.";
+            }
+        });
+    });
+
+    function handlePin() {
+        const p1 = document.getElementById('pin1').value;
+        const p2 = document.getElementById('pin2').value;
+        const user = firebase.auth().currentUser;
+
+        if (p1.length !== 4 || isNaN(p1)) return alert("PIN must be 4 digits.");
+        if (p1 !== p2) return alert("PINs do not match.");
+
+        db.ref('users/' + user.uid).update({ transaction_pin: p1 })
+        .then(() => {
+            alert("✅ Security PIN set successfully!");
+            window.location.href = 'home.html';
+        })
+        .catch(err => alert("Error: " + err.message));
+    }
+</script>
+</body>
+</html>

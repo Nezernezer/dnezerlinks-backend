@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Recharge PINs</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
+        .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .back-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; margin-right: 15px; }
+        .card { background:#fff; border-radius:15px; padding:20px; margin:15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
+        .summary { background: #e3f2fd; padding: 12px; border-radius: 10px; margin-top: 10px; font-size: 15px; color: var(--primary); font-weight: bold; text-align: center; border: 1px dashed var(--primary); }
+        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 15px; transition: 0.3s; }
+        .buy-btn:active { transform: scale(0.98); background: #1565c0; }
+        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 100; }
+        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="header-card">
+    <button class="back-btn" onclick="location.href='../home.html'">←</button>
+    <h3 style="margin:0;">Generate Recharge PIN</h3>
+</div>
+
+<div class="card">
+    <div class="form-group">
+        <label>Network</label>
+        <select id="network">
+            <option value="MTN">MTN</option>
+            <option value="GLO">GLO</option>
+            <option value="AIRTEL">AIRTEL</option>
+            <option value="9MOBILE">9MOBILE</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Denomination (₦)</label>
+        <select id="amount" onchange="updateTotal()">
+            <option value="100">100</option>
+            <option value="200">200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Quantity</label>
+        <input type="number" id="qty" value="1" min="1" max="10" oninput="updateTotal()">
+    </div>
+
+    <div class="summary" id="totalDisplay">Total Payable: ₦100.00</div>
+
+    <button class="buy-btn" id="procBtn">GENERATE PIN</button>
+</div>
+
+<div class="bottom-nav">
+    <a class="nav-item" href="../home.html">🏠<br>HOME</a>
+    <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>
+    <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    function updateTotal() {
+        const amt = parseFloat(document.getElementById('amount').value);
+        const qty = parseInt(document.getElementById('qty').value) || 0;
+        document.getElementById('totalDisplay').innerText = "Total Payable: ₦" + (amt * qty).toLocaleString();
+    }
+
+    document.getElementById('procBtn').onclick = async () => {
+        const user = auth.currentUser;
+        if (!user) return alert("Please login first");
+
+        const btn = document.getElementById('procBtn');
+        const amt = parseFloat(document.getElementById('amount').value);
+        const qty = parseInt(document.getElementById('qty').value);
+        const net = document.getElementById('network').value;
+        const totalCost = amt * qty;
+
+        if (isNaN(qty) || qty < 1) return alert("Select at least 1 PIN");
+
+        if (!confirm(`Confirm Purchase:\n\nService: ${net} PIN\nQty: ${qty}\nTotal: ₦${totalCost.toLocaleString()}\n\nProceed?`)) return;
+
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+
+        const userRef = database.ref('users/' + user.uid);
+
+        userRef.child('balance').transaction((currentBal) => {
+            if (currentBal === null || currentBal < totalCost) {
+                return; // Abort if insufficient funds
+            }
+            return currentBal - totalCost;
+        }, (error, committed) => {
+            if (error) {
+                alert("Transaction Error: " + error.message);
+                resetBtn();
+            } else if (!committed) {
+                alert(`❌ Insufficient Balance! You need ₦${totalCost}`);
+                resetBtn();
+            } else {
+                // Saving to transaction history
+                database.ref('transactions/' + user.uid).push({
+                    type: 'Recharge PIN',
+                    service: net + " (₦" + amt + " x " + qty + ")",
+                    amount: totalCost,
+                    date: new Date().toLocaleString(),
+                    status: "Successful"
+                }).then(() => {
+                    alert("✅ PINs Generated! Check your history to view the numbers.");
+                    location.href = '../home.html';
+                });
+            }
+        });
+    };
+
+    function resetBtn() {
+        const btn = document.getElementById('procBtn');
+        btn.disabled = false;
+        btn.innerText = "GENERATE PIN";
+    }
+</script>
+</body>
+</html>

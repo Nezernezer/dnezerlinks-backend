@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Buy Airtime</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
+        
+        /* Header & Back Navigation */
+        .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; }
+        .back-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; margin-right: 15px; }
+        
+        .card { background:#fff; border-radius:15px; padding:20px; margin:15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; }
+        
+        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .buy-btn:disabled { background: #ccc; }
+
+        /* Bottom Nav - Paths updated with ../ */
+        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; }
+        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+        .active { color: var(--primary); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header-card">
+    <button class="back-btn" onclick="location.href='../home.html'">←</button>
+    <h3 style="margin:0;">Buy Airtime</h3>
+</div>
+
+<div class="card">
+    <div class="form-group">
+        <label>Network</label>
+        <select id="network">
+            <option value="MTN">MTN</option>
+            <option value="GLO">GLO</option>
+            <option value="AIRTEL">AIRTEL</option>
+            <option value="9MOBILE">9MOBILE</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" id="phone" placeholder="08012345678" maxlength="11">
+    </div>
+
+    <div class="form-group">
+        <label>Amount (₦)</label>
+        <input type="number" id="amount" placeholder="Minimum 50">
+    </div>
+
+    <button class="buy-btn" id="procBtn">PURCHASE NOW</button>
+</div>
+
+<div class="bottom-nav">
+    <a class="nav-item" href="../home.html">🏠<br>HOME</a>
+    <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>
+    <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        projectId: "dnezerlinks",
+        storageBucket: "dnezerlinks.firebasestorage.app",
+        messagingSenderId: "1028450580168",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    document.getElementById('procBtn').onclick = async () => {
+        const user = auth.currentUser;
+        if (!user) return alert("Please login first");
+
+        const amt = parseFloat(document.getElementById('amount').value);
+        const ph = document.getElementById('phone').value;
+        const net = document.getElementById('network').value;
+        const btn = document.getElementById('procBtn');
+
+        if (!ph || ph.length < 11) return alert("Enter valid phone number");
+        if (isNaN(amt) || amt < 50) return alert("Minimum ₦50 required");
+
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+
+        const userRef = db.collection("users").doc(user.uid);
+
+        try {
+            const doc = await userRef.get();
+            const currentBal = doc.data().walletBalance || 0;
+
+            if (currentBal < amt) {
+                alert("Insufficient wallet balance!");
+            } else {
+                // 1. Deduct Balance
+                await userRef.update({ walletBalance: currentBal - amt });
+
+                // 2. Log Transaction
+                await userRef.collection("history").add({
+                    service: net + " Airtime",
+                    amount: amt,
+                    phone: ph,
+                    date: new Date().toLocaleString(),
+                    status: "Successful"
+                });
+
+                alert("Airtime Purchase Successful!");
+                location.href = '../home.html';
+            }
+        } catch (err) {
+            alert("Error: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "PURCHASE NOW";
+        }
+    };
+</script>
+</body>
+</html>
+

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Support Center</title>
+    <style>
+        :root { --primary: #0d47a1; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding:20px; text-align:center; }
+        .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px; }
+        .support-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; border: 1px solid #ddd; background: white; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .support-btn:active { background: #f0f0f0; }
+        .wa { color: #25D366; border-color: #25D366; }
+        .mail { color: #D44638; border-color: #D44638; }
+        .call { color: var(--primary); border-color: var(--primary); }
+        .back-btn { background: var(--primary); color: white; border: none; padding: 12px 30px; border-radius: 8px; margin-top: 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2 style="color:var(--primary);">How can we help?</h2>
+        <p>Our support team is available 24/7 to assist you with your transactions.</p>
+        
+        <button class="support-btn wa" onclick="window.location.href='https://wa.me/2349028397176'">
+            💬 Chat on WhatsApp
+        </button>
+
+        <button class="support-btn mail" onclick="window.location.href='mailto:dnezerlinks@gmail.com'">
+            ✉️ Send an Email
+        </button>
+
+        <button class="support-btn call" onclick="alert('Phone line busy, please use WhatsApp')">
+            📞 Call Support
+        </button>
+    </div>
+
+    <button class="back-btn" onclick="location.href='account.html'">Back to Account</button>
+
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Wallet - Dnezerlinks</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
+        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; position: relative; }
+        .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; }
+        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; display: block; }
+        .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
+        #acc-number { font-size: 1.4rem; color: #222; }
+        .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9rem; }
+        .copy-btn:hover { background: #0056b3; }
+        #loading { text-align: center; color: #007bff; font-weight: bold; padding: 20px; }
+        #toast { visibility: hidden; min-width: 200px; background-color: #333; color: #fff; text-align: center; border-radius: 5px; padding: 10px; position: fixed; z-index: 100; bottom: 30px; left: 50%; transform: translateX(-50%); }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Fund Wallet</h2>
+    <div class="balance-box">
+        <span style="font-size: 0.9rem;">Current Wallet Balance</span><br>
+        <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
+    </div>
+
+    <div id="loading">Gathering your banking details...</div>
+
+    <div id="account-ui" style="display: none;">
+        <p style="font-size: 0.9rem; text-align: center;">Transfer to your dedicated account below to fund your wallet instantly.</p>
+        
+        <div class="bank-card">
+            <span class="label">BANK NAME</span>
+            <span class="value" id="bank-name">---</span>
+
+            <span class="label">ACCOUNT NUMBER</span>
+            <div class="acc-num-row">
+                <span id="acc-number">----------</span>
+                <button class="copy-btn" onclick="copyAccount()">Copy</button>
+            </div>
+
+            <span class="label" style="margin-top:15px; display:block;">ACCOUNT NAME</span>
+            <span class="value" id="acc-name">---</span>
+        </div>
+        <p style="font-size: 0.8rem; color: #888; margin-top: 15px; text-align: center;">Powered by Billstack & Dnezerlinks</p>
+    </div>
+</div>
+
+<div id="toast">Account Number Copied!</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Your specific Dnezerlinks Configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        storageBucket: "dnezerlinks.appspot.com",
+        messagingSenderId: "1028450580168",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            const userRef = doc(db, "users", user.email);
+            // Real-time listener for balance and account changes
+            onSnapshot(userRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    document.getElementById("wallet-balance").innerText = `₦${parseFloat(data.walletBalance || 0).toLocaleString()}`;
+                    document.getElementById("bank-name").innerText = data.bankName || "PalmPay";
+                    document.getElementById("acc-number").innerText = data.accountNumber || "Not Assigned";
+                    document.getElementById("acc-name").innerText = data.accountName || `Dnezerlinks-${data.firstName}`;
+                    
+                    document.getElementById("loading").style.display = "none";
+                    document.getElementById("account-ui").style.display = "block";
+                } else {
+                    document.getElementById("loading").innerText = "No virtual account found. Please register on the dashboard.";
+                }
+            });
+        } else {
+            // Redirect to login if user isn't authenticated
+            window.location.href = "login.html";
+        }
+    });
+
+    window.copyAccount = function() {
+        const accNum = document.getElementById("acc-number").innerText;
+        if(accNum === "----------") return;
+        navigator.clipboard.writeText(accNum).then(() => {
+            const toast = document.getElementById("toast");
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        });
+    }
+</script>
+
+</body>
+</html>

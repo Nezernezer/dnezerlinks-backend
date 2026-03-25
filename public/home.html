@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dnezerlinks | Home</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
+        .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
+        .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
+
+        .notif-btn { position: absolute; top: 15px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
+        .notif-badge { position: absolute; top: -5px; right: -5px; background: red; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; font-weight: bold; display: none; }
+
+        .news-ticker { background: #e3f2fd; padding: 10px 0; border-bottom: 1px solid #bbdefb; overflow: hidden; white-space: nowrap; cursor: pointer; }
+        .ticker-text { display: inline-block; padding-left: 100%; font-size: 13px; font-weight: 700; color: var(--primary); animation: ticker 25s linear infinite; }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+
+        .services-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; }
+        .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; border: 1px solid #eee; transition: 0.2s; }
+        .service-item:active { transform: scale(0.95); }
+        .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
+
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #ddd; }
+        .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
+        .nav-link.active { color: var(--primary); font-weight: bold; }
+        .admin-switch { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 6px 12px; border-radius: 15px; font-size: 10px; }
+        .pending-badge { background: #ff5252; color: white; padding: 2px 6px; border-radius: 10px; font-size: 9px; margin-left: 5px; font-weight: bold; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .modal-content { background: white; margin: 15% auto; padding: 20px; border-radius: 20px; width: 85%; max-width: 400px; max-height: 70vh; overflow-y: auto; position: relative; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .close-btn { font-size: 24px; font-weight: bold; cursor: pointer; color: #888; border:none; background:none; }
+        .notif-item { padding: 12px; border-bottom: 1px solid #f1f1f1; font-size: 13px; line-height: 1.4; color: #333; text-align: left; }
+        .notif-item.unread { background: #fff9e6; border-left: 4px solid var(--accent); }
+        .notif-time { font-size: 10px; color: #999; display: block; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <button class="notif-btn" onclick="openNotif()">🔔<span id="notifBadge" class="notif-badge">0</span></button>
+    <div id="adminContainer"></div>
+    <div id="userName" style="font-size: 14px;">Loading...</div>
+    <div class="balance-amount">₦<span id="balDisplay">0.00</span></div>
+    <div style="font-size: 11px; opacity: 0.8;">WALLET BALANCE</div>
+</div>
+
+<div class="news-ticker" id="tickerBar">
+    <div class="ticker-text" id="globalUpdate">Connecting to server...</div>
+</div>
+
+<div class="services-grid">
+    <div class="service-item" onclick="location.href='airtime/'">📱<span>Airtime</span></div>
+    <div class="service-item" onclick="location.href='data/'">📶<span>Data</span></div>
+    <div class="service-item" onclick="location.href='cable/'">📺<span>Cable TV</span></div>
+    <div class="service-item" onclick="location.href='exampin/'">🎓<span>Exam Pin</span></div>
+    <div class="service-item" onclick="location.href='bulksms/'">✉️<span>Bulk SMS</span></div>
+    <div class="service-item" onclick="location.href='recharge-pin/'">🎫<span>Recharge PIN</span></div>
+    <div class="service-item" onclick="location.href='electricity/'">💡<span>Electricity</span></div>
+    <div class="service-item" onclick="location.href='airtime-to-cash/'">♻️<span>Swap</span></div>
+    <div class="service-item" onclick="location.href='fund-wallet.html'">💰<span>Fund Wallet</span></div>
+    <div class="service-item" onclick="location.href='history.html'">📜<span>History</span></div>
+</div>
+
+<div class="bottom-nav">
+    <a href="home.html" class="nav-link active">🏠<br>HOME</a>
+    <a href="profile.html" class="nav-link">👤<br>PROFILE</a>
+    <a href="account.html" class="nav-link">⚙️<br>ACCOUNT</a>
+</div>
+
+<div id="notifModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 style="margin:0; color:var(--primary); font-size:18px;">Notifications</h3>
+            <button class="close-btn" onclick="closeNotif()">&times;</button>
+        </div>
+        <div id="notifContainer">
+            <p style="text-align:center; color:#888;">No messages yet</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+            db.ref('users/' + user.uid).on('value', snap => {
+                const d = snap.val();
+                if (d) {
+                    document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('userName').innerText = "Hello, " + (d.name || "User");
+                }
+
+                if (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2") {
+                    db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
+                        const count = s.numChildren();
+                        const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
+                        document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>`;
+                    });
+                }
+            });
+
+            db.ref('notifications/' + user.uid).on('value', snap => {
+                let unread = 0;
+                snap.forEach(child => { if (child.val().read === false) unread++; });
+                const b = document.getElementById('notifBadge');
+                if (unread > 0) { b.innerText = unread; b.style.display = 'block'; }
+                else { b.style.display = 'none'; }
+            });
+
+            loadMarquee();
+        } else {
+            window.location.href = 'login.html';
+        }
+    });
+
+    function loadMarquee() {
+        const ticker = document.getElementById("globalUpdate");
+        firebase.database().ref("system_settings/global_update").on("value", snap => {
+            const val = snap.val();
+            ticker.innerText = val ? val : "Welcome to Dnezerlinks...";
+            ticker.style.animation = "none";
+            setTimeout(() => {
+                ticker.style.animation = "ticker 25s linear infinite";
+            }, 50);
+        });
+    }
+
+    function openNotif() {
+        const modal = document.getElementById('notifModal');
+        const container = document.getElementById('notifContainer');
+        const user = firebase.auth().currentUser;
+        modal.style.display = "block";
+
+        if (user) {
+            db.ref('notifications/' + user.uid).once('value', snap => {
+                container.innerHTML = '';
+                if (!snap.exists()) {
+                    container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>';
+                    return;
+                }
+                snap.forEach(child => {
+                    const n = child.val();
+                    const item = document.createElement('div');
+                    item.className = `notif-item ${n.read ? '' : 'unread'}`;
+                    item.innerHTML = `<div>${n.message}</div><span class="notif-time">${new Date(n.timestamp).toLocaleString()}</span>`;
+                    container.prepend(item);
+                    if (!n.read) db.ref('notifications/' + user.uid + '/' + child.key).update({ read: true });
+                });
+            });
+        }
+    }
+
+    function closeNotif() { document.getElementById('notifModal').style.display = "none"; }
+    window.onclick = function(event) { if (event.target == document.getElementById('notifModal')) closeNotif(); }
+</script>
+</body>
+</html>
