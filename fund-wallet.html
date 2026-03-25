@@ -51,3 +51,23 @@ async function loadAcc() {
 }
 if (userEmail) loadAcc();
 </script>
+
+<script>
+const userEmail = localStorage.getItem('userEmail'); 
+async function loadAcc() {
+    try {
+        const res = await fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: userEmail })
+        });
+        const data = await res.json();
+        if (data.account_number) {
+            if(document.getElementById('bankName')) document.getElementById('bankName').innerText = data.bank_name;
+            if(document.getElementById('accNumber')) document.getElementById('accNumber').innerText = data.account_number;
+            if(document.getElementById('accName')) document.getElementById('accName').innerText = data.account_name;
+        }
+    } catch (e) { console.log("Connecting to backend..."); }
+}
+if (userEmail) loadAcc();
+</script>

@@ -7,6 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Initialize Firebase
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
@@ -14,6 +15,7 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
+// Route to get/create Virtual Account
 app.post('/get-virtual-account', async (req, res) => {
     const { email } = req.body;
     try {
@@ -35,6 +37,7 @@ app.post('/get-virtual-account', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Webhook to Credit Wallet
 app.post('/webhook', async (req, res) => {
     const { event, data } = req.body;
     if (event === 'payment.success') {
@@ -47,5 +50,5 @@ app.post('/webhook', async (req, res) => {
     res.sendStatus(200);
 });
 
-app.get('/', (req, res) => res.send('Dnezerlinks Live 🚀'));
+app.get('/', (req, res) => res.send('Dnezerlinks Backend is Live! 🚀'));
 app.listen(process.env.PORT || 3000);
