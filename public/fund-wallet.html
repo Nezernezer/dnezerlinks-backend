@@ -36,17 +36,14 @@
 
     <div id="account-ui" style="display: none;">
         <p style="font-size: 0.9rem; text-align: center;">Transfer to your dedicated account below to fund your wallet instantly.</p>
-        
         <div class="bank-card">
             <span class="label">BANK NAME</span>
             <span class="value" id="bank-name">---</span>
-
             <span class="label">ACCOUNT NUMBER</span>
             <div class="acc-num-row">
                 <span id="acc-number">----------</span>
                 <button class="copy-btn" onclick="copyAccount()">Copy</button>
             </div>
-
             <span class="label" style="margin-top:15px; display:block;">ACCOUNT NAME</span>
             <span class="value" id="acc-name">---</span>
         </div>
@@ -61,11 +58,9 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // Your specific Dnezerlinks Configuration
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
         authDomain: "dnezerlinks.firebaseapp.com",
-        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
         projectId: "dnezerlinks",
         storageBucket: "dnezerlinks.appspot.com",
         messagingSenderId: "1028450580168",
@@ -76,41 +71,60 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    // If testing on the same phone browser, use localhost. 
+    // If testing on another device, use your Termux IP address.
+    const BACKEND_URL = "http://localhost:3000"; 
+
     onAuthStateChanged(auth, (user) => {
         if (user) {
             const userRef = doc(db, "users", user.email);
-            // Real-time listener for balance and account changes
-            onSnapshot(userRef, (docSnap) => {
-                if (docSnap.exists()) {
+            
+            onSnapshot(userRef, async (docSnap) => {
+                if (docSnap.exists() && docSnap.data().accountNumber) {
                     const data = docSnap.data();
-                    
-                    document.getElementById("wallet-balance").innerText = `₦${parseFloat(data.walletBalance || 0).toLocaleString()}`;
+                    document.getElementById("wallet-balance").innerText = `₦${parseFloat(data.walletBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
                     document.getElementById("bank-name").innerText = data.bankName || "PalmPay";
-                    document.getElementById("acc-number").innerText = data.accountNumber || "Not Assigned";
-                    document.getElementById("acc-name").innerText = data.accountName || `Dnezerlinks-${data.firstName}`;
-                    
+                    document.getElementById("acc-number").innerText = data.accountNumber;
+                    document.getElementById("acc-name").innerText = data.accountName;
                     document.getElementById("loading").style.display = "none";
                     document.getElementById("account-ui").style.display = "block";
                 } else {
-                    document.getElementById("loading").innerText = "No virtual account found. Please register on the dashboard.";
+                    // ACCOUNT DOES NOT EXIST - TRIGGER CREATION
+                    document.getElementById("loading").innerText = "Generating your bank account... please wait.";
+                    try {
+                        const response = await fetch(`${BACKEND_URL}/get-virtual-account`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                email: user.email,
+                                firstName: user.displayName ? user.displayName.split(' ')[0] : "Dnezer",
+                                lastName: "User",
+                                phone: "08100000000" // Fallback phone
+                            })
+                        });
+                        const resData = await response.json();
+                        if(resData.error) {
+                             document.getElementById("loading").innerText = "Error: " + resData.error;
+                        }
+                    } catch (err) {
+                        document.getElementById("loading").innerText = "Server Unreachable. Ensure backend is running.";
+                    }
                 }
             });
         } else {
-            // Redirect to login if user isn't authenticated
             window.location.href = "login.html";
         }
     });
 
     window.copyAccount = function() {
         const accNum = document.getElementById("acc-number").innerText;
-        if(accNum === "----------") return;
+        if(accNum.includes("-")) return;
         navigator.clipboard.writeText(accNum).then(() => {
             const toast = document.getElementById("toast");
             toast.className = "show";
             setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
-        });
+        }).catch(() => alert("Account Number: " + accNum));
     }
 </script>
-
 </body>
 </html>
