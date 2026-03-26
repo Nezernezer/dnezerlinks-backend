@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// FIXED Firebase Setup - Handles "5 NOT_FOUND" error
+// Firebase Setup
 if (!admin.apps.length) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
@@ -15,44 +15,36 @@ if (!admin.apps.length) {
         databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
     });
 }
+const db = admin.firestore();
 
-const db = admin.firestore();  // Default database
+console.log("✅ Server starting...");
 
-console.log("✅ Server starting... Billstack key:", !!process.env.BILLSTACK_SECRET_KEY);
-
-// Test route
 app.get('/test', (req, res) => {
-    res.json({
-        status: "Backend is LIVE",
-        time: new Date().toISOString(),
-        billstack_key_set: !!process.env.BILLSTACK_SECRET_KEY
+    res.json({ 
+        status: "LIVE", 
+        billstack_key: !!process.env.BILLSTACK_SECRET_KEY 
     });
 });
 
-// Virtual Account Route
 app.post('/get-virtual-account', async (req, res) => {
-    const { email, firstName, lastName, phone } = req.body;
-    console.log("\n=== REQUEST ===", { email });
+    const { email, firstName, lastName } = req.body;
+    console.log("Request for:", email);
 
     if (!email) return res.status(400).json({ error: "Email required" });
 
     try {
         const userRef = db.collection('users').doc(email);
         const doc = await userRef.get();
-        console.log("Firestore doc exists:", doc.exists);
 
         if (doc.exists && doc.data().accountNumber) {
-            console.log("✅ Existing account found");
             return res.json(doc.data());
         }
-
-        console.log("Creating new account on Billstack...");
 
         const payload = {
             email,
             firstName: firstName || "Dnezer",
             lastName: lastName || "User",
-            phone: phone || "08000000000",
+            phone: "08000000000",
             reference: `dnezer_${Date.now()}`,
             bank: "PALMPAY"
         };
@@ -64,39 +56,35 @@ app.post('/get-virtual-account', async (req, res) => {
                 headers: {
                     Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                     'Content-Type': 'application/json'
-                },
-                timeout: 25000
+                }
             }
         );
-
-        console.log("Billstack Success:", JSON.stringify(response.data, null, 2));
 
         const billData = response.data?.data || response.data;
 
         const dataToSave = {
-            bankName: billData.bank_name || billData.bankName || "PalmPay",
-            accountNumber: billData.account_number || billData.accountNumber,
-            accountName: billData.account_name || billData.accountName,
-            walletBalance: doc.exists ? (doc.data().walletBalance || 0) : 0
+            bankName: billData.bank_name || "PalmPay",
+            accountNumber: billData.account_number,
+            accountName: billData.account_name,
+            walletBalance: 0
         };
 
         await userRef.set(dataToSave, { merge: true });
-        console.log("✅ Saved to Firestore:", dataToSave.accountNumber);
+        console.log("Account created:", dataToSave.accountNumber);
 
         res.json(dataToSave);
 
     } catch (e) {
-        console.error("❌ ERROR:", e.message);
-        if (e.response) console.error("Billstack:", JSON.stringify(e.response.data, null, 2));
-        res.status(500).json({
-            error: "Failed to create virtual account",
-            details: e.message,
-            billstack: e.response ? e.response.data : null
+        console.error("Error:", e.message);
+        if (e.response) console.error("Billstack error:", e.response.data);
+        res.status(500).json({ 
+            error: e.message, 
+            billstack: e.response?.data 
         });
     }
 });
 
-app.get('/', (req, res) => res.send('Dnezerlinks Backend is ONLINE 🚀'));
+app.get('/', (req, res) => res.send('Dnezerlinks Backend ONLINE'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log('Server started on port', PORT));
