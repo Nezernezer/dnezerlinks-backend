@@ -74,6 +74,8 @@
         document.getElementById('lBtn').disabled = true;
         try {
             await auth.signInWithEmailAndPassword(email, pass);
+            // SAVE EMAIL TO STORAGE BEFORE REDIRECT
+            localStorage.setItem('userEmail', email);
             window.location.href = "home.html";
         } catch (err) {
             try {
@@ -108,6 +110,8 @@
                 name, email, phone, address, balance: 0, account_status: "active",
                 cooldown_timer: 0, kyc: { status: "not-submitted" }, joined: Date.now()
             });
+            // SAVE EMAIL TO STORAGE BEFORE REDIRECT
+            localStorage.setItem('userEmail', email);
             window.location.href = "home.html";
         } catch (e) {
             alert(e.message);
