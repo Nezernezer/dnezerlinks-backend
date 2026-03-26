@@ -7,12 +7,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Firebase Setup
+// Firebase Setup - Fixed for "5 NOT_FOUND" error
 if (!admin.apps.length) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
     });
 }
+
 const db = admin.firestore();
 
 console.log("✅ Server starting... Billstack key present:", !!process.env.BILLSTACK_SECRET_KEY);
@@ -22,35 +25,40 @@ app.get('/test', (req, res) => {
     res.json({
         status: "Backend is LIVE",
         time: new Date().toISOString(),
-        billstack_key_set: !!process.env.BILLSTACK_SECRET_KEY
+        billstack_key_set: !!process.env.BILLSTACK_SECRET_KEY,
+        firestore_ready: true
     });
 });
 
-// Main Route
+// Main Virtual Account Route
 app.post('/get-virtual-account', async (req, res) => {
     const { email, firstName, lastName, phone } = req.body;
-    console.log("\n=== REQUEST RECEIVED ===");
+    console.log("\n=== /get-virtual-account REQUEST ===");
     console.log("Email:", email);
 
-    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
 
     try {
         const userRef = db.collection('users').doc(email);
         const doc = await userRef.get();
+        console.log("Firestore doc exists:", doc.exists);
 
         if (doc.exists && doc.data().accountNumber) {
             console.log("✅ Returning existing account");
             return res.json(doc.data());
         }
 
-        console.log("Calling Billstack...");
+        console.log("Calling Billstack with bank: PALMPAY...");
 
         const payload = {
             email: email,
             firstName: firstName || "Dnezer",
             lastName: lastName || "User",
             phone: phone || "08000000000",
-            reference: `dnezer_${Date.now()}`
+            reference: `dnezer_${Date.now()}`,
+            bank: "PALMPAY"                     // Required by Billstack
         };
 
         const response = await axios.post(
@@ -77,16 +85,21 @@ app.post('/get-virtual-account', async (req, res) => {
         };
 
         await userRef.set(dataToSave, { merge: true });
+        console.log("✅ Account saved successfully:", dataToSave.accountNumber);
 
-        console.log("✅ SUCCESS - Account created:", dataToSave.accountNumber);
         res.json(dataToSave);
 
     } catch (e) {
-        console.error("❌ ERROR:", e.message);
-        if (e.response) console.error("Billstack details:", JSON.stringify(e.response.data, null, 2));
-        res.status(500).json({ 
+        console.error("❌ FULL ERROR:", e.message);
+        if (e.response) {
+            console.error("Billstack Error:", JSON.stringify(e.response.data, null, 2));
+        } else {
+            console.error("Other error (Firestore/Admin):", e.code || e);
+        }
+        res.status(500).json({
             error: "Failed to create virtual account",
-            details: e.response ? e.response.data : e.message 
+            details: e.message,
+            code: e.code || null
         });
     }
 });
