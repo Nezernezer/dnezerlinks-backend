@@ -10,11 +10,11 @@
         h2 { text-align: center; color: #007bff; }
         .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         #loading { text-align: center; padding: 30px; color: #007bff; font-size: 1.1rem; }
-        #error-msg { text-align: center; color: red; padding: 15px; background: #ffebee; border-radius: 8px; display: none; }
+        #error-msg { text-align: center; color: red; padding: 15px; background: #ffebee; border-radius: 8px; display: none; margin-bottom: 10px; }
         .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; }
         .label { font-size: 0.85rem; color: #666; margin-bottom: 5px; }
         .value { font-size: 1.2rem; font-weight: bold; }
-        button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        button { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -25,23 +25,23 @@
         <span id="wallet-balance" style="font-size:1.8rem;">₦0.00</span>
     </div>
 
-    <div id="loading">Connecting to backend and fetching your account...</div>
+    <div id="loading">Connecting to Dnezerlinks engine...</div>
     <div id="error-msg"></div>
 
     <div id="account-ui" style="display:none;">
-        <p style="text-align:center;">Transfer any amount to this account to fund instantly.</p>
+        <p style="text-align:center; font-size: 0.9rem;">Transfer money to the account below to fund your wallet instantly.</p>
         <div class="bank-card">
             <div class="label">BANK NAME</div>
-            <div class="value" id="bank-name">---</div>
-            
-            <div class="label">ACCOUNT NUMBER</div>
+            <div class="value" id="bank-name">Loading...</div>
+
+            <div class="label" style="margin-top:10px;">ACCOUNT NUMBER</div>
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span id="acc-number" style="font-size:1.4rem;">----------</span>
+                <span id="acc-number" style="font-size:1.4rem; letter-spacing: 1px;">----------</span>
                 <button onclick="copyAccount()">Copy</button>
             </div>
 
             <div class="label" style="margin-top:10px;">ACCOUNT NAME</div>
-            <div class="value" id="acc-name">---</div>
+            <div class="value" id="acc-name">Loading...</div>
         </div>
     </div>
 </div>
@@ -49,11 +49,12 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-    import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
         authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
         projectId: "dnezerlinks",
         storageBucket: "dnezerlinks.appspot.com",
         messagingSenderId: "1028450580168",
@@ -62,51 +63,61 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db = getDatabase(app);
 
+    // CHANGE THIS to your actual Render URL
     const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
 
     onAuthStateChanged(auth, (user) => {
-        if (!user) return window.location.href = "login.html";
+        if (!user) {
+            window.location.href = "login.html";
+            return;
+        }
 
-        const userRef = doc(db, "users", user.email);
+        const safeEmail = user.email.replace(/\./g, ',');
+        const userRef = ref(db, 'users/' + safeEmail);
 
-        onSnapshot(userRef, (snap) => {
+        // Listen for data updates in Realtime Database
+        onValue(userRef, (snapshot) => {
             document.getElementById("loading").style.display = "none";
-            if (snap.exists()) {
-                const d = snap.data();
-                document.getElementById("wallet-balance").innerText = `₦${parseFloat(d.walletBalance || 0).toLocaleString()}`;
-                document.getElementById("bank-name").innerText = d.bankName || "PalmPay";
-                document.getElementById("acc-number").innerText = d.accountNumber || "Not Assigned";
-                document.getElementById("acc-name").innerText = d.accountName || "Dnezerlinks User";
-                document.getElementById("account-ui").style.display = "block";
+            const data = snapshot.val();
+            
+            if (data) {
+                document.getElementById("wallet-balance").innerText = `₦${parseFloat(data.walletBalance || 0).toLocaleString()}`;
+                
+                if (data.account_number) {
+                    document.getElementById("bank-name").innerText = data.bank_name || "PalmPay";
+                    document.getElementById("acc-number").innerText = data.account_number;
+                    document.getElementById("acc-name").innerText = data.account_name || "Dnezerlinks User";
+                    document.getElementById("account-ui").style.display = "block";
+                }
             }
         });
 
+        // Trigger the backend to generate account if missing
         fetch(`${BACKEND_URL}/get-virtual-account`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email, firstName: "Dnezer", lastName: "User" })
+            body: JSON.stringify({ email: user.email })
         })
         .then(r => r.json())
-        .then(data => {
-            console.log("Backend:", data);
-            if (data.error) {
-                const errEl = document.getElementById("error-msg");
-                errEl.innerHTML = data.error + "<br><small>Check Render Logs</small>";
-                errEl.style.display = "block";
+        .then(res => {
+            if (res.error) {
+                document.getElementById("error-msg").style.display = "block";
+                document.getElementById("error-msg").innerText = res.error;
             }
         })
         .catch(err => {
-            const errEl = document.getElementById("error-msg");
-            errEl.innerHTML = "Cannot connect to server<br>" + err.message;
-            errEl.style.display = "block";
+            console.error("Fetch error:", err);
         });
     });
 
     window.copyAccount = function() {
         const num = document.getElementById("acc-number").innerText;
-        if (num.length > 5) navigator.clipboard.writeText(num);
+        if (num !== "----------") {
+            navigator.clipboard.writeText(num);
+            alert("Account number copied!");
+        }
     };
 </script>
 </body>
