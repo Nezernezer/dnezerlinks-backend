@@ -15,29 +15,83 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-// THE ROUTE THAT WAS FAILING
+console.log("✅ Server starting... Billstack key present:", !!process.env.BILLSTACK_SECRET_KEY);
+
+// Test Route
+app.get('/test', (req, res) => {
+    res.json({
+        status: "Backend is LIVE",
+        time: new Date().toISOString(),
+        billstack_key_set: !!process.env.BILLSTACK_SECRET_KEY
+    });
+});
+
+// Main Route
 app.post('/get-virtual-account', async (req, res) => {
-    const { email } = req.body;
+    const { email, firstName, lastName, phone } = req.body;
+    console.log("\n=== REQUEST RECEIVED ===");
+    console.log("Email:", email);
+
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
     try {
         const userRef = db.collection('users').doc(email);
         const doc = await userRef.get();
-        if (doc.exists && doc.data().account_number) return res.json(doc.data());
 
-        const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', 
-        { email, currency: "NGN", bank_code: "999991" }, 
-        { headers: { Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}` } });
+        if (doc.exists && doc.data().accountNumber) {
+            console.log("✅ Returning existing account");
+            return res.json(doc.data());
+        }
 
-        const data = {
-            bank_name: response.data.data.bank_name,
-            account_number: response.data.data.account_number,
-            account_name: response.data.data.account_name
+        console.log("Calling Billstack...");
+
+        const payload = {
+            email: email,
+            firstName: firstName || "Dnezer",
+            lastName: lastName || "User",
+            phone: phone || "08000000000",
+            reference: `dnezer_${Date.now()}`
         };
-        await userRef.set(data, { merge: true });
-        res.json(data);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        const response = await axios.post(
+            'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
+            payload,
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 20000
+            }
+        );
+
+        console.log("Billstack Response:", JSON.stringify(response.data, null, 2));
+
+        const billData = response.data?.data || response.data;
+
+        const dataToSave = {
+            bankName: billData.bank_name || billData.bankName || "PalmPay",
+            accountNumber: billData.account_number || billData.accountNumber,
+            accountName: billData.account_name || billData.accountName,
+            walletBalance: doc.exists ? (doc.data().walletBalance || 0) : 0
+        };
+
+        await userRef.set(dataToSave, { merge: true });
+
+        console.log("✅ SUCCESS - Account created:", dataToSave.accountNumber);
+        res.json(dataToSave);
+
+    } catch (e) {
+        console.error("❌ ERROR:", e.message);
+        if (e.response) console.error("Billstack details:", JSON.stringify(e.response.data, null, 2));
+        res.status(500).json({ 
+            error: "Failed to create virtual account",
+            details: e.response ? e.response.data : e.message 
+        });
+    }
 });
 
 app.get('/', (req, res) => res.send('Dnezerlinks Backend is ONLINE 🚀'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server Live'));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
