@@ -7,71 +7,57 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize Firebase Admin
 if (!admin.apps.length) {
     try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
-            databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com/`
+            // UPDATED TO MATCH YOUR SCREENSHOT:
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com/"
         });
-        console.log("Connected to Realtime Database: " + serviceAccount.project_id);
+        console.log("Connected to Dnezerlinks Main Database");
     } catch (err) {
         console.error("Firebase Init Error:", err.message);
     }
 }
 
 const db = admin.database();
-
-// Helper to sanitize emails for RTDB (replace . with ,)
 const encodeEmail = (email) => email.replace(/\./g, ',');
 
 app.post('/get-virtual-account', async (req, res) => {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!email) return res.status(400).json({ error: "Email required" });
 
     const safeEmail = encodeEmail(email);
     const userRef = db.ref(`users/${safeEmail}`);
 
     try {
-        // 1. Check if account already exists in Database
         const snapshot = await userRef.once('value');
-        if (snapshot.exists() && snapshot.val().account_number) {
-            console.log("Account found in cache for:", email);
-            return res.json(snapshot.val());
+        const userData = snapshot.val();
+
+        // If account already exists, return it
+        if (userData && userData.account_number) {
+            return res.json(userData);
         }
 
-        // 2. If not, request from Billstack
-        console.log("Requesting new account from Billstack...");
+        // Request from Billstack
         const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', 
-        { 
-            email: email, 
-            currency: "NGN", 
-            bank_code: "999991" // PalmPay
-        }, 
-        { 
-            headers: { Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}` } 
-        });
+        { email, currency: "NGN", bank_code: "999991" }, 
+        { headers: { Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}` } });
 
-        const accountData = {
+        const newAccount = {
             bank_name: response.data.data.bank_name,
             account_number: response.data.data.account_number,
-            account_name: response.data.data.account_name,
-            updatedAt: new Date().toISOString()
+            account_name: response.data.data.account_name
         };
 
-        // 3. Save to Realtime Database
-        await userRef.update(accountData);
-        console.log("New account saved for:", email);
-        
-        res.json(accountData);
+        // SAVE DIRECTLY INTO YOUR 'users' FOLDER
+        await userRef.update(newAccount);
+        res.json(newAccount);
+
     } catch (error) {
-        console.error("Error:", error.response?.data || error.message);
-        res.status(500).json({ error: "Provider or Database Error" });
+        res.status(500).json({ error: "Database/Provider Error" });
     }
 });
 
-app.get('/', (req, res) => res.send('Dnezerlinks RTDB Backend is LIVE 🚀'));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(process.env.PORT || 3000);
