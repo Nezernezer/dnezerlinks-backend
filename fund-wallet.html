@@ -5,68 +5,109 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fund Wallet - Dnezerlinks</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        .acc-info { margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px; border: 1px solid #b3d7ff; }
-        .label { font-size: 12px; color: #666; }
-        .value { font-size: 18px; font-weight: bold; color: #007bff; display: block; margin-bottom: 10px; }
+        body { font-family: Arial, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #007bff; }
+        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        #loading { text-align: center; padding: 30px; color: #007bff; font-size: 1.1rem; }
+        #error-msg { text-align: center; color: red; padding: 15px; background: #ffebee; border-radius: 8px; display: none; }
+        .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; }
+        .label { font-size: 0.85rem; color: #666; margin-bottom: 5px; }
+        .value { font-size: 1.2rem; font-weight: bold; }
+        button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
+<div class="container">
+    <h2>Fund Wallet</h2>
+    <div class="balance-box">
+        Current Wallet Balance<br>
+        <span id="wallet-balance" style="font-size:1.8rem;">₦0.00</span>
+    </div>
 
-<div class="card">
-    <h2>Fund Your Wallet</h2>
-    <p>Transfer to your dedicated PalmPay account below to fund your wallet instantly.</p>
+    <div id="loading">Connecting to backend and fetching your account...</div>
+    <div id="error-msg"></div>
 
-    <div id="account-details-container" class="acc-info">
-        <span class="label">Bank Name</span>
-        <span id="bankName" class="value">Loading...</span>
+    <div id="account-ui" style="display:none;">
+        <p style="text-align:center;">Transfer any amount to this account to fund instantly.</p>
+        <div class="bank-card">
+            <div class="label">BANK NAME</div>
+            <div class="value" id="bank-name">---</div>
+            
+            <div class="label">ACCOUNT NUMBER</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span id="acc-number" style="font-size:1.4rem;">----------</span>
+                <button onclick="copyAccount()">Copy</button>
+            </div>
 
-        <span class="label">Account Number</span>
-        <span id="accNumber" class="value">----------</span>
-
-        <span class="label">Account Name</span>
-        <span id="accName" class="value">Dnezerlinks-User</span>
+            <div class="label" style="margin-top:10px;">ACCOUNT NAME</div>
+            <div class="value" id="acc-name">---</div>
+        </div>
     </div>
 </div>
 
-<script>
-    // 1. Get the logged-in user's email
-    const userEmail = localStorage.getItem('userEmail'); 
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    async function fetchMyVirtualAccount() {
-        if (!userEmail) {
-            alert("Please log in first!");
-            return;
-        }
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        projectId: "dnezerlinks",
+        storageBucket: "dnezerlinks.appspot.com",
+        messagingSenderId: "1028450580168",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
 
-        try {
-            const response = await fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: userEmail })
-            });
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-            const data = await response.json();
+    const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
 
-            if (data.account_number) {
-                // This updates the HTML spans above
-                document.getElementById('bankName').innerText = data.bank_name;
-                document.getElementById('accNumber').innerText = data.account_number;
-                document.getElementById('accName').innerText = data.account_name;
-            } else {
-                document.getElementById('accNumber').innerText = "Error Loading";
-                console.error("Backend error:", data.error);
+    onAuthStateChanged(auth, (user) => {
+        if (!user) return window.location.href = "login.html";
+
+        const userRef = doc(db, "users", user.email);
+
+        onSnapshot(userRef, (snap) => {
+            document.getElementById("loading").style.display = "none";
+            if (snap.exists()) {
+                const d = snap.data();
+                document.getElementById("wallet-balance").innerText = `₦${parseFloat(d.walletBalance || 0).toLocaleString()}`;
+                document.getElementById("bank-name").innerText = d.bankName || "PalmPay";
+                document.getElementById("acc-number").innerText = d.accountNumber || "Not Assigned";
+                document.getElementById("acc-name").innerText = d.accountName || "Dnezerlinks User";
+                document.getElementById("account-ui").style.display = "block";
             }
-        } catch (error) {
-            console.error("Connection Error:", error);
-            document.getElementById('accNumber').innerText = "Server Starting...";
-        }
-    }
+        });
 
-    // Run automatically on page load
-    fetchMyVirtualAccount();
+        fetch(`${BACKEND_URL}/get-virtual-account`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, firstName: "Dnezer", lastName: "User" })
+        })
+        .then(r => r.json())
+        .then(data => {
+            console.log("Backend:", data);
+            if (data.error) {
+                const errEl = document.getElementById("error-msg");
+                errEl.innerHTML = data.error + "<br><small>Check Render Logs</small>";
+                errEl.style.display = "block";
+            }
+        })
+        .catch(err => {
+            const errEl = document.getElementById("error-msg");
+            errEl.innerHTML = "Cannot connect to server<br>" + err.message;
+            errEl.style.display = "block";
+        });
+    });
+
+    window.copyAccount = function() {
+        const num = document.getElementById("acc-number").innerText;
+        if (num.length > 5) navigator.clipboard.writeText(num);
+    };
 </script>
-
 </body>
 </html>

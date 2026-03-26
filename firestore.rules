@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // This allows your Render Server (Admin) and users to 
+    // read/write to the 'users' collection where accounts are stored.
+    match /users/{email} {
+      allow read, write: if true;
+    }
+    
+    // Default rule for everything else
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
