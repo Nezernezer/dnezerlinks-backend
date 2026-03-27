@@ -4,43 +4,57 @@ const axios = require('axios');
 const admin = require('firebase-admin');
 
 const app = express();
-
-// 1. FIXED CORS: This allows your website to talk to Render without being blocked
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-if (!admin.apps.length) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com/"
-    });
+// SAFE INITIALIZATION
+let db;
+try {
+    if (!admin.apps.length) {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT.trim());
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com/"
+        });
+        console.log("✅ Firebase Admin Connected");
+    }
+    db = admin.database();
+} catch (e) {
+    console.error("❌ CRITICAL FIREBASE INIT ERROR:", e.message);
 }
 
-const db = admin.database();
 const encodeEmail = (email) => email.replace(/\./g, ',');
 
-// 2. HEALTH CHECK: So you see a message instead of "Cannot GET"
-app.get('/', (req, res) => {
-    res.send("<h1>Dnezerlinks API is Online</h1><p>Status: Ready to generate accounts.</p>");
-});
+app.get('/', (req, res) => res.send("Dnezerlinks API Online"));
 
 app.post('/get-virtual-account', async (req, res) => {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required" });
+    console.log(`Processing request for: ${email}`);
 
-    const safeEmail = encodeEmail(email);
-    const userRef = db.ref(`users/${safeEmail}`);
+    if (!db) return res.status(500).json({ error: "Database not initialized" });
 
     try {
-        const snapshot = await userRef.once('value');
+        const safeEmail = encodeEmail(email);
+        const userRef = db.ref(`users/${safeEmail}`);
+
+        // Try to fetch with a 5-second timeout
+        const snapshot = await Promise.race([
+            userRef.once('value'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 5000))
+        ]);
+
         if (snapshot.exists() && snapshot.val().account_number) {
             return res.json(snapshot.val());
         }
 
+        // Call Billstack
         const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', 
-        { email, currency: "NGN", bank_code: "999991" }, 
-        { headers: { Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}` } });
+            { email, currency: "NGN", bank_code: "999991" }, 
+            { 
+                headers: { Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}` },
+                timeout: 8000 
+            }
+        );
 
         const accountData = {
             bank_name: response.data.data.bank_name,
@@ -50,14 +64,12 @@ app.post('/get-virtual-account', async (req, res) => {
 
         await userRef.update(accountData);
         res.json(accountData);
+
     } catch (error) {
-        console.error("Error:", error.message);
-        res.status(500).json({ error: "Provider Error: " + error.message });
+        console.error("Operation Failed:", error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// 3. RENDER PORT FIX: Render uses process.env.PORT
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Dnezerlinks running on port ${PORT}`));
