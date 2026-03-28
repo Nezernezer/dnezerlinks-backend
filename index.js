@@ -25,12 +25,12 @@ app.post('/get-virtual-account', async (req, res) => {
         const safeEmail = email.replace(/\./g, ',');
         const userRef = db.ref(`users/${safeEmail}`);
 
-        // Try the updated 2026 Billstack Business Endpoint
-        const response = await axios.post('https://api.billstack.co/v1/business/virtual-account', 
+        // Try the 2026 "Collections" endpoint which is the current 9PSB/Billstack standard
+        const response = await axios.post('https://api.billstack.co/v1/collections/virtual-account', 
             { 
                 email: email,
                 currency: "NGN",
-                bank_code: "999991" // PalmPay/9PSB 
+                bank_code: "999991" 
             }, 
             { 
                 headers: { 
@@ -42,7 +42,7 @@ app.post('/get-virtual-account', async (req, res) => {
         );
 
         const accountData = {
-            bank_name: response.data.data.bank_name || "PalmPay",
+            bank_name: response.data.data.bank_name || "9PSB/PalmPay",
             account_number: response.data.data.account_number,
             account_name: response.data.data.account_name
         };
@@ -51,7 +51,7 @@ app.post('/get-virtual-account', async (req, res) => {
         res.json(accountData);
 
     } catch (error) {
-        // If 404 persists, the error.response.data will tell us why
+        // If this STILL returns 404, the Billstack API Key is likely for an older version
         const apiError = error.response?.data?.message || error.message;
         console.error("Billstack Error:", apiError);
         res.status(500).json({ error: "API Error: " + apiError });
