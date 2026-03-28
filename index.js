@@ -19,32 +19,58 @@ const db = admin.database();
 
 app.get('/', (req, res) => res.send("Dnezerlinks Backend is Live."));
 
+// --- NEW WEBHOOK ROUTE ---
+app.post('/webhook', async (req, res) => {
+    const event = req.body;
+
+    // Verify this is a successful charge/payment event
+    if (event.event === 'charge.success' || event.status === 'success') {
+        const { email, amount } = event.data;
+        const safeEmail = email.replace(/\./g, ',');
+
+        try {
+            const userRef = db.ref(`users/${safeEmail}`);
+            
+            // Atomically increment the user's balance in Firebase
+            await userRef.child('balance').transaction((currentBalance) => {
+                return (currentBalance || 0) + parseFloat(amount);
+            });
+
+            console.log(`✅ Funded ${email} with NGN ${amount}`);
+            return res.status(200).send('Webhook Received');
+        } catch (error) {
+            console.error("Webhook Database Error:", error.message);
+            return res.status(500).send('Internal Error');
+        }
+    }
+
+    res.status(200).send('Event ignored');
+});
+
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, phone } = req.body;
-    
-    // 2026 Billstack v2 Payload
+
     const payload = {
         email: email,
         firstName: first_name,
         lastName: last_name,
         phone: phone,
-        reference: `REF-${Date.now()}`, // Required in v2
-        bank: "PALMPAY"                 // Requesting PalmPay specifically
+        reference: `REF-${Date.now()}`,
+        bank: "PALMPAY"
     };
 
     try {
-        const response = await axios.post('https://api.billstack.co/v2/thirdparty/generateVirtualAccount/', 
-        payload, 
+        const response = await axios.post('https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
+        payload,
         {
-            headers: { 
+            headers: {
                 'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                 'Content-Type': 'application/json'
             }
         });
 
-        // Billstack v2 returns data in an 'account' array
         const accountInfo = response.data.data.account[0];
-        
+
         const accountData = {
             bank_name: accountInfo.bank_name,
             account_number: accountInfo.account_number,
@@ -58,9 +84,9 @@ app.post('/get-virtual-account', async (req, res) => {
 
     } catch (error) {
         console.error("Billstack Error:", error.response?.data || error.message);
-        res.status(500).json({ 
-            error: "Provider Error", 
-            detail: error.response?.data?.message || "Check if PalmPay is enabled on your dashboard." 
+        res.status(500).json({
+            error: "Provider Error",
+            detail: error.response?.data?.message || "Check if PalmPay is enabled on your dashboard."
         });
     }
 });
