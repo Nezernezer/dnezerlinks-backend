@@ -4,64 +4,64 @@ const axios = require('axios');
 const admin = require('firebase-admin');
 
 const app = express();
-app.use(cors({ origin: true }));
+
+// --- FIXED CORS CONFIG ---
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
-// Firebase Initialization
-try {
-    if (!admin.apps.length) {
+if (!admin.apps.length) {
+    try {
         admin.initializeApp({
             credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
-    }
-} catch (e) { console.error("Firebase Init Fail"); }
-
+    } catch (e) { console.error("Firebase Init Error"); }
+}
 const db = admin.database();
+
+app.get('/', (req, res) => res.send("Dnezerlinks Backend is Live."));
+
+app.post('/webhook', async (req, res) => {
+    const event = req.body;
+    if (event.event === 'charge.success' || event.status === 'success') {
+        const { email, amount } = event.data;
+        const safeEmail = email.replace(/\./g, ',');
+        try {
+            await db.ref(`users/${safeEmail}`).child('balance').transaction((current) => (current || 0) + parseFloat(amount));
+            return res.status(200).send('Webhook Received');
+        } catch (error) { return res.status(500).send('Internal Error'); }
+    }
+    res.status(200).send('Event ignored');
+});
 
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, phone } = req.body;
-    console.log(`[Dnezerlinks] Request for ${email}`);
-
+    const payload = {
+        email, firstName: first_name, lastName: last_name, phone,
+        reference: `REF-${Date.now()}`,
+        bank: "PALMPAY"
+    };
     try {
-        // Try the 2026 'Reserved Accounts' path
-        const response = await axios.post('https://api.billstack.co/v1/reserved-accounts', 
-            { 
-                email: email,
-                first_name: first_name || "Customer",
-                last_name: last_name || "Dnezer",
-                phone: phone || "08000000000",
-                currency: "NGN"
-            }, 
-            { 
-                headers: { 
-                    'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 10000 
-            }
-        );
-
+        const response = await axios.post('https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
+        payload,
+        { headers: { 'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}` } });
+        
+        const accountInfo = response.data.data.account[0];
         const accountData = {
-            bank_name: response.data.data.bank_name || "9PSB",
-            account_number: response.data.data.account_number,
-            account_name: response.data.data.account_name
+            bank_name: accountInfo.bank_name,
+            account_number: accountInfo.account_number,
+            account_name: accountInfo.account_name
         };
-
-        // Save to Firebase (Silent background update)
         const safeEmail = email.replace(/\./g, ',');
-        db.ref(`users/${safeEmail}`).update(accountData).catch(e => console.log("DB Update Fail"));
-
+        await db.ref(`users/${safeEmail}`).update(accountData);
         res.json(accountData);
-
     } catch (error) {
-        // This log will show us exactly why it's a 404 in the Render dashboard
-        const details = error.response?.data || error.message;
-        console.error("Billstack Raw Error:", JSON.stringify(details));
-        res.status(500).json({ 
-            error: "API Routing Error", 
-            message: "The endpoint returned 404. Please check Billstack Dashboard for the current Base URL." 
-        });
+        res.status(500).json({ error: "Provider Error", detail: error.response?.data?.message || error.message });
     }
 });
 
