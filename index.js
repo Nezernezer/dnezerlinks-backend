@@ -7,26 +7,24 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-if (!admin.apps.length) {
-    try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// Firebase Initialization
+try {
+    if (!admin.apps.length) {
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
-    } catch (e) { console.error("Firebase Init Error"); }
-}
+    }
+} catch (e) { console.error("Firebase Init Fail"); }
 
 const db = admin.database();
 
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, phone } = req.body;
-    
-    try {
-        const safeEmail = email.replace(/\./g, ',');
-        const userRef = db.ref(`users/${safeEmail}`);
+    console.log(`[Dnezerlinks] Request for ${email}`);
 
-        // Try the NEW 2026 Reserved Account Endpoint
+    try {
+        // Try the 2026 'Reserved Accounts' path
         const response = await axios.post('https://api.billstack.co/v1/reserved-accounts', 
             { 
                 email: email,
@@ -40,7 +38,7 @@ app.post('/get-virtual-account', async (req, res) => {
                     'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 12000 
+                timeout: 10000 
             }
         );
 
@@ -50,13 +48,20 @@ app.post('/get-virtual-account', async (req, res) => {
             account_name: response.data.data.account_name
         };
 
-        await userRef.update(accountData);
+        // Save to Firebase (Silent background update)
+        const safeEmail = email.replace(/\./g, ',');
+        db.ref(`users/${safeEmail}`).update(accountData).catch(e => console.log("DB Update Fail"));
+
         res.json(accountData);
 
     } catch (error) {
-        const apiError = error.response?.data?.message || error.message;
-        console.error("Billstack Error:", apiError);
-        res.status(500).json({ error: "API Error: " + apiError });
+        // This log will show us exactly why it's a 404 in the Render dashboard
+        const details = error.response?.data || error.message;
+        console.error("Billstack Raw Error:", JSON.stringify(details));
+        res.status(500).json({ 
+            error: "API Routing Error", 
+            message: "The endpoint returned 404. Please check Billstack Dashboard for the current Base URL." 
+        });
     }
 });
 
