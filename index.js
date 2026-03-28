@@ -20,38 +20,40 @@ if (!admin.apps.length) {
 const db = admin.database();
 
 app.post('/get-virtual-account', async (req, res) => {
-    const { email } = req.body;
+    const { email, first_name, last_name, phone } = req.body;
+    
     try {
         const safeEmail = email.replace(/\./g, ',');
         const userRef = db.ref(`users/${safeEmail}`);
 
-        // Try the 2026 "Collections" endpoint which is the current 9PSB/Billstack standard
-        const response = await axios.post('https://api.billstack.co/v1/collections/virtual-account', 
+        // Try the NEW 2026 Reserved Account Endpoint
+        const response = await axios.post('https://api.billstack.co/v1/reserved-accounts', 
             { 
                 email: email,
-                currency: "NGN",
-                bank_code: "999991" 
+                first_name: first_name || "Customer",
+                last_name: last_name || "Dnezer",
+                phone: phone || "08000000000",
+                currency: "NGN"
             }, 
             { 
                 headers: { 
                     'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000 
+                timeout: 12000 
             }
         );
 
         const accountData = {
-            bank_name: response.data.data.bank_name || "9PSB/PalmPay",
+            bank_name: response.data.data.bank_name || "9PSB",
             account_number: response.data.data.account_number,
             account_name: response.data.data.account_name
         };
 
-        userRef.update(accountData).catch(e => console.log("DB Update Background Fail"));
+        await userRef.update(accountData);
         res.json(accountData);
 
     } catch (error) {
-        // If this STILL returns 404, the Billstack API Key is likely for an older version
         const apiError = error.response?.data?.message || error.message;
         console.error("Billstack Error:", apiError);
         res.status(500).json({ error: "API Error: " + apiError });
