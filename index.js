@@ -13,7 +13,7 @@ if (!admin.apps.length) {
             credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
-    } catch (e) { console.error("Firebase Init Fail"); }
+    } catch (e) { console.error("Firebase Init Error"); }
 }
 const db = admin.database();
 
@@ -22,43 +22,47 @@ app.get('/', (req, res) => res.send("Dnezerlinks Backend is Live."));
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, phone } = req.body;
     
-    // List of possible 2026 Billstack endpoints
-    const endpoints = [
-        'https://api.billstack.co/v1/collections/reserved-accounts',
-        'https://api.billstack.co/v1/virtual-accounts',
-        'https://api.billstack.co/v1/reserved-accounts'
-    ];
+    // 2026 Billstack v2 Payload
+    const payload = {
+        email: email,
+        firstName: first_name,
+        lastName: last_name,
+        phone: phone,
+        reference: `REF-${Date.now()}`, // Required in v2
+        bank: "PALMPAY"                 // Requesting PalmPay specifically
+    };
 
-    for (let url of endpoints) {
-        try {
-            console.log(`Trying: ${url}`);
-            const response = await axios.post(url, {
-                email, first_name, last_name, phone,
-                currency: "NGN"
-            }, {
-                headers: { 'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}` },
-                timeout: 8000
-            });
-
-            if (response.data.data) {
-                const account = response.data.data;
-                const safeEmail = email.replace(/\./g, ',');
-                await db.ref(`users/${safeEmail}`).update({
-                    bank_name: account.bank_name || "9PSB",
-                    account_number: account.account_number,
-                    account_name: account.account_name
-                });
-                return res.json(account);
+    try {
+        const response = await axios.post('https://api.billstack.co/v2/thirdparty/generateVirtualAccount/', 
+        payload, 
+        {
+            headers: { 
+                'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
+                'Content-Type': 'application/json'
             }
-        } catch (err) {
-            console.log(`Failed ${url}: ${err.response?.status || err.message}`);
-        }
-    }
+        });
 
-    res.status(500).json({ 
-        error: "All Endpoints Failed", 
-        detail: "Check Billstack Dashboard for your specific API Base URL." 
-    });
+        // Billstack v2 returns data in an 'account' array
+        const accountInfo = response.data.data.account[0];
+        
+        const accountData = {
+            bank_name: accountInfo.bank_name,
+            account_number: accountInfo.account_number,
+            account_name: accountInfo.account_name
+        };
+
+        const safeEmail = email.replace(/\./g, ',');
+        await db.ref(`users/${safeEmail}`).update(accountData);
+
+        res.json(accountData);
+
+    } catch (error) {
+        console.error("Billstack Error:", error.response?.data || error.message);
+        res.status(500).json({ 
+            error: "Provider Error", 
+            detail: error.response?.data?.message || "Check if PalmPay is enabled on your dashboard." 
+        });
+    }
 });
 
 app.listen(process.env.PORT || 10000);
