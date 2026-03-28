@@ -7,7 +7,7 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// 1. Firebase Admin Setup
+// 1. Firebase Admin Initialization
 if (!admin.apps.length) {
     try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -15,7 +15,7 @@ if (!admin.apps.length) {
             credential: admin.credential.cert(serviceAccount),
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
-        console.log("✅ Firebase Admin Initialized");
+        console.log("✅ Firebase Connected Successfully");
     } catch (e) {
         console.error("❌ Firebase Init Error:", e.message);
     }
@@ -23,27 +23,31 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-// 2. The "Home" Route (Fixes the 404 you just saw)
+// 2. Health Check Route
 app.get('/', (req, res) => {
-    res.send("Dnezerlinks API is Online and Connected.");
+    res.send("Dnezerlinks Backend is Live and Connected to Firebase.");
 });
 
-// 3. The Virtual Account Route
+// 3. 2026 Billstack Reserved Account Route
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, phone } = req.body;
-    
-    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    if (!email || !first_name || !last_name || !phone) {
+        return res.status(400).json({ 
+            error: "Missing KYC data", 
+            message: "Email, first_name, last_name, and phone are mandatory in 2026." 
+        });
+    }
 
     try {
-        console.log(`Processing request for: ${email}`);
+        console.log(`[Billstack] Processing reserved account for: ${email}`);
 
-        // Hit the 2026 Billstack Reserved Account Endpoint
         const response = await axios.post('https://api.billstack.co/v1/reserved-accounts', 
             { 
-                email: email,
-                first_name: first_name || "Customer",
-                last_name: last_name || "User",
-                phone: phone || "08000000000",
+                email,
+                first_name,
+                last_name,
+                phone,
                 currency: "NGN"
             }, 
             { 
@@ -51,7 +55,7 @@ app.post('/get-virtual-account', async (req, res) => {
                     'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000 
+                timeout: 15000 
             }
         );
 
@@ -61,18 +65,18 @@ app.post('/get-virtual-account', async (req, res) => {
             account_name: response.data.data.account_name
         };
 
-        // Save to Firebase
+        // Update Firebase
         const safeEmail = email.replace(/\./g, ',');
         await db.ref(`users/${safeEmail}`).update(accountData);
 
         res.json(accountData);
 
     } catch (error) {
-        const errorMsg = error.response?.data?.message || error.message;
-        console.error("Billstack Error:", errorMsg);
-        res.status(500).json({ error: "Integration Error", details: errorMsg });
+        const errMsg = error.response?.data?.message || error.message;
+        console.error("❌ API Error:", errMsg);
+        res.status(500).json({ error: "Provider Error", detail: errMsg });
     }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Dnezerlinks Server running on port ${PORT}`));
