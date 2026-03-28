@@ -25,12 +25,12 @@ app.post('/get-virtual-account', async (req, res) => {
         const safeEmail = email.replace(/\./g, ',');
         const userRef = db.ref(`users/${safeEmail}`);
 
-        // Try Billstack with the most common successful 2026 path
-        const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', 
+        // Try the updated 2026 Billstack Business Endpoint
+        const response = await axios.post('https://api.billstack.co/v1/business/virtual-account', 
             { 
                 email: email,
                 currency: "NGN",
-                bank_code: "999991" // PalmPay
+                bank_code: "999991" // PalmPay/9PSB 
             }, 
             { 
                 headers: { 
@@ -42,7 +42,7 @@ app.post('/get-virtual-account', async (req, res) => {
         );
 
         const accountData = {
-            bank_name: response.data.data.bank_name,
+            bank_name: response.data.data.bank_name || "PalmPay",
             account_number: response.data.data.account_number,
             account_name: response.data.data.account_name
         };
@@ -51,10 +51,10 @@ app.post('/get-virtual-account', async (req, res) => {
         res.json(accountData);
 
     } catch (error) {
-        // If Billstack returns a 404 or 401, we catch the EXACT message here
-        const errorMessage = error.response?.data?.message || error.message;
-        console.error("Billstack Error:", errorMessage);
-        res.status(500).json({ error: "Provider Error: " + errorMessage });
+        // If 404 persists, the error.response.data will tell us why
+        const apiError = error.response?.data?.message || error.message;
+        console.error("Billstack Error:", apiError);
+        res.status(500).json({ error: "API Error: " + apiError });
     }
 });
 
