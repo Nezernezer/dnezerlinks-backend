@@ -7,82 +7,70 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- FIREBASE INITIALIZATION ---
+// --- 1. FIREBASE SETUP ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
 });
 const db = admin.database();
-
 const BILLSTACK_SECRET = process.env.BILLSTACK_SECRET;
 
-// 1. ROUTE: GET VIRTUAL ACCOUNT (Now using UID)
+// --- 2. ROUTE: CREATE/GET VIRTUAL ACCOUNT ---
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, uid } = req.body;
-
-    if (!uid) return res.status(400).send("User UID is required.");
+    if (!uid) return res.status(400).send("UID Required");
 
     try {
-        // Check if UID already has an account
         const userRef = db.ref(`users/${uid}`);
-        const snapshot = await userRef.once('value');
-        const userData = snapshot.val();
+        const snap = await userRef.once('value');
+        const userData = snap.val() || {};
 
-        if (userData && userData.account_number) {
-            return res.json(userData);
-        }
+        // If account already exists, return it
+        if (userData.account_number) return res.json(userData);
 
-        // Request from Billstack
+        // Request new account from Billstack
         const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', {
-            email: email,
-            first_name: first_name,
-            last_name: last_name,
-            currency: "NGN"
+            email, first_name, last_name, currency: "NGN"
         }, {
             headers: { Authorization: `Bearer ${BILLSTACK_SECRET}` }
         });
 
         const account = response.data.data;
         
-        // SAVE TO UID FOLDER ONLY
+        // Save to UID folder (Include email for the webhook to find this UID later)
         await userRef.update({
             account_number: account.account_number,
             bank_name: account.bank_name,
             account_name: account.account_name,
-            email: email // Keep email inside the folder for webhook lookups
+            email: email, 
+            balance: userData.balance || 0
         });
 
         res.json(account);
-    } catch (error) {
-        console.error("Billstack Error:", error.response?.data || error.message);
-        res.status(500).send("Error creating account");
+    } catch (err) {
+        res.status(500).send("Account Generation Failed");
     }
 });
 
-// 2. ROUTE: WEBHOOK (The "Money Receiver")
+// --- 3. ROUTE: WEBHOOK (THE MONEY RECEIVER) ---
 app.post('/webhook', async (req, res) => {
-    const event = req.body;
-    if (event.event === 'charge.success') {
-        const customerEmail = event.data.customer.email;
-        const amount = event.data.amount / 100; // Convert kobo to Naira
+    const { event, data } = req.body;
+    if (event === 'charge.success') {
+        const email = data.customer.email;
+        const amount = data.amount / 100;
 
-        // FIND UID BY EMAIL
-        const usersRef = db.ref('users');
-        const snapshot = await usersRef.orderByChild('email').equalTo(customerEmail).once('value');
-        const users = snapshot.val();
+        // Search for the UID that owns this email
+        const userQuery = await db.ref('users').orderByChild('email').equalTo(email).once('value');
+        const userMatch = userQuery.val();
 
-        if (users) {
-            const uid = Object.keys(users)[0];
-            const balanceRef = db.ref(`users/${uid}/balance`);
-
-            // Atomic increment
-            await balanceRef.transaction((current) => (current || 0) + amount);
-            console.log(`Funded ₦${amount} to UID: ${uid}`);
+        if (userMatch) {
+            const uid = Object.keys(userMatch)[0];
+            await db.ref(`users/${uid}/balance`).transaction(curr => (curr || 0) + amount);
+            console.log(`Successfully funded ${uid} with ₦${amount}`);
         }
     }
     res.sendStatus(200);
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(process.env.PORT || 3000);

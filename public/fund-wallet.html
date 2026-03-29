@@ -1,101 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fund Wallet - Dnezerlinks</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
-        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; }
-        .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; display: block; }
-        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; display: block; }
-        .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
-        #acc-number { font-size: 1.4rem; color: #222; font-weight: bold; }
-        .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
-        #status-msg { text-align: center; color: #007bff; font-weight: bold; padding: 20px; }
-        #account-ui { display: none; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
-    <h2>Fund Wallet</h2>
-    <div class="balance-box">
-        <span style="font-size: 0.9rem;">Wallet Balance</span><br>
-        <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
-    </div>
-
-    <div id="status-msg">Checking for your account...</div>
-
-    <div id="account-ui">
-        <div class="bank-card">
-            <span class="label">BANK NAME</span>
-            <span class="value" id="bank-name">---</span>
-            <span class="label">ACCOUNT NUMBER</span>
-            <div class="acc-num-row">
-                <span id="acc-number">----------</span>
-                <button class="copy-btn" onclick="copyAccount()">Copy</button>
-            </div>
-            <span class="label" style="margin-top:15px;">ACCOUNT NAME</span>
-            <span class="value" id="acc-name">---</span>
-        </div>
-    </div>
-</div>
-
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
-        authDomain: "dnezerlinks.firebaseapp.com",
-        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
-        projectId: "dnezerlinks",
-        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    firebase.auth().onAuthStateChanged(async (user) => {
+    firebase.auth().onAuthStateChanged(user => {
         if (user) {
-            const safeEmail = user.email.replace(/\./g, ',');
-            
-            // Listen to both the UID folder and the Email folder
-            db.ref('users').on('value', (snap) => {
-                const allUsers = snap.val();
-                const uidData = allUsers[user.uid] || {};
-                const emailData = allUsers[safeEmail] || {};
-                
-                // Merge the two (Priority to UID balance, but take account details from wherever they are)
-                const combinedData = { ...emailData, ...uidData };
-
-                if (combinedData.account_number) {
-                    document.getElementById("wallet-balance").innerText = "₦" + parseFloat(combinedData.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-                    document.getElementById("bank-name").innerText = combinedData.bank_name;
-                    document.getElementById("acc-number").innerText = combinedData.account_number;
-                    document.getElementById("acc-name").innerText = combinedData.account_name;
-                    
-                    document.getElementById("status-msg").style.display = "none";
-                    document.getElementById("account-ui").style.display = "block";
+            const userRef = db.ref(`users/${user.uid}`);
+            userRef.on('value', snap => {
+                const data = snap.val() || {};
+                if (data.account_number) {
+                    document.getElementById('wallet-balance').innerText = "₦" + data.balance.toFixed(2);
+                    document.getElementById('acc-number').innerText = data.account_number;
+                    document.getElementById('acc-name').innerText = "Dnezerlinks-" + (data.name || "User");
+                    // Show UI logic here
                 } else {
-                    document.getElementById("status-msg").innerText = "Generating your account... Please wait.";
-                    // Logic to trigger backend goes here if needed
+                    // Trigger backend /get-virtual-account here
                 }
             });
-        } else {
-            window.location.href = 'login.html';
         }
     });
-
-    function copyAccount() {
-        const num = document.getElementById("acc-number").innerText;
-        navigator.clipboard.writeText(num).then(() => alert("Copied!"));
-    }
 </script>
-</body>
-</html>
