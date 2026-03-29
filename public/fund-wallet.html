@@ -1,18 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fund Wallet - Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div id="app">
+        <h2>Wallet Balance: <span id="balance">₦0.00</span></h2>
+        <div id="status">Connecting...</div>
+        <div id="account-info" style="display:none;">
+            <p>Bank: <b id="bank"></b></p>
+            <p>Account: <b id="number"></b></p>
+            <p>Name: <b id="name"></b></p>
+        </div>
+    </div>
+
 <script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
     firebase.auth().onAuthStateChanged(user => {
-        if (user) {
-            const userRef = db.ref(`users/${user.uid}`);
-            userRef.on('value', snap => {
-                const data = snap.val() || {};
-                if (data.account_number) {
-                    document.getElementById('wallet-balance').innerText = "₦" + data.balance.toFixed(2);
-                    document.getElementById('acc-number').innerText = data.account_number;
-                    document.getElementById('acc-name').innerText = "Dnezerlinks-" + (data.name || "User");
-                    // Show UI logic here
-                } else {
-                    // Trigger backend /get-virtual-account here
-                }
-            });
-        }
+        if (!user) return window.location.href = 'login.html';
+
+        const userRef = db.ref(`users/${user.uid}`);
+        
+        userRef.on('value', snap => {
+            const data = snap.val();
+
+            // IF THE FOLDER IS MISSING (because you deleted it):
+            if (!data || !data.account_number) {
+                document.getElementById('status').innerText = "Rebuilding your profile...";
+                
+                // Call the backend to RE-CREATE the folder and account
+                fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        uid: user.uid,
+                        email: user.email,
+                        first_name: "User",
+                        last_name: user.uid.substring(0,5)
+                    })
+                })
+                .then(res => res.json())
+                .then(() => console.log("Profile restored!"))
+                .catch(err => console.error("Restore failed:", err));
+            } else {
+                // IF DATA EXISTS:
+                document.getElementById('balance').innerText = "₦" + (data.balance || 0).toFixed(2);
+                document.getElementById('bank').innerText = data.bank_name;
+                document.getElementById('number').innerText = data.account_number;
+                document.getElementById('name').innerText = "Dnezerlinks-" + (data.name || "User");
+                document.getElementById('status').style.display = 'none';
+                document.getElementById('account-info').style.display = 'block';
+            }
+        });
     });
 </script>
+</body>
+</html>
