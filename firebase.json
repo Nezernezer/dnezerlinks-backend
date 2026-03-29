@@ -1,5 +1,6 @@
 {
   "database": {
+    "instance": "dnezerlinks-default-rtdb",
     "rules": "database.rules.json"
   }
 }

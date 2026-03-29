@@ -102,3 +102,9 @@ app.post("/createBillstackAccount", async (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log("Server running on port", PORT));
 
+
+// ===== FUNCTIONS TEST ROUTE =====
+app.get("/functions-test", (req, res) => {
+  res.send("FUNCTIONS FILE ACTIVE");
+});
+

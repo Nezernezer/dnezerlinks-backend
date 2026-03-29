@@ -1,33 +1,25 @@
 {
   "rules": {
-    // 1. GLOBAL ADMIN OVERRIDE (Master Key)
+    // Keep your Master Admin Key
     ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
     ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
     "users": {
-      "$uid": {
-        // 2. Individual User Permissions
-        ".read": "auth.uid === $uid",
-        ".write": "auth.uid === $uid",
-
-        "balance": {
-          ".validate": "newData.isNumber() && newData.val() >= 0"
-        },
-        "kyc_status": {
-          ".validate": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || newData.val() === 'PENDING' || newData.val() === 'UNVERIFIED'"
-        }
+      // Allow searching by email index
+      ".indexOn": ["email"],
+      
+      // This allows your Render Server (Admin SDK) to write 
+      // the account_number to any email-based node
+      "$user_identifier": {
+        ".read": "auth != null", 
+        ".write": "auth != null"
       }
     },
+    
     "transactions": {
       "$uid": {
         ".read": "auth.uid === $uid",
         ".write": "auth.uid === $uid"
-      }
-    },
-    "notifications": {
-      "$uid": {
-        ".read": "auth.uid === $uid",
-        ".write": "auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
       }
     },
     "settings": {
