@@ -1,0 +1,17 @@
+[debug] [2026-03-29T16:46:30.809Z] ----------------------------------------------------------------------
+[debug] [2026-03-29T16:46:30.852Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase deploy --only hosting
+[debug] [2026-03-29T16:46:30.855Z] CLI Version:   15.7.0
+[debug] [2026-03-29T16:46:30.856Z] Platform:      android
+[debug] [2026-03-29T16:46:30.857Z] Node Version:  v25.8.1
+[debug] [2026-03-29T16:46:30.858Z] Time:          Sun Mar 29 2026 17:46:30 GMT+0100 (West Africa Time)
+[debug] [2026-03-29T16:46:30.859Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-29T16:46:46.408Z] Object "/database" in "firebase.json" has unknown property: {"additionalProperty":"instance"}
+[debug] [2026-03-29T16:46:46.411Z] Field "/database" in "firebase.json" is possibly invalid: must be array
+[debug] [2026-03-29T16:46:46.413Z] Field "/database" in "firebase.json" is possibly invalid: must match a schema in anyOf
+[debug] [2026-03-29T16:46:51.606Z] Error: Timed out.
+    at Timeout._onTimeout (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

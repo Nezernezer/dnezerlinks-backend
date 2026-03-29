@@ -1,90 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fund Wallet</title>
-
-<style>
-body {
-  font-family: Arial;
-  background: #f5f5f5;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-}
-.box {
-  background: #fff;
-  padding: 20px;
-  width: 320px;
-  border-radius: 10px;
-}
-input, button {
-  width: 100%;
-  padding: 10px;
-  margin: 8px 0;
-}
-.result {
-  margin-top: 15px;
-  font-size: 14px;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Wallet - Dnezerlinks</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
+        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; }
+        .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; display: block; }
+        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; display: block; }
+        .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
+        #acc-number { font-size: 1.4rem; color: #222; font-weight: bold; }
+        .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        #status-msg { text-align: center; color: #007bff; font-weight: bold; padding: 20px; }
+        #account-ui { display: none; }
+    </style>
 </head>
-
 <body>
 
-<div class="box">
-  <h3>Fund Wallet</h3>
+<div class="container">
+    <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
+    <h2>Fund Wallet</h2>
+    <div class="balance-box">
+        <span style="font-size: 0.9rem;">Wallet Balance</span><br>
+        <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
+    </div>
 
-  <input type="email" id="email" placeholder="Email">
-  <input type="number" id="amount" placeholder="Amount">
+    <div id="status-msg">Checking for your account...</div>
 
-  <button onclick="fundWallet()">Generate Account</button>
-
-  <div class="result" id="result"></div>
+    <div id="account-ui">
+        <div class="bank-card">
+            <span class="label">BANK NAME</span>
+            <span class="value" id="bank-name">---</span>
+            <span class="label">ACCOUNT NUMBER</span>
+            <div class="acc-num-row">
+                <span id="acc-number">----------</span>
+                <button class="copy-btn" onclick="copyAccount()">Copy</button>
+            </div>
+            <span class="label" style="margin-top:15px;">ACCOUNT NAME</span>
+            <span class="value" id="acc-name">---</span>
+        </div>
+    </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
 <script>
-async function fundWallet() {
-  const email = document.getElementById("email").value;
-  const amount = document.getElementById("amount").value;
-  const result = document.getElementById("result");
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-  result.innerHTML = "Processing...";
+    firebase.auth().onAuthStateChanged(async (user) => {
+        if (user) {
+            const safeEmail = user.email.replace(/\./g, ',');
+            
+            // Listen to both the UID folder and the Email folder
+            db.ref('users').on('value', (snap) => {
+                const allUsers = snap.val();
+                const uidData = allUsers[user.uid] || {};
+                const emailData = allUsers[safeEmail] || {};
+                
+                // Merge the two (Priority to UID balance, but take account details from wherever they are)
+                const combinedData = { ...emailData, ...uidData };
 
-  try {
-    const res = await fetch("https://dnezerlinks-backend.onrender.com/createBillstackAccount", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email, amount })
+                if (combinedData.account_number) {
+                    document.getElementById("wallet-balance").innerText = "₦" + parseFloat(combinedData.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById("bank-name").innerText = combinedData.bank_name;
+                    document.getElementById("acc-number").innerText = combinedData.account_number;
+                    document.getElementById("acc-name").innerText = combinedData.account_name;
+                    
+                    document.getElementById("status-msg").style.display = "none";
+                    document.getElementById("account-ui").style.display = "block";
+                } else {
+                    document.getElementById("status-msg").innerText = "Generating your account... Please wait.";
+                    // Logic to trigger backend goes here if needed
+                }
+            });
+        } else {
+            window.location.href = 'login.html';
+        }
     });
 
-    const data = await res.json();
-
-    if (data.error) {
-      result.innerHTML = "❌ Error: " + data.error;
-      return;
+    function copyAccount() {
+        const num = document.getElementById("acc-number").innerText;
+        navigator.clipboard.writeText(num).then(() => alert("Copied!"));
     }
-
-    // 🔥 SHOW ACCOUNT DETAILS
-    const acct = data.data;
-
-    result.innerHTML = `
-      ✅ Account Generated<br><br>
-      <b>Bank:</b> ${acct.bank_name || "N/A"}<br>
-      <b>Account Number:</b> ${acct.account_number || "N/A"}<br>
-      <b>Account Name:</b> ${acct.account_name || "N/A"}<br><br>
-      Send exactly ₦${amount}
-    `;
-
-  } catch (err) {
-    result.innerHTML = "❌ Network error";
-  }
-}
 </script>
-
 </body>
 </html>
