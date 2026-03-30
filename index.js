@@ -6,7 +6,6 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
-// Initialize Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -14,39 +13,43 @@ admin.initializeApp({
 });
 const db = admin.database();
 
-// 1. WEBHOOK RECEIVER (Optimized for speed)
 app.post('/webhook', async (req, res) => {
-    // CRITICAL: Respond to Billstack immediately so Status 0 goes away
+    // 1. Send 200 immediately to keep Billstack happy
     res.status(200).send('OK');
 
     const payload = req.body;
-    console.log("PAYLOAD:", JSON.stringify(payload));
-
     if (payload.event === 'PAYMENT_NOTIFICATION') {
         try {
-            const accNo = String(payload.data.account.account_number);
+            const rawAccNo = payload.data.account.account_number;
             const amount = Number(payload.data.amount);
 
-            // Find user by account_number
-            const snapshot = await db.ref('users')
-                .orderByChild('account_number')
-                .equalTo(accNo)
-                .once('value');
+            // 2. Search for the user (checking both String and Number types)
+            const usersRef = db.ref('users');
             
+            // Try searching as String first
+            let snapshot = await usersRef.orderByChild('account_number').equalTo(String(rawAccNo)).once('value');
+            
+            // If not found, try searching as Number
+            if (!snapshot.exists()) {
+                snapshot = await usersRef.orderByChild('account_number').equalTo(Number(rawAccNo)).once('value');
+            }
+
             if (snapshot.exists()) {
                 const uid = Object.keys(snapshot.val())[0];
-                await db.ref(`users/${uid}/balance`).transaction(curr => (curr || 0) + amount);
-                console.log(`✅ Credited ${uid} with N${amount}`);
+                
+                // 3. Atomically update the balance
+                await db.ref(`users/${uid}/balance`).transaction((current) => {
+                    return (Number(current) || 0) + amount;
+                });
+                console.log(`✅ SUCCESS: Credited ${uid} with N${amount}`);
             } else {
-                console.log(`❌ No user for account ${accNo}`);
+                console.log(`❌ NOT FOUND: No user with account ${rawAccNo}`);
             }
         } catch (err) {
-            console.error("Internal Error:", err.message);
+            console.error("WEBHOOK ERROR:", err.message);
         }
     }
 });
 
-// 2. HEALTH CHECK (To test if Render is alive)
-app.get('/', (req, res) => res.send('Backend is LIVE'));
-
+app.get('/', (req, res) => res.send('Dnezerlinks Backend is Online'));
 app.listen(process.env.PORT || 3000);
