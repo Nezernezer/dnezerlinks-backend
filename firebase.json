@@ -1,9 +1,9 @@
 {
   "database": {
-    "instance": "dnezerlinks-default-rtdb",
     "rules": "database.rules.json"
   },
   "hosting": {
+    "target": "dnezerlinks",
     "public": "public",
     "ignore": [
       "firebase.json",

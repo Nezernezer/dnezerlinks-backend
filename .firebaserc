@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "dnezerlinks-vtu"
-  }
+  },
+  "targets": {
+    "dnezerlinks": {
+      "hosting": {
+        "dnezerlinks": [
+          "dnezerlinks"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
