@@ -14,42 +14,39 @@ admin.initializeApp({
 });
 const db = admin.database();
 
-// Health Check (To see if server is alive)
-app.get('/', (req, res) => res.send('Dnezerlinks Backend is Online'));
-
+// 1. WEBHOOK RECEIVER (Optimized for speed)
 app.post('/webhook', async (req, res) => {
-    const payload = req.body;
-    console.log("PAYLOAD RECEIVED:", JSON.stringify(payload));
+    // CRITICAL: Respond to Billstack immediately so Status 0 goes away
+    res.status(200).send('OK');
 
-    // From your screenshot: payload.event is "PAYMENT_NOTIFICATION"
+    const payload = req.body;
+    console.log("PAYLOAD:", JSON.stringify(payload));
+
     if (payload.event === 'PAYMENT_NOTIFICATION') {
         try {
-            // Path from your screenshot: data -> account -> account_number
             const accNo = String(payload.data.account.account_number);
             const amount = Number(payload.data.amount);
 
-            const userQuery = await db.ref('users')
+            // Find user by account_number
+            const snapshot = await db.ref('users')
                 .orderByChild('account_number')
                 .equalTo(accNo)
                 .once('value');
             
-            if (userQuery.exists()) {
-                const snapshot = userQuery.val();
-                const uid = Object.keys(snapshot)[0];
-                
-                await db.ref(`users/${uid}/balance`).transaction((current) => {
-                    return (current || 0) + amount;
-                });
-                console.log(`SUCCESS: Credited ${uid} with N${amount}`);
+            if (snapshot.exists()) {
+                const uid = Object.keys(snapshot.val())[0];
+                await db.ref(`users/${uid}/balance`).transaction(curr => (curr || 0) + amount);
+                console.log(`✅ Credited ${uid} with N${amount}`);
             } else {
-                console.log(`NOT FOUND: No user with account ${accNo}`);
+                console.log(`❌ No user for account ${accNo}`);
             }
         } catch (err) {
-            console.error("LOGIC ERROR:", err.message);
+            console.error("Internal Error:", err.message);
         }
     }
-    // Billstack MUST get this 200 to change "Status 0" to "Success"
-    res.status(200).json({ status: 'success' });
 });
+
+// 2. HEALTH CHECK (To test if Render is alive)
+app.get('/', (req, res) => res.send('Backend is LIVE'));
 
 app.listen(process.env.PORT || 3000);
