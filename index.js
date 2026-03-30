@@ -6,6 +6,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
+// Initialize Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -13,43 +14,42 @@ admin.initializeApp({
 });
 const db = admin.database();
 
+// Health Check (To see if server is alive)
+app.get('/', (req, res) => res.send('Dnezerlinks Backend is Online'));
+
 app.post('/webhook', async (req, res) => {
     const payload = req.body;
-    console.log("Incoming Webhook:", JSON.stringify(payload));
+    console.log("PAYLOAD RECEIVED:", JSON.stringify(payload));
 
-    // Match Billstack's specific event name from your screenshot
+    // From your screenshot: payload.event is "PAYMENT_NOTIFICATION"
     if (payload.event === 'PAYMENT_NOTIFICATION') {
-        const data = payload.data;
-        const amount = Number(data.amount); 
-        // Targeted path: data -> account -> account_number
-        const accNo = String(data.account.account_number);
-
         try {
+            // Path from your screenshot: data -> account -> account_number
+            const accNo = String(payload.data.account.account_number);
+            const amount = Number(payload.data.amount);
+
             const userQuery = await db.ref('users')
                 .orderByChild('account_number')
                 .equalTo(accNo)
                 .once('value');
             
             if (userQuery.exists()) {
-                const userData = userQuery.val();
-                const uid = Object.keys(userData)[0];
+                const snapshot = userQuery.val();
+                const uid = Object.keys(snapshot)[0];
                 
-                // Atomically update balance
                 await db.ref(`users/${uid}/balance`).transaction((current) => {
                     return (current || 0) + amount;
                 });
-
-                console.log(`✅ SUCCESS: Credited ₦${amount} to UID: ${uid}`);
+                console.log(`SUCCESS: Credited ${uid} with N${amount}`);
             } else {
-                console.log(`❌ ERROR: No user found with account number: ${accNo}`);
+                console.log(`NOT FOUND: No user with account ${accNo}`);
             }
         } catch (err) {
-            console.error("🔥 DATABASE ERROR:", err.message);
+            console.error("LOGIC ERROR:", err.message);
         }
     }
-    
-    // CRITICAL: Billstack needs a 200 OK to stop the "Status 0" error
-    res.status(200).send('OK');
+    // Billstack MUST get this 200 to change "Status 0" to "Success"
+    res.status(200).json({ status: 'success' });
 });
 
 app.listen(process.env.PORT || 3000);
