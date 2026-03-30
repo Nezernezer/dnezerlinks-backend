@@ -5,7 +5,7 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: 'https://dnezerlinks.web.app' }));
 
 // --- 1. FIREBASE SETUP ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -49,7 +49,7 @@ app.post('/get-virtual-account', async (req, res) => {
 
         res.json(account);
     } catch (err) {
-        res.status(500).send("Account Generation Failed");
+        res.status(500).json({ error: err.message, details: err.response?.data || 'No extra info' });
     }
 });
 
