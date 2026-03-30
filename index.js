@@ -5,9 +5,9 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: 'https://dnezerlinks.web.app' }));
+app.use(cors());
 
-// --- 1. FIREBASE SETUP ---
+// --- FIREBASE SETUP ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -16,58 +16,64 @@ admin.initializeApp({
 const db = admin.database();
 const BILLSTACK_SECRET = process.env.BILLSTACK_SECRET;
 
-// --- 2. ROUTE: CREATE/GET VIRTUAL ACCOUNT ---
+// --- V2 API ROUTE ---
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, uid } = req.body;
-    if (!uid) return res.status(400).send("UID Required");
+    if (!uid) return res.status(400).send("UID is required");
 
     try {
         const userRef = db.ref(`users/${uid}`);
         const snap = await userRef.once('value');
-        const userData = snap.val() || {};
+        let userData = snap.val() || {};
 
-        // If account already exists, return it
         if (userData.account_number) return res.json(userData);
 
-        // Request new account from Billstack
-        const response = await axios.post('https://api.billstack.co/v1/virtual-accounts', {
-            email, first_name, last_name, currency: "NGN"
+        // UPDATED TO V2 ENDPOINT
+        const response = await axios.post('https://api.billstack.co/v2/virtual-accounts', {
+            email, 
+            first_name, 
+            last_name, 
+            currency: "NGN"
         }, {
-            headers: { Authorization: `Bearer ${BILLSTACK_SECRET}` }
+            headers: { 
+                Authorization: `Bearer ${BILLSTACK_SECRET}`,
+                "Content-Type": "application/json"
+            }
         });
 
         const account = response.data.data;
         
-        // Save to UID folder (Include email for the webhook to find this UID later)
         await userRef.update({
             account_number: account.account_number,
             bank_name: account.bank_name,
             account_name: account.account_name,
-            email: email, 
+            email: email,
             balance: userData.balance || 0
         });
 
         res.json(account);
     } catch (err) {
-        res.status(500).json({ error: err.message, details: err.response?.data || 'No extra info' });
+        console.error("V2 Error:", err.response?.data || err.message);
+        res.status(500).json({ 
+            error: "V2 Request Failed", 
+            details: err.response?.data || err.message 
+        });
     }
 });
 
-// --- 3. ROUTE: WEBHOOK (THE MONEY RECEIVER) ---
+// --- WEBHOOK (Update to search by Email) ---
 app.post('/webhook', async (req, res) => {
     const { event, data } = req.body;
     if (event === 'charge.success') {
         const email = data.customer.email;
         const amount = data.amount / 100;
 
-        // Search for the UID that owns this email
         const userQuery = await db.ref('users').orderByChild('email').equalTo(email).once('value');
         const userMatch = userQuery.val();
 
         if (userMatch) {
             const uid = Object.keys(userMatch)[0];
-            await db.ref(`users/${uid}/balance`).transaction(curr => (curr || 0) + amount);
-            console.log(`Successfully funded ${uid} with ₦${amount}`);
+            await db.ref(`users/${uid}/balance`).transaction(c => (c || 0) + amount);
         }
     }
     res.sendStatus(200);
