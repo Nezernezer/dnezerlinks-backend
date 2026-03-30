@@ -5,9 +5,8 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: '*' })); // Allows your Firebase site to talk to Render
 
-// --- FIREBASE SETUP ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -16,7 +15,6 @@ admin.initializeApp({
 const db = admin.database();
 const BILLSTACK_SECRET = process.env.BILLSTACK_SECRET;
 
-// --- V2 API ROUTE ---
 app.post('/get-virtual-account', async (req, res) => {
     const { email, first_name, last_name, uid } = req.body;
     if (!uid) return res.status(400).send("UID is required");
@@ -28,49 +26,33 @@ app.post('/get-virtual-account', async (req, res) => {
 
         if (userData.account_number) return res.json(userData);
 
-        // UPDATED TO V2 ENDPOINT
         const response = await axios.post('https://api.billstack.co/v2/virtual-accounts', {
-            email, 
-            first_name, 
-            last_name, 
-            currency: "NGN"
+            email, first_name, last_name, currency: "NGN"
         }, {
-            headers: { 
-                Authorization: `Bearer ${BILLSTACK_SECRET}`,
-                "Content-Type": "application/json"
-            }
+            headers: { Authorization: `Bearer ${BILLSTACK_SECRET}` }
         });
 
         const account = response.data.data;
-        
         await userRef.update({
             account_number: account.account_number,
             bank_name: account.bank_name,
             account_name: account.account_name,
-            email: email,
+            email: email, 
             balance: userData.balance || 0
         });
-
         res.json(account);
     } catch (err) {
-        console.error("V2 Error:", err.response?.data || err.message);
-        res.status(500).json({ 
-            error: "V2 Request Failed", 
-            details: err.response?.data || err.message 
-        });
+        res.status(500).json({ error: err.message, details: err.response?.data });
     }
 });
 
-// --- WEBHOOK (Update to search by Email) ---
 app.post('/webhook', async (req, res) => {
     const { event, data } = req.body;
     if (event === 'charge.success') {
         const email = data.customer.email;
         const amount = data.amount / 100;
-
         const userQuery = await db.ref('users').orderByChild('email').equalTo(email).once('value');
         const userMatch = userQuery.val();
-
         if (userMatch) {
             const uid = Object.keys(userMatch)[0];
             await db.ref(`users/${uid}/balance`).transaction(c => (c || 0) + amount);
