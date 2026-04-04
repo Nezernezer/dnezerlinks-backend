@@ -16,7 +16,7 @@ const db = admin.database();
 app.post('/webhook', async (req, res) => {
     res.status(200).send('OK');
     const payload = req.body;
-    if (payload.event === 'PAYMENT_NOTIFICATION') {
+    if (payload.event === 'PAYMENT_NOTIFICATION' || payload.event === 'TRANSACTION_SUCCESS') {
         try {
             const rawAccNo = payload.data.account.account_number;
             const amount = Number(payload.data.amount);
@@ -24,7 +24,6 @@ app.post('/webhook', async (req, res) => {
 
             const usersRef = db.ref('users');
             let snapshot = await usersRef.orderByChild('account_number').equalTo(String(rawAccNo)).once('value');
-
             if (!snapshot.exists()) {
                 snapshot = await usersRef.orderByChild('account_number').equalTo(Number(rawAccNo)).once('value');
             }
@@ -34,9 +33,12 @@ app.post('/webhook', async (req, res) => {
                 await db.ref(`users/${uid}/balance`).transaction((current) => {
                     return (Number(current) || 0) + netAmount;
                 });
-                console.log(`✅ SUCCESS: Credited ${uid} with N${netAmount} (after 2% fee)`);
-            } else {
-                console.log(`❌ NOT FOUND: No user with account ${rawAccNo}`);
+
+                await db.ref(`notifications/${uid}`).push({
+                    message: `your wallet has been credited through your account number with ₦${netAmount.toLocaleString()}`,
+                    timestamp: Date.now(),
+                    read: false
+                });
             }
         } catch (err) {
             console.error("WEBHOOK ERROR:", err.message);
