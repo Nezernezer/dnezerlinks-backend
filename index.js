@@ -16,26 +16,10 @@ const db = admin.database();
 app.post('/webhook', async (req, res) => {
     res.status(200).send('OK');
     const payload = req.body;
-    
     if (payload.event === 'PAYMENT_NOTIFICATION' || payload.event === 'TRANSACTION_SUCCESS') {
         try {
-            const data = payload.data;
-            const reference = data.reference || data.tx_ref || data.id; 
-            
-            if (!reference) return console.error("No reference found");
-
-            // --- DUPLICATE CHECK START ---
-            const processedRef = db.ref(`processed_payments/${reference}`);
-            const check = await processedRef.once('value');
-            
-            if (check.exists()) {
-                console.log(`Duplicate detected: ${reference}. Skipping.`);
-                return;
-            }
-            // --- DUPLICATE CHECK END ---
-
-            const rawAccNo = data.account.account_number;
-            const amount = Number(data.amount);
+            const rawAccNo = payload.data.account.account_number;
+            const amount = Number(payload.data.amount);
             const netAmount = amount * 0.98;
 
             const usersRef = db.ref('users');
@@ -46,20 +30,12 @@ app.post('/webhook', async (req, res) => {
 
             if (snapshot.exists()) {
                 const uid = Object.keys(snapshot.val())[0];
-
-                // Save reference immediately to block duplicates
-                await processedRef.set({
-                    uid,
-                    amount,
-                    timestamp: admin.database.ServerValue.TIMESTAMP
-                });
-
                 await db.ref(`users/${uid}/balance`).transaction((current) => {
                     return (Number(current) || 0) + netAmount;
                 });
 
                 await db.ref(`notifications/${uid}`).push({
-                    message: `Wallet credited: ₦${netAmount.toLocaleString()} (Ref: ${reference})`,
+                    message: `your wallet has been credited through your account number with ₦${netAmount.toLocaleString()}`,
                     timestamp: Date.now(),
                     read: false
                 });
@@ -71,4 +47,4 @@ app.post('/webhook', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.send('Dnezerlinks Backend is Online'));
-app.listen(process.env.PORT || 3000);
+app.listen(process.env.PORT || 3000, () => console.log('Server running on port 3000'));
