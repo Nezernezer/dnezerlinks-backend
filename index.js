@@ -16,8 +16,18 @@ const db = admin.database();
 app.post('/webhook', async (req, res) => {
     res.status(200).send('OK');
     const payload = req.body;
+    const txRef = payload.data && (payload.data.reference || payload.data.transaction_id);
+
     if (payload.event === 'PAYMENT_NOTIFICATION' || payload.event === 'TRANSACTION_SUCCESS') {
         try {
+            if (txRef) {
+                const txCheck = await db.ref(`processed_transactions/${txRef}`).once('value');
+                if (txCheck.exists()) {
+                    console.log(`[DUPLICATE] Transaction ${txRef} already processed. Skipping.`);
+                    return;
+                }
+            }
+
             const rawAccNo = payload.data.account.account_number;
             const amount = Number(payload.data.amount);
             const netAmount = amount * 0.98;
@@ -30,10 +40,16 @@ app.post('/webhook', async (req, res) => {
 
             if (snapshot.exists()) {
                 const uid = Object.keys(snapshot.val())[0];
+                if (txRef) {
+                    await db.ref(`processed_transactions/${txRef}`).set({
+                        uid: uid,
+                        amount: netAmount,
+                        timestamp: Date.now()
+                    });
+                }
                 await db.ref(`users/${uid}/balance`).transaction((current) => {
                     return (Number(current) || 0) + netAmount;
                 });
-
                 await db.ref(`notifications/${uid}`).push({
                     message: `your wallet has been credited through your account number with ₦${netAmount.toLocaleString()}`,
                     timestamp: Date.now(),
