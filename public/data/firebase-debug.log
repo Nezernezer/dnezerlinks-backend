@@ -1,0 +1,89 @@
+[debug] [2026-04-23T18:40:00.075Z] ----------------------------------------------------------------------
+[debug] [2026-04-23T18:40:00.133Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase deploy
+[debug] [2026-04-23T18:40:00.136Z] CLI Version:   15.7.0
+[debug] [2026-04-23T18:40:00.137Z] Platform:      android
+[debug] [2026-04-23T18:40:00.138Z] Node Version:  v25.8.1
+[debug] [2026-04-23T18:40:00.139Z] Time:          Thu Apr 23 2026 19:40:00 GMT+0100 (West Africa Time)
+[debug] [2026-04-23T18:40:00.140Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-23T18:40:14.940Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-23T18:40:14.943Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-04-23T18:40:14.945Z] [iam] checking project dnezerlinks for permissions ["firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update"]
+[debug] [2026-04-23T18:40:14.954Z] Checked if tokens are valid: false, expires at: 1776926966615
+[debug] [2026-04-23T18:40:14.956Z] Checked if tokens are valid: false, expires at: 1776926966615
+[debug] [2026-04-23T18:40:14.958Z] > refreshing access token with scopes: []
+[debug] [2026-04-23T18:40:14.975Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-04-23T18:40:14.976Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-23T18:40:25.159Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------eb067b1ceb4c157f45b7220d","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: getaddrinfo ENOTFOUND www.googleapis.com
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-04-23T18:40:25.180Z] [iam] error while checking permissions, command may fail: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-04-23T18:40:25.187Z] Checked if tokens are valid: false, expires at: 1776926966615
+[debug] [2026-04-23T18:40:25.188Z] Checked if tokens are valid: false, expires at: 1776926966615
+[debug] [2026-04-23T18:40:25.189Z] > refreshing access token with scopes: []
+[debug] [2026-04-23T18:40:25.197Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-04-23T18:40:25.198Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-23T18:40:29.939Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-04-23T18:40:29.940Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-23T18:40:29.968Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-04-23T18:40:37.365Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-04-23T18:40:37.368Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[debug] [2026-04-23T18:40:37.373Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:37.373Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:37.375Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-04-23T18:40:37.781Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-04-23T18:40:37.782Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[info] 
+[info] === Deploying to 'dnezerlinks'...
+[info] 
+[info] i  deploying database, hosting 
+[info] i  database: checking rules syntax... 
+[debug] [2026-04-23T18:40:37.830Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:37.831Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:37.832Z] >>> [apiv2][query] GET https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb [none]
+[debug] [2026-04-23T18:40:39.511Z] <<< [apiv2][status] GET https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb 200
+[debug] [2026-04-23T18:40:39.513Z] <<< [apiv2][body] GET https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb {"name":"projects/1028450580168/locations/us-central1/instances/dnezerlinks-default-rtdb","project":"projects/1028450580168","databaseUrl":"https://dnezerlinks-default-rtdb.firebaseio.com","type":"DEFAULT_DATABASE","state":"ACTIVE"}
+[debug] [2026-04-23T18:40:39.528Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:39.529Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:40:39.535Z] >>> [apiv2][query] PUT https://dnezerlinks-default-rtdb.firebaseio.com/.settings/rules.json dryRun=true
+[debug] [2026-04-23T18:40:39.536Z] >>> [apiv2][body] PUT https://dnezerlinks-default-rtdb.firebaseio.com/.settings/rules.json "{\n  \"rules\": {\n    // Keep your Master Admin Key\n    \".read\": \"auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'\",\n    \".write\": \"auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'\",\n\n    \"users\": {\n      // Allow searching by email index\n      \".indexOn\": [\"email\"],\n      \n      // This allows your Render Server (Admin SDK) to write \n      // the account_number to any email-based node\n      \"$user_identifier\": {\n        \".read\": \"auth != null\", \n        \".write\": \"auth != null\"\n      }\n    },\n    \n    \"transactions\": {\n      \"$uid\": {\n        \".read\": \"auth.uid === $uid\",\n        \".write\": \"auth.uid === $uid\"\n      }\n    },\n    \"settings\": {\n      \".read\": \"true\",\n      \".write\": \"auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'\"\n    }\n  }\n}\n"
+[debug] [2026-04-23T18:41:01.995Z] <<< [apiv2][status] PUT https://dnezerlinks-default-rtdb.firebaseio.com/.settings/rules.json 200
+[debug] [2026-04-23T18:41:01.997Z] <<< [apiv2][body] PUT https://dnezerlinks-default-rtdb.firebaseio.com/.settings/rules.json {"status":"ok"}
+[info] ✔  database: rules syntax for database dnezerlinks-default-rtdb is valid 
+[debug] [2026-04-23T18:41:02.026Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:02.027Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:02.028Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions [none]
+[debug] [2026-04-23T18:41:02.030Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-04-23T18:41:06.342Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions 200
+[debug] [2026-04-23T18:41:06.345Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions {"name":"projects/1028450580168/sites/dnezerlinks/versions/0cb76aa451b653c7","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[dnezerlinks]: beginning deploy... 
+[info] i  hosting[dnezerlinks]: found 51 files in public 
+[debug] [2026-04-23T18:41:06.725Z] [hosting] uploading with 200 concurrency
+[debug] [2026-04-23T18:41:07.102Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:07.104Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:07.113Z] [hosting] hash cache [cHVibGlj] stored for 51 files
+[debug] [2026-04-23T18:41:07.116Z] [hosting][hash queue][FINAL] {"max":138,"min":3,"avg":13.352941176470589,"active":0,"complete":51,"success":51,"errored":0,"retried":0,"total":51,"elapsed":230}
+[debug] [2026-04-23T18:41:07.120Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/0cb76aa451b653c7:populateFiles [none]
+[debug] [2026-04-23T18:41:07.122Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/0cb76aa451b653c7:populateFiles {"files":{"/users.html":"c1aa0dc35b0274aa8314e50ad471488169bec00aec357d7f2e4275aa2cce5a28","/test-create.js":"307594d469b6ed0658c421b914c570089e19648a0543612e9d2fdc546c8250ed","/support.html":"b9ecc4f032a7b009a4132a8dea0b30cb6922402f62f9ddefac1cee05557bb085","/security.html":"3ffbd22e4fdc893a5b31fe58667916ad0fffe53d69cc5b60f9c4af582a191119","/profile.html":"74d84a8a69388ebd71954b4a47acabfeff05688c54a93a65cd862342c600f2cc","/pinsetup.html":"c473c1780d8193d9ba3a4593d9b906851204bd8c697ae2b3720330d74e0a2bbc","/paysuccess.html":"e2e7cfd829257a1c8d8d566d6d5f080fa080a7b5cb93934bc50e04c6a8f0c518","/payfailed.html":"b523dc6b53c15b3569d01249bfa6d32387030b79ccd95b0b60f781d680995d89","/package-lock.json":"b51f8753bf1ea8ee1bc1c8029b46fe92e14e83cf58ed3558a888b662af2207eb","/login.html":"85056b329f80ca6c0901cee1cabb7479a5b32a97380c27fd79647c3304c52b95","/kyc_status.html":"27971c5f6911048662dbf89a065366a2b58234545dffdcd08d1b86aa3cc0eadb","/index.js":"9a82fb927e7c1b079c460b5db1a5ba34aab6e99c7128a4c4acaae435fd661b42","/index.html":"2b366b0341195f6d809a2e94abb3a650c6268403d564cc9961723aecc7344624","/home_backup.html":"8fb4e551580ffb6f80bf8b2a17059546f3aa8642edcec41aa2c4ade85c194128","/home.html":"a2cc2360c260488c2d13897d32ef39559f5d7800c755eba8d0a1e55d7eabe2e3","/home.bak":"c8bf71ac525a5149e55feadce8e0d170d5537026ce06b6a74adfdf1507870d05","/history.html":"ddfd8cdb43cae3a4676b21cfe98fb7d32464116312264a19dd095441c6e4e826","/fund.bak":"731e27604dfa935754a34dcadda09937b864369fece3b498e0b3d8d7ace3a092","/fund-walletmonnify.html":"448741e5d38a4421ceadd70d439df961accd22debe4af57b4434168adb8460e2","/fund-wallet.html":"a30126ed850c105e98b64a5ac5cce56139877f64a0b697fe1c4c92f091df140b","/firebase-config.js":"c76d0f1b9c074dc8c9c47b66e911b30591fc2bf8948f4d8d46ff96f7c9cc0405","/broadcast.html":"8633fdd5b9bc5ff1c650e007c8cb8861aa4dc343a1334833ee138cb509e9cfbe","/auth-check.js":"ee28620d5dbc9e8ef818c77e50cee5721361b2ab4f43443dc488701747225c19","/airtime.js":"7f9324b2ce3f3ecf03a5dee3f03dd7bf2d328cd98ce95c5e1e216fc0f5e9cacf","/admin_patch.sh":"e330732c7c72c599806f35a513884fb7d08147a143a7fc71fe3ba9754d1c73f8","/account.html":"b94970f962fd7aba0081a24fc5da3d40cfd3274204e06e2d3c560f7e6e504324","/404.html":"b7bab6b83fa074653ff28c8d2a64135d3434575f70a12ab3d3ba8080461b9537","/recharge-pin/index.html":"790f761ee1220aedbf13d4b0921749bdb280fd2aa77473055dd6d04fa0594ec6","/public/kyc_status.html":"0d47a32851de6beae7e045956b34a7522fa3153f53134191a6f11a26a7d144e9","/public/home.html":"72ae0b10b618dc673e73d991087f839f30c3d062d6188dc05db0fed317adfe2f","/public/js/modals.js":"27e5c9da4740041d52ec62421acb4d0616bbba9067204c56d08c04f965721cad","/exampin/index.html":"f9365fbc85a0be65bd3d46fd512926c19b92bd0c154937c79b07288c0865c879","/electricity/index.html":"1376eba28dd422b227db47c70a63570fae6b7f6c3fbb32522091a87c60e1ca25","/data/script.js":"0f37f4b0fa2c55ed9f58d279434f3d3c31d7db4fd6163885951bad3aee859315","/data/data_old/index.html":"86326b5b117c914b5b80e6d47e5fbbc0c1698f3a2014b4b3006c76d920c50f8c","/cable/index.html":"2a80c65473be80463c7739c5e13af8523b81d499f518dc1c318a5c92fffd50dc","/bulksms/index.html":"0da670c02b6c4df710dfe4d5a66392d9640720c76338b691681d15a56e57467c","/airtime-to-cash/index.html":"e7179afdd5d596e4003e61268a721fa8d20c526885b36060851095b709e603d6","/airtime/script.js":"65cd2e0025035dd963c7a6cf0334a261b5072f577c887a6ff4ba520729d6dc74","/airtime/airtime_old/index.html":"f08c3a01c93f9a17032361d4773ea37d1e18fc8103ac0e7a5dcdbba3a6f77d63","/admin/wallet.html":"27f7be7636c186ba687ea3204fd7ab45ffb53ccfa31477409d7c3cdc69a334e0","/admin/users_fix.js":"ce3dfe16f4d5f297a9d435525d3e15ad4edb81e0d8f1658892e9581baf81327c","/admin/users.html":"9833c8a3bdd1ff60f1f3e6cbbe4aa221e5cafecc524a1af37321120834ca820d","/admin/users.bak":"45797b09e3f85d3ea9b8dccc32653119c7b93b7e39ca255de83a8c7667dc5fe8","/admin/index.html":"22609f1a8ac4cc8ebb1c7cdb1209d1ffefc18c53e36b78672a323d298fc938ae","/admin/history.html":"bf64c7f6995290883fe00f12fff5b26fc9c896d532e5bd94a30ab78d62b5c51e","/admin/broadcast.html":"88da899e0c5bc2183d7478e3ab871fc644cab67e9db4678c5582698c44c1d0cd","/admin/auth.js":"aeac1004e40dd8386ca3ade073c84d0b3da851a344cbed75cc07130fcca8800e","/admin/audit.html":"186116b7dd386cf8462859b95fdbc6a9e25a453972a1b0e80ced7593ed7a7b42","/data/index.html":"e5b84568579a9da69cfbb15090adc9c5d7528700c8dfd27b80de727b13c16dcd","/airtime/index.html":"132f343d87d1313f340f00571442eb9c5e3426b376393a2001a3e61a4936edea"}}
+[debug] [2026-04-23T18:41:08.520Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/0cb76aa451b653c7:populateFiles 200
+[debug] [2026-04-23T18:41:08.522Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/0cb76aa451b653c7:populateFiles {"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/dnezerlinks/versions/0cb76aa451b653c7/files"}
+[debug] [2026-04-23T18:41:08.525Z] [hosting][populate queue][FINAL] {"max":1424,"min":1424,"avg":1424,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":1425}
+[debug] [2026-04-23T18:41:08.527Z] [hosting] uploads queued: 0
+[debug] [2026-04-23T18:41:08.529Z] [hosting][upload queue][FINAL] {"max":0,"min":9999999999,"avg":0,"active":0,"complete":0,"success":0,"errored":0,"retried":0,"total":0,"elapsed":1776969668529}
+[info] ✔  hosting[dnezerlinks]: file upload complete 
+[debug] [2026-04-23T18:41:08.540Z] [hosting] deploy completed after 2144ms
+[info] i  database: releasing rules... 
+[debug] [2026-04-23T18:41:08.545Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:08.546Z] Checked if tokens are valid: true, expires at: 1776973228942
+[debug] [2026-04-23T18:41:08.549Z] >>> [apiv2][query] GET https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb [none]
+[debug] [2026-04-23T18:41:18.568Z] *** [apiv2] error from fetch(https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb, {"headers":{},"method":"GET","signal":{"reason":""}}): AbortError: The user aborted a request.
+[debug] [2026-04-23T18:41:18.570Z] Timeout reached making request to https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb
+[debug] [2026-04-23T18:41:23.617Z] Error: Timed out.
+    at Timeout._onTimeout (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
