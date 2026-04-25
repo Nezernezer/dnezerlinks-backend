@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Verification - Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --success: #2e7d32; --danger: #d32f2f; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; margin: 0; display: none; flex-direction: column; align-items: center; }
+        .header { background: var(--primary); color: white; padding: 15px; width: 100%; box-sizing: border-box; }
+        .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
+        .header h2 { margin: 5px 0 0 0; text-align: center; font-size: 1.4rem; }
+        .container { padding: 20px; max-width: 450px; width: 90%; margin-top: 10px; }
+        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; }
+        .status-badge { position: absolute; top: 15px; right: 15px; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; }
+        .status-unverified { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .status-declined { background: #fff3f3; color: var(--danger); border: 1px solid #ffcdd2; }
+        .status-pending { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+        .status-verified { background: #e8f5e9; color: var(--success); border: 1px solid #a5d6a7; }
+        #msg { display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center; font-weight: bold; }
+        .error { background: #ffebee; color: #c62828; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 13px; }
+        input, select { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .btn-main { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-pay { background: var(--success); }
+        .footer-note { text-align: center; margin-top: 15px; color: #888; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="nav-links"><a href="home.html">← DASHBOARD</a></div>
+        <h2>Identity Verification</h2>
+    </div>
+
+    <div class="container">
+        <div class="card" id="kycCard">
+            <div id="statusLabel" class="status-badge">Checking...</div>
+            <div id="msg"></div>
+
+            <div id="dynamicContent">
+                <form id="kycForm">
+                    <label>ID Type</label>
+                    <select id="idType">
+                        <option value="NIN">National ID (NIN)</option>
+                        <option value="BVN">Bank Verification (BVN)</option>
+                    </select>
+                    <label>ID Number</label>
+                    <input type="number" id="idNumber" placeholder="Enter 11 digit number" required>
+                    <label>Date of Birth</label>
+                    <input type="date" id="dob" required>
+                    <label>Full Name</label>
+                    <p style="font-size: 11px; color: #888; margin-top: -5px;">Must match your Bank Account Name exactly.</p>
+                    <input type="text" id="fullName" placeholder="Legal Name on ID/Bank" required>
+                    <button type="submit" id="submitBtn" class="btn-main">Submit Details</button>
+                </form>
+            </div>
+            <div class="footer-note">Secure encryption enabled for data privacy.</div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                database.ref('users/' + user.uid).on('value', snap => {
+                    const data = snap.val() || {};
+                    document.body.style.display = 'flex';
+                    updateUI(data);
+                });
+            } else {
+                location.href = "login.html";
+            }
+        });
+
+        function updateUI(data) {
+            const container = document.getElementById('dynamicContent');
+            const statusLabel = document.getElementById('statusLabel');
+            const status = (data.kyc_status || 'NOT-SUBMITTED').toUpperCase();
+
+            if (status === "VERIFIED") {
+                statusLabel.innerText = "VERIFIED";
+                statusLabel.className = "status-badge status-verified";
+                container.innerHTML = `<div style="text-align:center; padding:10px;">
+                    <p style="color:var(--success); font-weight:bold;">✅ Verification Successful</p>
+                    <button class="btn-main btn-pay" onclick="location.href='fund.html'">PROCEED TO FUNDING</button>
+                </div>`;
+            } else if (status === "PENDING") {
+                statusLabel.innerText = "PENDING";
+                statusLabel.className = "status-badge status-pending";
+                container.innerHTML = `<div style="text-align:center; padding:10px;">
+                    <p style="color:#e65100; font-weight:bold;">⏳ Auto-Verification Active</p>
+                    <p style="font-size:13px; color:#666;">Transfer money to your virtual account to activate your identity instantly.</p>
+                    <button class="btn-main" onclick="location.href='home.html'">RETURN TO DASHBOARD</button>
+                </div>`;
+            } else if (status === "FLAGGED") {
+                statusLabel.innerText = "FLAGGED";
+                statusLabel.className = "status-badge status-declined";
+                container.innerHTML = `<div style="text-align:center; padding:10px;">
+                    <p style="color:var(--danger); font-weight:bold;">⚠️ Name Mismatch</p>
+                    <p style="font-size:13px; color:#666;">Bank sender name doesn't match your registered name.</p>
+                    <button class="btn-main" onclick="window.open('https://wa.me/234XXXXXXXXXX')">CONTACT SUPPORT</button>
+                </div>`;
+            } else {
+                statusLabel.innerText = status === "DECLINED" ? "DECLINED" : "NOT SUBMITTED";
+                statusLabel.className = status === "DECLINED" ? "status-badge status-declined" : "status-badge status-unverified";
+            }
+        }
+
+        document.addEventListener('submit', function(e) {
+            if (e.target && e.target.id === 'kycForm') {
+                e.preventDefault();
+                const user = auth.currentUser;
+                const btn = document.getElementById('submitBtn');
+                btn.disabled = true;
+                btn.innerText = "Processing...";
+
+                database.ref('users/' + user.uid).update({
+                    kyc_status: "PENDING",
+                    dob: document.getElementById('dob').value,
+                    id_type: document.getElementById('idType').value,
+                    id_number: document.getElementById('idNumber').value,
+                    full_name: document.getElementById('fullName').value,
+                    submittedAt: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+[debug] [2026-04-25T00:12:33.647Z] ----------------------------------------------------------------------
+[debug] [2026-04-25T00:12:33.699Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase deploy
+[debug] [2026-04-25T00:12:33.702Z] CLI Version:   15.7.0
+[debug] [2026-04-25T00:12:33.703Z] Platform:      android
+[debug] [2026-04-25T00:12:33.704Z] Node Version:  v25.8.1
+[debug] [2026-04-25T00:12:33.706Z] Time:          Sat Apr 25 2026 01:12:33 GMT+0100 (West Africa Time)
+[debug] [2026-04-25T00:12:33.708Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-25T00:12:50.141Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-25T00:12:50.146Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-04-25T00:12:50.147Z] [iam] checking project dnezerlinks for permissions ["firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update"]
+[debug] [2026-04-25T00:12:50.157Z] Checked if tokens are valid: false, expires at: 1777076662094
+[debug] [2026-04-25T00:12:50.159Z] Checked if tokens are valid: false, expires at: 1777076662094
+[debug] [2026-04-25T00:12:50.161Z] > refreshing access token with scopes: []
+[debug] [2026-04-25T00:12:50.184Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-04-25T00:12:50.186Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-25T00:13:11.090Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-04-25T00:13:11.094Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-25T00:13:11.125Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions [none]
+[debug] [2026-04-25T00:13:11.127Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions  x-goog-user-project=dnezerlinks
+[debug] [2026-04-25T00:13:11.128Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update"]}
+[debug] [2026-04-25T00:13:12.705Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions 200
+[debug] [2026-04-25T00:13:12.707Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update"]}
+[debug] [2026-04-25T00:13:12.715Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:12.717Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:12.723Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-04-25T00:13:22.415Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-04-25T00:13:22.416Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[debug] [2026-04-25T00:13:22.419Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:22.420Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:22.422Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-04-25T00:13:22.830Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-04-25T00:13:22.832Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[info] 
+[info] === Deploying to 'dnezerlinks'...
+[info] 
+[info] i  deploying database, hosting 
+[info] i  database: checking rules syntax... 
+[debug] [2026-04-25T00:13:22.898Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:22.899Z] Checked if tokens are valid: true, expires at: 1777079590096
+[debug] [2026-04-25T00:13:22.901Z] >>> [apiv2][query] GET https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb [none]
+[debug] [2026-04-25T00:13:32.922Z] *** [apiv2] error from fetch(https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb, {"headers":{},"method":"GET","signal":{"reason":""}}): AbortError: The user aborted a request.
+[debug] [2026-04-25T00:13:32.926Z] Timeout reached making request to https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb
+[debug] [2026-04-25T00:13:33.538Z] FirebaseError: Timeout reached making request to https://firebasedatabase.googleapis.com/v1beta/projects/dnezerlinks/locations/-/instances/dnezerlinks-default-rtdb
+    at RetryOperation._fn (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/apiv2.js:275:35)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[error] 
+[error] Error: Failed to get instance details for instance: dnezerlinks-default-rtdb. See firebase-debug.log for more details.

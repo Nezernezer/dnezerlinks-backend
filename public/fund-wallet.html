@@ -1,31 +1,3 @@
-<script>
-    firebase.auth().onAuthStateChanged(user => {
-        if (!user) return window.location.href = 'login.html';
-        
-        const userRef = db.ref(`users/${user.uid}`);
-        userRef.on('value', snap => {
-            const data = snap.val();
-            
-            if (!data || !data.account_number) {
-                // AUTO-RESTORE: Re-create the folder in the database
-                fetch('https://dnezerlinks-backend.onrender.com/get-virtual-account', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        uid: user.uid,
-                        email: user.email,
-                        first_name: "Customer",
-                        last_name: user.uid.substring(0,5)
-                    })
-                });
-            } else {
-                document.getElementById('wallet-balance').innerText = "₦" + (data.balance || 0).toFixed(2);
-                document.getElementById('acc-number').innerText = data.account_number;
-                document.getElementById('bank-name').innerText = data.bank_name;
-            }
-        });
-    });
-</script>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -57,7 +29,7 @@
         <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
     </div>
 
-    <div id="status-msg">Checking for your account...</div>
+    <div id="status-msg">searching for your account details...</div>
 
     <div id="account-ui">
         <div class="bank-card">
@@ -71,6 +43,7 @@
             <span class="label" style="margin-top:15px;">ACCOUNT NAME</span>
             <span class="value" id="acc-name">---</span>
         </div>
+        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:10px;">Note: A 2% fee applies to all automated deposits.</p>
     </div>
 </div>
 
@@ -90,39 +63,48 @@
     const db = firebase.database();
 
     firebase.auth().onAuthStateChanged(async (user) => {
-        if (user) {
-            const safeEmail = user.email.replace(/\./g, ',');
-            
-            // Listen to both the UID folder and the Email folder
-            db.ref('users').on('value', (snap) => {
-                const allUsers = snap.val();
-                const uidData = allUsers[user.uid] || {};
-                const emailData = allUsers[safeEmail] || {};
-                
-                // Merge the two (Priority to UID balance, but take account details from wherever they are)
-                const combinedData = { ...emailData, ...uidData };
+        if (!user) return window.location.href = 'login.html';
 
-                if (combinedData.account_number) {
-                    document.getElementById("wallet-balance").innerText = "₦" + parseFloat(combinedData.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-                    document.getElementById("bank-name").innerText = combinedData.bank_name;
-                    document.getElementById("acc-number").innerText = combinedData.account_number;
-                    document.getElementById("acc-name").innerText = combinedData.account_name;
-                    
-                    document.getElementById("status-msg").style.display = "none";
-                    document.getElementById("account-ui").style.display = "block";
-                } else {
-                    document.getElementById("status-msg").innerText = "Generating your account... Please wait.";
-                    // Logic to trigger backend goes here if needed
+        // Listen only to the UID folder (Standardized)
+        const userRef = db.ref(`users/${user.uid}`);
+        
+        userRef.on('value', async (snap) => {
+            const data = snap.val() || {};
+
+            if (data.account_number) {
+                // UI Update
+                document.getElementById("wallet-balance").innerText = "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                document.getElementById("bank-name").innerText = data.bank_name;
+                document.getElementById("acc-number").innerText = data.account_number;
+                document.getElementById("acc-name").innerText = data.account_name || "Dnezerlinks Customer";
+
+                document.getElementById("status-msg").style.display = "none";
+                document.getElementById("account-ui").style.display = "block";
+            } else {
+                document.getElementById("status-msg").innerText = "Generating your account... Please wait.";
+                
+                // CALL THE NEW ROUTE
+                try {
+                    await fetch('https://dnezerlinks-backend.onrender.com/api/account/fund', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            uid: user.uid,
+                            email: user.email,
+                            first_name: "Customer",
+                            last_name: user.uid.substring(0,5)
+                        })
+                    });
+                } catch (err) {
+                    console.error("Account generation failed:", err);
                 }
-            });
-        } else {
-            window.location.href = 'login.html';
-        }
+            }
+        });
     });
 
     function copyAccount() {
         const num = document.getElementById("acc-number").innerText;
-        navigator.clipboard.writeText(num).then(() => alert("Copied!"));
+        navigator.clipboard.writeText(num).then(() => alert("Copied to clipboard!"));
     }
 </script>
 </body>

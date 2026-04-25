@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Send Money</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f2f4f8;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 420px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+h2 {
+    text-align: center;
+    color: #0d47a1;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    background: #0d47a1;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    background: #888;
+}
+
+.result {
+    margin-top: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    color: green;
+}
+
+.error {
+    color: red;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Send Money</h2>
+
+    <input type="text" id="accountNumber" placeholder="Recipient Account Number">
+    <button onclick="searchUser()">Verify Account</button>
+
+    <div id="nameResult" class="result"></div>
+
+    <input type="number" id="amount" placeholder="Amount">
+
+    <button onclick="sendMoney()">Send</button>
+
+    <div id="msg"></div>
+</div>
+
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+    authDomain: "dnezerlinks.firebaseapp.com",
+    databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+    projectId: "dnezerlinks",
+    appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+let recipientUID = null;
+
+function searchUser() {
+    const acc = document.getElementById("accountNumber").value;
+    document.getElementById("nameResult").innerText = "Checking...";
+
+    db.ref("users").orderByChild("account_number").equalTo(acc).once("value", snap => {
+        if (snap.exists()) {
+            snap.forEach(child => {
+                const data = child.val();
+                recipientUID = child.key;
+                document.getElementById("nameResult").innerText = "Recipient: " + data.name;
+            });
+        } else {
+            recipientUID = null;
+            document.getElementById("nameResult").innerText = "Account not found";
+            document.getElementById("nameResult").style.color = "red";
+        }
+    });
+}
+
+function sendMoney() {
+    const amount = parseFloat(document.getElementById("amount").value);
+    const msg = document.getElementById("msg");
+
+    const sender = firebase.auth().currentUser;
+
+    if (!sender) {
+        msg.innerHTML = "<span class='error'>User not logged in</span>";
+        return;
+    }
+
+    if (!recipientUID) {
+        msg.innerHTML = "<span class='error'>Verify recipient first</span>";
+        return;
+    }
+
+    if (!amount || amount <= 0) {
+        msg.innerHTML = "<span class='error'>Invalid amount</span>";
+        return;
+    }
+
+    const senderRef = db.ref("users/" + sender.uid);
+    const receiverRef = db.ref("users/" + recipientUID);
+
+    senderRef.once("value").then(snap => {
+        const senderData = snap.val();
+
+        if (senderData.balance < amount) {
+            msg.innerHTML = "<span class='error'>Insufficient balance</span>";
+            return;
+        }
+
+        const newSenderBal = senderData.balance - amount;
+
+        receiverRef.once("value").then(rSnap => {
+            const rData = rSnap.val();
+            const newReceiverBal = (rData.balance || 0) + amount;
+
+            senderRef.update({ balance: newSenderBal });
+            receiverRef.update({ balance: newReceiverBal });
+
+            msg.innerHTML = "<span class='result'>Transfer Successful</span>";
+        });
+    });
+}
+</script>
+
+</body>
+</html>
