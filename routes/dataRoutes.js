@@ -23,6 +23,18 @@ router.post('/buy', async (req, res) => {
 
         if (response.data.Status === "successful") {
             await userRef.transaction(c => c - parseFloat(amount));
+            const txRef = db.ref(`transactions/${uid}`).push(); 
+            await txRef.set({ 
+                service: "Data Bundle", 
+                network: networkID, 
+                phone: phone, 
+                amount: amount, 
+                type: "debit", 
+                status: "successful", 
+                timestamp: Date.now(), 
+                reference: response.data.request_id || txRef.key, 
+                description: `Data purchase for ${phone}` 
+            });
             return res.json({ success: true, message: "Data Successful" });
         }
         res.status(400).json({ success: false, error: response.data.api_response || "Failed" });
