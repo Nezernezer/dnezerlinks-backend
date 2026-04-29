@@ -8,8 +8,40 @@
         body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #fff; color: #333; }
         .hero { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; text-align: center; padding: 60px 20px; }
         .hero h1 { font-size: 3.5rem; margin: 0; font-weight: bold; }
-        .hero p { font-size: 1.15rem; opacity: 0.9; margin: 15px 0 35px; line-height: 1.4; }
-        .btn-get-started { background: #FFB300; color: #fff; text-decoration: none; padding: 16px 55px; border-radius: 40px; font-weight: bold; font-size: 1.4rem; display: inline-block; }
+        .hero p { font-size: 1.15rem; opacity: 0.9; margin: 15px 0 25px; line-height: 1.4; }
+        
+        /* Typing Message Style */
+        .status-msg {
+            height: 20px;
+            font-size: 0.95rem;
+            color: #FFB300; /* Matching button color for visibility */
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Animated Get Started Button */
+        .btn-get-started { 
+            background: #FFB300; 
+            color: #fff; 
+            text-decoration: none; 
+            padding: 16px 55px; 
+            border-radius: 40px; 
+            font-weight: bold; 
+            font-size: 1.4rem; 
+            display: inline-block;
+            transition: 0.3s;
+            box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.7);
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 179, 0, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0); }
+        }
+
         .features { padding: 50px 20px; text-align: center; background: #fff; }
         .features h2 { font-size: 2.2rem; margin-bottom: 40px; color: #333; font-weight: 700; }
         .card-container { display: flex; flex-direction: column; gap: 20px; max-width: 380px; margin: 0 auto; }
@@ -22,8 +54,12 @@
     <section class="hero">
         <h1>Dnezerlinks</h1>
         <p>Premium Data, Airtime & Utility Services at<br>your fingertips.</p>
+        
+        <div class="status-msg" id="typeMsg"></div>
+        
         <a href="login.html" class="btn-get-started">Get Started</a>
     </section>
+
     <section class="features">
         <h2>Why Choose Us?</h2>
         <div class="card-container">
@@ -33,5 +69,35 @@
             <div class="card"><h3>SUPPORT</h3><p>24/7 customer support.</p></div>
         </div>
     </section>
+
+    <script>
+        // Typing Animation Logic
+        const text = "Touch get started to login or create account.";
+        let i = 0;
+        let isDeleting = false;
+        const speed = 70;
+
+        function type() {
+            const el = document.getElementById("typeMsg");
+            if (!el) return;
+
+            if (!isDeleting && i < text.length) {
+                el.innerHTML = text.substring(0, i + 1);
+                i++;
+                if (i === text.length) {
+                    setTimeout(() => isDeleting = true, 3000); // Pause at end
+                }
+            } else if (isDeleting && i > 0) {
+                el.innerHTML = text.substring(0, i - 1);
+                i--;
+                if (i === 0) {
+                    isDeleting = false;
+                }
+            }
+            setTimeout(type, isDeleting ? 40 : speed);
+        }
+
+        window.onload = type;
+    </script>
 </body>
 </html>

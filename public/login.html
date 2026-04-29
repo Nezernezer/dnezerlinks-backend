@@ -9,11 +9,68 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
         :root { --main: #0d47a1; --warn: #f57c00; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
-        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 380px; }
-        h2 { color: var(--main); text-align: center; margin-bottom: 20px; }
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: var(--main); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        .card {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 380px;
+        }
+        h2 { color: var(--main); text-align: center; margin-bottom: 5px; }
+        h3 { color: #555; text-align: center; margin: 0 0 5px 0; font-size: 18px; }
+        
+        .status-msg {
+            height: 35px; /* Slightly taller for longer mobile text */
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 15px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 15px;
+            margin-bottom: 10px;
+        }
+        .password-wrapper { margin: 0 0 8px 0; }
+        .password-container {
+            display: flex;
+            align-items: center;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            padding-right: 12px;
+        }
+        .password-container input { border: none; flex: 1; padding: 12px 15px; margin: 0; font-size: 15px; }
+        .show-label { display: flex; align-items: center; font-size: 13px; color: #666; cursor: pointer; font-weight: 600; }
+        .show-label input { width: 16px; height: 16px; margin-right: 5px; }
+        
+        button {
+            width: 100%; padding: 12px; background: var(--main); color: #fff;
+            border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px;
+        }
         button:disabled { opacity: 0.5; }
         .link { text-align: center; font-size: 13px; color: var(--main); cursor: pointer; margin-top: 15px; font-weight: 600; }
         .hidden { display: none; }
@@ -23,26 +80,42 @@
     </style>
 </head>
 <body>
+
 <div class="card" id="loginBox">
     <h2>Dnezerlinks</h2>
+    <div class="status-msg" id="loginStatus"></div>
     <input type="email" id="lEmail" placeholder="Email">
-    <input type="password" id="lPass" placeholder="Password">
+    <div class="password-wrapper">
+        <div class="password-container">
+            <input type="password" id="lPass" placeholder="Password">
+            <label class="show-label"><input type="checkbox" onchange="togglePassword('lPass', this)"> Show</label>
+        </div>
+    </div>
     <div class="loading" id="lLoad"><div class="bar"></div></div>
     <button id="lBtn" onclick="handleLogin()">Login</button>
     <div class="link" onclick="toggle('regBox')">Create Account</div>
     <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888;">Forgot Password?</div>
 </div>
+
 <div class="card hidden" id="regBox">
-    <h2>Join Us</h2>
+    <h2>Dnezerlinks</h2>
+    <h3>Join Us</h3>
+    <div class="status-msg" id="regStatus"></div>
     <input type="text" id="rName" placeholder="Full Name">
     <input type="tel" id="rPhone" placeholder="Phone Number">
     <input type="text" id="rAddress" placeholder="Home Address">
     <input type="email" id="rEmail" placeholder="Email">
-    <input type="password" id="rPass" placeholder="Password (min 6 chars)">
+    <div class="password-wrapper">
+        <div class="password-container">
+            <input type="password" id="rPass" placeholder="Password (min 6 chars)">
+            <label class="show-label"><input type="checkbox" onchange="togglePassword('rPass', this)"> Show</label>
+        </div>
+    </div>
     <div class="loading" id="rLoad"><div class="bar"></div></div>
     <button id="rBtn" onclick="handleRegister()">Sign Up</button>
     <div class="link" onclick="toggle('loginBox')">Back to Login</div>
 </div>
+
 <div class="card hidden" id="forgotBox">
     <h2>Reset</h2>
     <input type="email" id="fEmail" placeholder="Your Email">
@@ -50,6 +123,7 @@
     <button onclick="handleReset()">Send Reset Link</button>
     <div class="link" onclick="toggle('loginBox')">Back</div>
 </div>
+
 <script>
     const config = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
@@ -61,11 +135,78 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
+    // --- Dynamic Typing Logic ---
+    let currentText = "Please login with your details below";
+    let displayedText = "";
+    let charIdx = 0;
+    let isDeleting = false;
+    let activeStatusId = "loginStatus";
+
+    function runTyping() {
+        const statusEl = document.getElementById(activeStatusId);
+        if (!statusEl) return;
+
+        if (!isDeleting) {
+            displayedText = currentText.substring(0, charIdx++);
+            if (charIdx > currentText.length) {
+                setTimeout(runTyping, 2500); 
+                isDeleting = true;
+                return;
+            }
+        } else {
+            displayedText = currentText.substring(0, charIdx--);
+            if (charIdx < 0) { isDeleting = false; charIdx = 0; }
+        }
+        statusEl.innerText = displayedText;
+        setTimeout(runTyping, isDeleting ? 30 : 50);
+    }
+
+    function setStatus(msg) {
+        if(currentText === msg) return;
+        currentText = msg;
+        charIdx = 0;
+        isDeleting = false;
+    }
+
+    // Input Focus Listeners (Login)
+    document.getElementById('lEmail').addEventListener('focus', () => setStatus("Please enter your email address here e.g. Dnezerlinks@mail.com"));
+    document.getElementById('lPass').addEventListener('focus', () => setStatus("Please enter your password here. Do not share the password."));
+    document.getElementById('lEmail').addEventListener('blur', () => setStatus("Please login with your details below"));
+    document.getElementById('lPass').addEventListener('blur', () => setStatus("Please login with your details below"));
+
+    // Input Focus Listeners (Register)
+    document.getElementById('rName').addEventListener('focus', () => setStatus("Enter your full name. Separate names with space here. Eg John Doe Meg."));
+    document.getElementById('rPhone').addEventListener('focus', () => setStatus("Enter your active phone number here."));
+    document.getElementById('rAddress').addEventListener('focus', () => setStatus("Please enter your house address in full."));
+    document.getElementById('rEmail').addEventListener('focus', () => setStatus("Please enter an active email as it will be used to retrieve password if forgotten. Eg johndoe@dnezer.com "));
+    document.getElementById('rPass').addEventListener('focus', () => setStatus("Please create a strong password eg Abcq19@ "));
+    
+    // Reset to welcome when blur on register fields
+    ['rName', 'rPhone', 'rAddress', 'rEmail', 'rPass'].forEach(id => {
+        document.getElementById(id).addEventListener('blur', () => setStatus("Welcome, please touch any field below for me to guide you."));
+    });
+
+    runTyping();
+
     function toggle(id) {
         document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
+        
+        if(id === 'loginBox') {
+            activeStatusId = "loginStatus";
+            setStatus("Please login with your details below.");
+        } else if(id === 'regBox') {
+            activeStatusId = "regStatus";
+            setStatus("Welcome, please touch any field below for me to guide you.");
+        }
     }
 
+    function togglePassword(inputId, checkbox) {
+        const input = document.getElementById(inputId);
+        input.type = checkbox.checked ? "text" : "password";
+    }
+
+    // Handle Auth logic (Keeping your original handles)
     async function handleLogin() {
         const email = document.getElementById('lEmail').value.trim();
         const pass = document.getElementById('lPass').value;
@@ -74,22 +215,10 @@
         document.getElementById('lBtn').disabled = true;
         try {
             await auth.signInWithEmailAndPassword(email, pass);
-            // SAVE EMAIL TO STORAGE BEFORE REDIRECT
             localStorage.setItem('userEmail', email);
             window.location.href = "home.html";
         } catch (err) {
-            try {
-                const snap = await db.ref('users').orderByChild('email').equalTo(email).once('value');
-                const data = snap.val();
-                if (data) {
-                    const uid = Object.keys(data)[0];
-                    if (data[uid].temp_password === pass) {
-                        alert("Temp access! Please reset via email link.");
-                        toggle('forgotBox');
-                        document.getElementById('fEmail').value = email;
-                    } else { alert("Invalid Credentials"); }
-                } else { alert("User not found"); }
-            } catch (e) { alert("Error: " + err.message); }
+            alert(err.message);
             document.getElementById('lLoad').style.display = 'none';
             document.getElementById('lBtn').disabled = false;
         }
@@ -101,17 +230,19 @@
         const address = document.getElementById('rAddress').value.trim();
         const email = document.getElementById('rEmail').value.trim();
         const pass = document.getElementById('rPass').value;
-        if(!name || !phone || !address || !email || pass.length < 6) return alert("Valid data required");
+
+        if(!name || !phone || !address || !email || pass.length < 6)
+            return alert("Valid data required");
+
         document.getElementById('rLoad').style.display = 'block';
         document.getElementById('rBtn').disabled = true;
+
         try {
             const res = await auth.createUserWithEmailAndPassword(email, pass);
             await db.ref('users/' + res.user.uid).set({
-                name, email, phone, address, balance: 0, account_status: "active",
-                cooldown_timer: 0, kyc: { status: "not-submitted" }, joined: Date.now()
+                name, email, phone, address,
+                balance: 0, account_status: "active", joined: Date.now()
             });
-            // SAVE EMAIL TO STORAGE BEFORE REDIRECT
-            localStorage.setItem('userEmail', email);
             window.location.href = "home.html";
         } catch (e) {
             alert(e.message);

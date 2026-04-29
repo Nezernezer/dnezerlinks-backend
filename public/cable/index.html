@@ -3,135 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cable TV - Dnezerlinks</title>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <title>Dnezerlinks | Cable TV Subscription</title>
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: #f4f4f4; display: flex; justify-content: center; }
-        .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
-        h2 { color: #0d47a1; margin-bottom: 20px; text-align: center; }
-        label { font-size: 14px; font-weight: 600; color: #555; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0 20px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
-        button { background: #0d47a1; color: white; font-weight: bold; border: none; cursor: pointer; margin-top: 10px; }
-        button:disabled { background: #ccc; }
-        .back-link { display: block; text-align: center; color: #666; text-decoration: none; font-size: 14px; margin-top: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        .container { max-width: 500px; margin: auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background: #0d47a1; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        label { display: block; margin: 15px 0 6px; font-weight: 600; color: #333; }
+        select, input { width: 100%; padding: 13px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none; }
+        select:focus, input:focus { border-color: #0d47a1; }
+        
+        /* THE KEY FIX: This masks the numbers in the PIN field like a password */
+        #pin { -webkit-text-security: disc; }
+
+        button { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .validate-btn { background: #28a745; color: white; margin-bottom: 10px; }
+        .pay-btn { background: #0d47a1; color: white; font-size: 1.1rem; }
+        .price-display { background: #e3f2fd; padding: 16px; margin: 15px 0; border-radius: 10px; text-align: center; border: 2px dashed #0d47a1; display: none; }
+        .amount { font-size: 2rem; font-weight: 800; color: #0d47a1; }
+        .pin-toggle { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 0.95rem; cursor: pointer; color: #555; }
+        .pin-toggle input { width: auto; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>📺 Cable Subscription</h2>
+<div class="container">
+    <header>
+        <h2>🛰️ Cable TV Subscription</h2>
+    </header>
+    
+    <div class="content">
+        <form id="cableForm" autocomplete="off">
+            <label>Provider</label>
+            <select id="provider" required>
+                <option value="">-- Select Provider --</option>
+                <option value="GOTV">GOtv</option>
+                <option value="DSTV">DStv</option>
+                <option value="STARTIMES">StarTimes</option>
+                <option value="SHOWMAX">Showmax</option>
+            </select>
 
-        <label>Select Provider</label>
-        <select id="provider" onchange="updatePackages()">
-            <option value="">-- Choose Provider --</option>
-            <option value="DSTV">DSTV</option>
-            <option value="GOTV">GOtv</option>
-            <option value="STARTIMES">StarTimes</option>
-        </select>
+            <label>Bouquet / Package</label>
+            <select id="planList" required>
+                <option value="">-- Choose Provider First --</option>
+            </select>
 
-        <label>Select Package</label>
-        <select id="package">
-            <option value="">-- Select Package --</option>
-        </select>
+            <div id="priceDisplay" class="price-display">
+                <small>PAYABLE AMOUNT</small><br>
+                <span id="totalVal" class="amount">₦0</span>
+            </div>
 
-        <label>IUC / SmartCard Number</label>
-        <input type="number" id="iucNum" placeholder="e.g. 1023456789">
+            <label>SmartCard / IUC Number</label>
+            <input type="text" id="iuc" name="iuc_no" autocomplete="on" placeholder="Enter Decoder / IUC Number" required>
 
-        <button id="subBtn" onclick="processCableSub()">Subscribe Now</button>
-        <a href="../home.html" class="back-link">← Back to Dashboard</a>
+            <button type="button" id="validateBtn" class="validate-btn">Validate SmartCard</button>
+
+            <label>Transaction PIN</label>
+            <input type="tel" id="pin" name="vtu_pin_field" maxlength="4" placeholder="Enter 4-digit PIN" required>
+
+            <label class="pin-toggle">
+                <input type="checkbox" id="showPin"> Show PIN
+            </label>
+
+            <button type="submit" id="payBtn" class="pay-btn">Activate Subscription</button>
+        </form>
     </div>
+</div>
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
-            authDomain: "dnezerlinks.firebaseapp.com",
-            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
-            projectId: "dnezerlinks",
-            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        const auth = firebase.auth();
-
-        const bundles = {
-            "DSTV": [
-                {name: "Padi - ₦2,950", price: 2950},
-                {name: "Yanga - ₦4,200", price: 4200},
-                {name: "Confam - ₦7,400", price: 7400}
-            ],
-            "GOTV": [
-                {name: "Smallie - ₦1,300", price: 1300},
-                {name: "Jolli - ₦3,950", price: 3950},
-                {name: "Max - ₦5,700", price: 5700}
-            ],
-            "STARTIMES": [
-                {name: "Nova - ₦1,500", price: 1500},
-                {name: "Basic - ₦2,600", price: 2600},
-                {name: "Smart - ₦3,500", price: 3500}
-            ]
-        };
-
-        function updatePackages() {
-            const provider = document.getElementById('provider').value;
-            const packageSelect = document.getElementById('package');
-            packageSelect.innerHTML = '<option value="">-- Select Package --</option>';
-            if (provider && bundles[provider]) {
-                bundles[provider].forEach(b => {
-                    let opt = document.createElement('option');
-                    opt.value = b.price;
-                    opt.innerText = b.name;
-                    packageSelect.appendChild(opt);
-                });
-            }
-        }
-
-        async function processCableSub() {
-            const provider = document.getElementById('provider').value;
-            const price = parseFloat(document.getElementById('package').value);
-            const packageName = document.getElementById('package').options[document.getElementById('package').selectedIndex].text;
-            const iuc = document.getElementById('iucNum').value;
-            const subBtn = document.getElementById('subBtn');
-            const user = auth.currentUser;
-
-            if (!user) return;
-            if (!provider || isNaN(price) || iuc.length < 9) {
-                alert("❌ Please fill all fields correctly.");
-                return;
-            }
-
-            if (!confirm(`CONFIRM CABLE SUB\n\n📺 ${provider}\n📦 ${packageName}\n🔢 ${iuc}\n\nProceed?`)) return;
-
-            subBtn.disabled = true;
-            subBtn.innerText = "Processing...";
-
-            const userRef = database.ref('users/' + user.uid);
-
-            userRef.child('balance').transaction(bal => {
-                if (bal === null || bal < price) return;
-                return bal - price;
-            }, (err, committed) => {
-                if (!committed) {
-                    alert("❌ Insufficient Balance!");
-                    subBtn.disabled = false;
-                    subBtn.innerText = "Subscribe Now";
-                } else {
-                    database.ref('transactions/' + user.uid).push({
-                        type: 'Cable TV',
-                        provider: provider,
-                        package: packageName,
-                        iuc: iuc,
-                        amount: price,
-                        status: 'Successful',
-                        date: new Date().toLocaleString()
-                    }).then(() => {
-                        alert("✅ Subscription Successful!");
-                        window.location.href = "../home.html";
-                    });
-                }
-            });
-        }
-    </script>
+<script src="cable_plans.js"></script>
 </body>
 </html>

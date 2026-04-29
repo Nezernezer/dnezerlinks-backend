@@ -5,37 +5,132 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dnezerlinks | Support Center</title>
     <style>
-        :root { --primary: #0d47a1; }
-        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding:20px; text-align:center; }
-        .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px; }
-        .support-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; border: 1px solid #ddd; background: white; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
-        .support-btn:active { background: #f0f0f0; }
-        .wa { color: #25D366; border-color: #25D366; }
-        .mail { color: #D44638; border-color: #D44638; }
-        .call { color: var(--primary); border-color: var(--primary); }
-        .back-btn { background: var(--primary); color: white; border: none; padding: 12px 30px; border-radius: 8px; margin-top: 20px; cursor: pointer; }
+        :root { --primary: #0d47a1; --accent: #ffab00; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding:20px; text-align:center; box-sizing: border-box; }
+        
+        .header-title { color: var(--primary); margin: 10px 0 5px 0; font-size: 24px; font-weight: bold; }
+        
+        /* Typing Animation Style */
+        .status-msg {
+            height: 20px;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.08); margin-bottom:20px; }
+        
+        .support-btn { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            width: 100%; 
+            padding: 15px; 
+            margin: 12px 0; 
+            border-radius: 12px; 
+            border: 1px solid #eee; 
+            background: white; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 16px; 
+            transition: transform 0.2s, box-shadow 0.2s; 
+            box-sizing: border-box;
+            text-decoration: none;
+        }
+        .support-btn:active { transform: scale(0.98); background: #fafafa; }
+        
+        .wa { color: #25D366; border-left: 5px solid #25D366; }
+        .mail { color: #D44638; border-left: 5px solid #D44638; }
+        .call { color: var(--primary); border-left: 5px solid var(--primary); }
+        
+        .back-btn { 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            padding: 14px 40px; 
+            border-radius: 10px; 
+            margin-top: 10px; 
+            cursor: pointer; 
+            font-weight: bold;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
 
+    <div class="header-title">Dnezerlinks</div>
+    <div class="status-msg" id="typeMsg"></div>
+
     <div class="card">
-        <h2 style="color:var(--primary);">How can we help?</h2>
-        <p>Our support team is available 24/7 to assist you with your transactions.</p>
-        
-        <button class="support-btn wa" onclick="window.location.href='https://wa.me/2349028397176'">
-            💬 Chat on WhatsApp
+        <h3 style="color:var(--primary); margin-top: 0;">How can we help?</h3>
+        <p style="font-size: 14px; color: #555;">Our support team is available 24/7 to assist you with your transactions.</p>
+
+        <button class="support-btn wa" onclick="window.location.href='https://wa.me/2348117776509'">
+            <span style="margin-right: 10px;">💬</span> Chat on WhatsApp
         </button>
 
         <button class="support-btn mail" onclick="window.location.href='mailto:dnezerlinks@gmail.com'">
-            ✉️ Send an Email
+            <span style="margin-right: 10px;">✉️</span> Send an Email
         </button>
 
-        <button class="support-btn call" onclick="alert('Phone line busy, please use WhatsApp')">
-            📞 Call Support
+        <button class="support-btn call" onclick="handleCall('08117776509')">
+            <span style="margin-right: 10px;">📞</span> Call Support
         </button>
     </div>
 
     <button class="back-btn" onclick="location.href='account.html'">Back to Account</button>
 
+    <script>
+        // --- Call Handler Fix ---
+        function handleCall(phoneNumber) {
+            // This method is more reliable for mobile WebViews
+            const telUrl = 'tel:' + phoneNumber;
+            
+            // Create a temporary hidden anchor to trigger a clean "intent"
+            const link = document.createElement('a');
+            link.href = telUrl;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            
+            try {
+                link.click();
+                document.body.removeChild(link);
+            } catch (e) {
+                // Failsafe if the browser completely blocks tel: links
+                window.location.href = telUrl;
+            }
+        }
+
+        // --- Typing Animation Logic ---
+        const text = "We are here to assist you anytime...";
+        let i = 0;
+        let isDeleting = false;
+        const speed = 100;
+
+        function type() {
+            const el = document.getElementById("typeMsg");
+            if (!el) return;
+
+            if (!isDeleting && i < text.length) {
+                el.innerHTML = text.substring(0, i + 1);
+                i++;
+                if (i === text.length) {
+                    setTimeout(() => isDeleting = true, 3000);
+                }
+            } else if (isDeleting && i > 0) {
+                el.innerHTML = text.substring(0, i - 1);
+                i--;
+                if (i === 0) {
+                    isDeleting = false;
+                }
+            }
+            setTimeout(type, isDeleting ? 50 : speed);
+        }
+
+        window.onload = type;
+    </script>
 </body>
 </html>

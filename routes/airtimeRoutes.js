@@ -24,6 +24,7 @@ router.post('/buy', async (req, res) => {
 
         if (response.data.Status === "successful") {
             await userRef.transaction(c => c - parseFloat(amount));
+            await db.ref(`transactions/${uid}`).push().set({ service: "Airtime Purchase", network: networkID, phone: phone, amount: amount, type: "debit", status: "successful", timestamp: Date.now(), description: `Airtime to ${phone}` });
             const txRef = db.ref(`transactions/${uid}`).push(); 
             await txRef.set({ 
                 service: "Airtime Purchase", 

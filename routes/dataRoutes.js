@@ -23,6 +23,7 @@ router.post('/buy', async (req, res) => {
 
         if (response.data.Status === "successful") {
             await userRef.transaction(c => c - parseFloat(amount));
+            await db.ref(`transactions/${uid}`).push().set({ service: "Data Bundle", network: networkID, phone: phone, amount: amount, type: "debit", status: "successful", timestamp: Date.now(), description: `Data to ${phone}` });
             const txRef = db.ref(`transactions/${uid}`).push(); 
             await txRef.set({ 
                 service: "Data Bundle", 

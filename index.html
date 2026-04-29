@@ -54,11 +54,8 @@
             font-size: 2rem; text-align: center; letter-spacing: 5px; 
             width: 100%; margin: 15px 0;
         }
-        .toggle-pin {
-            background: #6c757d; margin-top: 8px; padding: 8px; border-radius: 6px; font-size: 0.9rem;
-        }
 
-        /* Dnezerlinks Animated Progress Bar */
+        /* Progress Bar Section */
         #loadingScreen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #f4f7f6; display: flex; align-items: center; justify-content: center;
@@ -127,8 +124,7 @@
 <div id="pinModal">
     <div class="modal-content">
         <h3>Enter PIN</h3>
-        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
-        <button onclick="togglePinVisibility()" class="toggle-pin" id="toggleBtn">Show PIN</button>
+        <input type="text" id="txnPin" class="pin-input" maxlength="4" placeholder="0000" inputmode="numeric">
         <button id="confirmBtn" onclick="verifyAndPay()" style="width: 100%;">Confirm</button>
         <button onclick="closePinModal()" style="background:#f44336; color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; width:100%; margin-top: 10px;">Cancel</button>
     </div>
@@ -169,6 +165,7 @@ auth.onAuthStateChanged(user => {
                 return;
             }
 
+            // Hide progress bar and show content
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
         });
@@ -201,23 +198,10 @@ function openPinModal() {
         return alert("Fill all fields");
     }
     document.getElementById('pinModal').style.display = 'flex';
-    document.getElementById('txnPin').value = '';
 }
 
 function closePinModal() { 
     document.getElementById('pinModal').style.display = 'none'; 
-}
-
-function togglePinVisibility() {
-    const pinInput = document.getElementById('txnPin');
-    const toggleBtn = document.getElementById('toggleBtn');
-    if (pinInput.type === "password") {
-        pinInput.type = "text";
-        toggleBtn.textContent = "Hide PIN";
-    } else {
-        pinInput.type = "password";
-        toggleBtn.textContent = "Show PIN";
-    }
 }
 
 async function verifyAndPay() {

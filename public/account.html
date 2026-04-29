@@ -6,20 +6,26 @@
     <title>Dnezerlinks | Account</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="js/modals.js"></script>
     <style>
-        :root { --primary: #0d47a1; --accent: #ffab00; --success: #00c853; }
+        :root { --primary: #0d47a1; --accent: #ffab00; --success: #00c853; --danger: #d32f2f; }
         body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
         .balance-card { background: var(--primary); color: #fff; text-align: center; padding: 25px; border-radius: 0 0 20px 20px; }
-        .balance { font-size: 28px; font-weight: bold; color: var(--accent); }
+        .balance { font-size: 28px; font-weight: bold; color: var(--accent); margin-bottom: 10px; }
         .card { background:#fff; margin:15px; padding:20px; border-radius:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
-        button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-fund { background: var(--success); color: white; }
-        .btn-support { background: #eee; color: var(--primary); }
-        .btn-danger { background: #d32f2f; color: white; }
-        .history-item { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; }
-        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; }
+        .btn-small-fund { background: var(--accent); color: var(--primary); width: auto; padding: 5px 20px; font-size: 11px; margin-top: 5px; }
+        .btn-danger { background: var(--danger); color: white; }
+        .history-compact { max-height: 200px; overflow-y: auto; padding: 0 10px; }
+        .history-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 11px; cursor: pointer; }
+        .history-item b { font-size: 12px; color: var(--primary); }
+        label { display: block; margin-top: 10px; font-size: 11px; color: #666; font-weight: bold; }
+        input { width: 100%; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 13px; }
+        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 1000; }
+        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
         .active { color: var(--primary); font-weight: bold; }
     </style>
 </head>
@@ -27,17 +33,31 @@
 
 <div class="balance-card">
     <div class="balance">₦<span id="balDisplay">0.00</span></div>
-    <small>Wallet Balance</small>
+    <div style="font-size: 11px; opacity: 0.9;">Wallet Balance</div>
+    <button class="btn-small-fund" onclick="location.href='fund-wallet.html'">+ Add Funds</button>
+</div>
+
+<div class="card" style="padding: 15px 5px;">
+    <h4 style="margin: 0 15px 10px 15px; font-size: 14px; color: var(--primary);">Recent History</h4>
+    <div id="historyList" class="history-compact"></div>
 </div>
 
 <div class="card">
-    <button class="btn-fund" onclick="location.href='fund.html'">💳 Fund Wallet</button>
-    <button class="btn-support" onclick="location.href='support.html'">📞 Contact Support</button>
-</div>
+    <h4 style="margin-top:0; font-size: 14px;">Security Management</h4>
 
-<div class="card" style="padding:0;">
-    <h3 style="padding: 15px 20px 0 20px;">History</h3>
-    <div id="historyList"></div>
+    <label>Change Transaction PIN</label>
+    <input type="password" id="field_p1" maxlength="4" placeholder="New 4-Digit PIN" readonly onfocus="this.removeAttribute('readonly');">
+    <input type="password" id="field_p2" maxlength="4" placeholder="Verify New PIN" readonly onfocus="this.removeAttribute('readonly');">
+    <input type="password" id="field_p_auth" placeholder="Login Password to Confirm" readonly onfocus="this.removeAttribute('readonly');">
+    <button class="btn-fund" id="pinBtn" onclick="updatePin()">Update PIN</button>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+    <label>Change Login Password</label>
+    <input type="password" id="field_s1" placeholder="New Password (min 6 chars)" readonly onfocus="this.removeAttribute('readonly');">
+    <input type="password" id="field_s2" placeholder="Verify New Password" readonly onfocus="this.removeAttribute('readonly');">
+    <input type="password" id="field_s_auth" maxlength="4" placeholder="Transaction PIN to Confirm" readonly onfocus="this.removeAttribute('readonly');">
+    <button class="btn-danger" id="passBtn" onclick="updatePass()">Update Password</button>
 </div>
 
 <div class="card">
@@ -45,41 +65,116 @@
 </div>
 
 <div class="bottom-nav">
-    <div class="nav-item" onclick="location.href='home.html'">🏠<br>HOME</div>
-    <div class="nav-item" onclick="location.href='profile.html'">👤<br>PROFILE</div>
-    <div class="nav-item active" onclick="location.href='account.html'">⚙️<br>ACCOUNT</div>
+    <a href="home.html" class="nav-item">🏠<br>HOME</a>
+    <a href="profile.html" class="nav-item">👤<br>PROFILE</a>
+    <a href="support.html" class="nav-item">📞<br>SUPPORT</a>
+    <a href="account.html" class="nav-item active">⚙️<br>ACCOUNT</a>
 </div>
 
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
         authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
         projectId: "dnezerlinks",
-        storageBucket: "dnezerlinks.firebasestorage.app",
-        messagingSenderId: "1028450580168",
         appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    const db = firebase.firestore();
+    const db = firebase.database();
 
     auth.onAuthStateChanged(user => {
         if (user) {
-            db.collection("users").doc(user.uid).onSnapshot(doc => {
-                if(doc.exists) document.getElementById('balDisplay').innerText = doc.data().walletBalance.toFixed(2);
+            db.ref(`users/${user.uid}/balance`).on('value', snap => {
+                document.getElementById('balDisplay').innerText = parseFloat(snap.val() || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
             });
             loadHistory(user.uid);
         } else { location.href = 'login.html'; }
     });
 
-    async function loadHistory(uid) {
-        const snap = await db.collection("users").doc(uid).collection("history").orderBy('date','desc').get();
-        let h = "";
-        snap.forEach(doc => {
-            const d = doc.data();
-            h += `<div class="history-item"><div><b>${d.service.toUpperCase()}</b><br><small>${d.date}</small></div><div style="color:green;">₦${d.amount}</div></div>`;
+    function loadHistory(uid) {
+        db.ref(`transactions/${uid}`).orderByChild('timestamp').limitToLast(5).on('value', snap => {
+            let records = [];
+            snap.forEach(doc => { records.push(doc.val()); });
+            records.reverse();
+            let h = "";
+            records.forEach(d => {
+                const isCredit = d.type === 'credit';
+                h += `<div class="history-item" onclick="location.href='history.html'">
+                    <div><b>${(d.service || "Payment").toUpperCase()}</b><br>${d.timestamp ? new Date(d.timestamp).toLocaleDateString() : 'Recent'}</div>
+                    <div style="color:${isCredit ? 'green' : 'red'}; font-weight:bold;">${isCredit ? '+' : '-'}₦${d.amount}</div>
+                </div>`;
+            });
+            document.getElementById('historyList').innerHTML = h || "<p style='padding:20px; font-size:11px;'>No history.</p>";
         });
-        document.getElementById('historyList').innerHTML = h || "<p style='padding:20px;'>No history.</p>";
+    }
+
+    async function updatePin() {
+        const pin = document.getElementById('field_p1').value;
+        const confirm = document.getElementById('field_p2').value;
+        const pass = document.getElementById('field_p_auth').value;
+        const btn = document.getElementById('pinBtn');
+        const user = auth.currentUser;
+
+        if (!pin || !confirm || !pass) return DnezerPopup.alert("Error", "Please fill all fields", "error");
+        if (pin !== confirm) return DnezerPopup.alert("Error", "New PINs do not match", "error");
+        if (pin.length !== 4) return DnezerPopup.alert("Error", "PIN must be 4 digits", "error");
+
+        btn.disabled = true;
+        try {
+            // Re-authenticate user before updating sensitive info
+            const credential = firebase.auth.EmailAuthProvider.credential(user.email, pass);
+            await user.reauthenticateWithCredential(credential);
+            
+            // Update PIN in Database
+            await db.ref(`users/${user.uid}`).update({ transaction_pin: pin });
+            
+            DnezerPopup.alert("Success", "PIN changed successfully", "success");
+            
+            // Clear fields
+            document.getElementById('field_p1').value = ""; 
+            document.getElementById('field_p2').value = ""; 
+            document.getElementById('field_p_auth').value = "";
+        } catch (e) { 
+            DnezerPopup.alert("Error", e.message.includes("password") ? "Incorrect Login Password" : e.message, "error"); 
+        } finally { 
+            btn.disabled = false; 
+        }
+    }
+
+    async function updatePass() {
+        const pass = document.getElementById('field_s1').value;
+        const confirm = document.getElementById('field_s2').value;
+        const pin = document.getElementById('field_s_auth').value;
+        const btn = document.getElementById('passBtn');
+        const user = auth.currentUser;
+
+        if (!pass || !confirm || !pin) return DnezerPopup.alert("Error", "Please fill all fields", "error");
+        if (pass !== confirm) return DnezerPopup.alert("Error", "New passwords do not match", "error");
+        if (pass.length < 6) return DnezerPopup.alert("Error", "Password too short", "error");
+
+        btn.disabled = true;
+        try {
+            // Verify Transaction PIN from Database
+            const snap = await db.ref(`users/${user.uid}/transaction_pin`).once('value');
+            if (snap.val() !== pin) {
+                throw new Error("Incorrect Transaction PIN");
+            }
+
+            // Update Password in Firebase Auth
+            await user.updatePassword(pass);
+            
+            DnezerPopup.alert("Success", "Password changed successfully", "success");
+            
+            // Clear fields
+            document.getElementById('field_s1').value = ""; 
+            document.getElementById('field_s2').value = ""; 
+            document.getElementById('field_s_auth').value = "";
+        } catch (e) { 
+            DnezerPopup.alert("Failed", e.message, "error"); 
+        } finally { 
+            btn.disabled = false; 
+        }
     }
 
     function logout() { auth.signOut().then(() => location.href = 'login.html'); }

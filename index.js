@@ -3,10 +3,15 @@ const cors = require('cors');
 const apiRoutes = require('./routes/api');
 
 const app = express();
+
+// Standard CORS
 app.use(cors({ origin: '*' }));
+// Enable pre-flight across-the-board
+app.options('*', cors());
+
 app.use(express.json());
 
-// This makes all routes accessible under /api/...
+// Routes
 app.use('/api', apiRoutes);
 
 app.get('/', (req, res) => res.send("Dnezerlinks API is running."));
