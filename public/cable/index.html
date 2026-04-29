@@ -12,12 +12,8 @@
         label { display: block; margin: 15px 0 6px; font-weight: 600; color: #333; }
         select, input { width: 100%; padding: 13px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none; }
         select:focus, input:focus { border-color: #0d47a1; }
-        
-        /* THE KEY FIX: This masks the numbers in the PIN field like a password */
         #pin { -webkit-text-security: disc; }
-
         button { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .validate-btn { background: #28a745; color: white; margin-bottom: 10px; }
         .pay-btn { background: #0d47a1; color: white; font-size: 1.1rem; }
         .price-display { background: #e3f2fd; padding: 16px; margin: 15px 0; border-radius: 10px; text-align: center; border: 2px dashed #0d47a1; display: none; }
         .amount { font-size: 2rem; font-weight: 800; color: #0d47a1; }
@@ -28,12 +24,14 @@
 <body>
 
 <div class="container">
+    <a href="../home.html" style="display: inline-block; padding: 10px 15px; text-decoration: none; color: #0d47a1; font-weight: bold; font-size: 0.9rem;">← Back to Dashboard</a>
     <header>
         <h2>🛰️ Cable TV Subscription</h2>
     </header>
-    
+
     <div class="content">
         <form id="cableForm" autocomplete="off">
+        <div id="statusBox" style="display: none; padding: 12px; text-align: center; font-weight: bold; font-size: 0.95rem; border-radius: 8px; margin-bottom: 15px;"></div>
             <label>Provider</label>
             <select id="provider" required>
                 <option value="">-- Select Provider --</option>
@@ -45,7 +43,7 @@
 
             <label>Bouquet / Package</label>
             <select id="planList" required>
-                <option value="">-- Choose Provider First --</option>
+                <option value="">Select Provider</option>
             </select>
 
             <div id="priceDisplay" class="price-display">
@@ -54,9 +52,8 @@
             </div>
 
             <label>SmartCard / IUC Number</label>
-            <input type="text" id="iuc" name="iuc_no" autocomplete="on" placeholder="Enter Decoder / IUC Number" required>
-
-            <button type="button" id="validateBtn" class="validate-btn">Validate SmartCard</button>
+            <input type="text" id="iuc" name="iuc_no" placeholder="Enter Decoder / IUC Number" required>
+            <div id="customerInfo" style="margin-top: 5px; font-size: 0.9rem; font-weight: bold; color: #28a745; min-height: 1.2rem;"></div>
 
             <label>Transaction PIN</label>
             <input type="tel" id="pin" name="vtu_pin_field" maxlength="4" placeholder="Enter 4-digit PIN" required>
@@ -70,6 +67,9 @@
     </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="cable_plans.js"></script>
 </body>
 </html>

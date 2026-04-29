@@ -14,98 +14,135 @@ const cablePlans = [
     { id: 115, provider: "SHOWMAX", vtu_id: 115, name: "Showmax Full", base: 3500 }
 ];
 
-function getProfit(base) {
-    if (base < 5000) return 500;
-    if (base < 15000) return 800;
-    if (base < 30000) return 1300;
-    return 2200;
-}
-
-const allPlans = cablePlans.map(p => ({ ...p, total: p.base + getProfit(p.base) }));
+const providerMap = { "GOTV": 1, "DSTV": 2, "STARTIMES": 3, "SHOWMAX": 4 };
 
 const providerSelect = document.getElementById('provider');
 const planSelect = document.getElementById('planList');
+const iucInput = document.getElementById('iuc');
+const customerInfo = document.getElementById('customerInfo');
 const pinInput = document.getElementById('pin');
-const showPin = document.getElementById('showPin');
-const priceDisplay = document.getElementById('priceDisplay');
+const statusBox = document.getElementById('statusBox');
 const totalVal = document.getElementById('totalVal');
+const priceDisplay = document.getElementById('priceDisplay');
 
-const providerMap = { "GOTV": 1, "DSTV": 2, "STARTIMES": 3, "SHOWMAX": 4 };
-
-// 1. Toggle Logic
-if (showPin) {
-    showPin.addEventListener('change', function() {
-        pinInput.style.webkitTextSecurity = this.checked ? "none" : "disc";
-    });
+function showMessage(text, type = 'error') {
+    if(!statusBox) return;
+    statusBox.textContent = text;
+    statusBox.style.display = 'block';
+    statusBox.style.backgroundColor = type === 'success' ? '#d4edda' : '#f8d7da';
+    statusBox.style.color = type === 'success' ? '#155724' : '#721c24';
+    setTimeout(() => { statusBox.style.display = 'none'; }, 5000);
 }
 
-// 2. Populate Plans
-providerSelect.addEventListener('change', function() {
-    const prov = this.value;
-    planSelect.innerHTML = '<option value="">-- Select Package --</option>';
-    if (prov) {
-        const filtered = allPlans.filter(p => p.provider === prov);
-        filtered.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify({ vtu_id: p.vtu_id, total: p.total, name: p.name, base: p.base });
-            opt.textContent = `${p.name} - ₦${p.total.toLocaleString()}`;
-            planSelect.appendChild(opt);
-        });
-    }
-});
-
-// 3. Price Display
-planSelect.addEventListener('change', function() {
-    if (this.value) {
-        const data = JSON.parse(this.value);
-        totalVal.textContent = `₦${data.total.toLocaleString()}`;
-        priceDisplay.style.display = 'block';
+// 1. Validation Logic with RED Error for invalid IUC
+iucInput.addEventListener('input', async function() {
+    const iuc = this.value.trim();
+    const provider = providerSelect.value;
+    if (iuc.length >= 9 && provider) {
+        customerInfo.style.color = "#888";
+        customerInfo.textContent = "Verifying...";
+        try {
+            const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ iuc, providerID: providerMap[provider] })
+            });
+            const data = await res.json();
+            if (data.success && data.customerName) {
+                customerInfo.style.color = "#28a745";
+                customerInfo.textContent = "✔ " + data.customerName;
+            } else {
+                customerInfo.style.color = "#dc3545";
+                customerInfo.textContent = "✖ Iuc/smartcard number not valid";
+            }
+        } catch (e) { 
+            customerInfo.style.color = "#dc3545";
+            customerInfo.textContent = "✖ Verification failed. Check network."; 
+        }
     } else {
-        priceDisplay.style.display = 'none';
+        customerInfo.textContent = "";
     }
 });
 
-// 4. Validation Logic
-document.getElementById('validateBtn').addEventListener('click', async () => {
-    const iuc = document.getElementById('iuc').value;
-    const provider = document.getElementById('provider').value;
-    if(!iuc || !provider) return alert("Enter IUC and Provider");
-    
-    try {
-        const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/validate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ iuc, providerID: providerMap[provider] })
-        });
-        const data = await res.json();
-        if(data.success) alert("Customer: " + data.customerName);
-        else alert(data.error);
-    } catch (e) { alert("Server Connection Error"); }
-});
-
-// 5. Purchase Logic
+// 2. Purchase Logic
 document.getElementById('cableForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const planValue = planSelect.value;
-    const uid = localStorage.getItem('uid') || localStorage.getItem('userId') || localStorage.getItem('user_id');
-    if(!planValue || !uid) return alert("Missing plan or user ID");
-
-    const payload = {
-        uid,
-        providerID: providerMap[providerSelect.value],
-        planDetails: JSON.parse(planValue),
-        iuc: document.getElementById('iuc').value,
-        pin: pinInput.value
-    };
-
+    
     try {
+        const planValue = planSelect.value;
+        const uid = localStorage.getItem('uid') || localStorage.getItem('userEmail');
+        const selectedProvider = providerSelect.value;
+
+        if(!planValue) return showMessage("Please select a package");
+        if(!uid) return showMessage("Session expired. Please re-login.");
+        if(!selectedProvider) return showMessage("Please select a provider");
+        if(customerInfo.textContent.includes("✖")) return showMessage("Invalid IUC number provided");
+
+        const parsedPlan = JSON.parse(planValue);
+        
+        const payload = {
+            uid,
+            providerID: providerMap[selectedProvider],
+            planDetails: parsedPlan,
+            iuc: iucInput.value.trim(),
+            pin: Number(pinInput.value) // Ensure PIN is a number
+        };
+
+        showMessage("Processing Subscription...", "success");
+
         const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/buy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        
         const data = await res.json();
-        if (data.success) { alert("Subscription Successful!"); window.location.reload(); }
-        else { alert("Error: " + data.error); }
-    } catch (err) { alert("Network Error"); }
+        
+        if (data.success) {
+            showMessage("Subscription Successful!", "success");
+            setTimeout(() => { window.location.reload(); }, 3000);
+        } else {
+            // Check for staged backend errors from index.js
+            if (data.error === "KYC_REQUIRED") {
+                window.location.href = "../kyc_status.html";
+            } else if (data.error === "PIN_REQUIRED") {
+                window.location.href = "../pinsetup.html";
+            } else {
+                showMessage(data.error || "Transaction Failed");
+            }
+        }
+    } catch (err) {
+        showMessage("Connection Error: Check internet");
+    }
+});
+
+providerSelect.addEventListener('change', () => {
+    const prov = providerSelect.value;
+    planSelect.innerHTML = '<option value="">-- Select Package --</option>';
+    customerInfo.textContent = "";
+    if (prov) {
+        cablePlans.filter(p => p.provider === prov).forEach(p => {
+            const total = p.base + (p.base < 5000 ? 500 : p.base < 15000 ? 800 : p.base < 30000 ? 1300 : 2200);
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({ vtu_id: p.vtu_id, total: total, name: p.name, base: p.base });
+            opt.textContent = `${p.name} - ₦${total.toLocaleString()}`;
+            planSelect.appendChild(opt);
+        });
+    }
+});
+
+planSelect.addEventListener('change', function() {
+    if (this.value) {
+        try {
+            const data = JSON.parse(this.value);
+            totalVal.textContent = `₦${data.total.toLocaleString()}`;
+            priceDisplay.style.display = 'block';
+        } catch(e) { priceDisplay.style.display = 'none'; }
+    } else {
+        priceDisplay.style.display = 'none';
+    }
+});
+
+document.getElementById('showPin').addEventListener('change', function() {
+    pinInput.style.webkitTextSecurity = this.checked ? "none" : "disc";
 });

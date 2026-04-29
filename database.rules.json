@@ -1,27 +1,24 @@
 {
   "rules": {
-    // Keep your Master Admin Key
     ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
     ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
     "users": {
-      // Allow searching by email index
       ".indexOn": ["email"],
-      
-      // This allows your Render Server (Admin SDK) to write 
-      // the account_number to any email-based node
-      "$user_identifier": {
-        ".read": "auth != null", 
-        ".write": "auth != null"
+      "$uid": {
+        // Only the owner of the account or the Admin can read/write
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "transactions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     
-    "transactions": {
-      "$uid": {
-        ".read": "auth.uid === $uid",
-        ".write": "auth.uid === $uid"
-      }
-    },
     "settings": {
       ".read": "true",
       ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
