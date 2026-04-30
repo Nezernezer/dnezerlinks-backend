@@ -34,58 +34,66 @@ function showMessage(text, type = 'error') {
     setTimeout(() => { statusBox.style.display = 'none'; }, 5000);
 }
 
-// 1. Validation Logic with RED Error for invalid IUC
-iucInput.addEventListener('input', async function() {
-    const iuc = this.value.trim();
+// ==================== IMPROVED IUC VALIDATION (DEBOUNCED) ====================
+let iucValidationTimeout = null;
+
+iucInput.addEventListener('input', function() {
+    const rawIuc = this.value.trim();
+    const iuc = rawIuc.replace(/\s/g, "");
     const provider = providerSelect.value;
-    if (iuc.length >= 9 && provider) {
-        customerInfo.style.color = "#888";
-        customerInfo.textContent = "Verifying...";
+
+    if (iucValidationTimeout) clearTimeout(iucValidationTimeout);
+
+    if (iuc.length < 9 || !provider) {
+        customerInfo.textContent = "";
+        customerInfo.style.color = "";
+        return;
+    }
+
+    customerInfo.style.color = "#888";
+    customerInfo.textContent = "Verifying...";
+
+    iucValidationTimeout = setTimeout(async () => {
         try {
             const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ iuc: iuc.replace(/\s/g, ""), providerID: providerMap[provider] })
+                body: JSON.stringify({ iuc: iuc, providerID: providerMap[provider] })
             });
+
             const data = await res.json();
             if (data.success && data.customerName) {
                 customerInfo.style.color = "#28a745";
-                customerInfo.textContent = "✔ " + data.customerName;
+                customerInfo.textContent = `✔ ${data.customerName}`;
             } else {
                 customerInfo.style.color = "#dc3545";
-                customerInfo.textContent = "✖ Iuc/smartcard number not valid";
+                customerInfo.textContent = "✖ IUC/Smartcard number is not valid";
             }
-        } catch (e) { 
+        } catch (e) {
             customerInfo.style.color = "#dc3545";
-            customerInfo.textContent = "✖ Verification failed. Check network."; 
+            customerInfo.textContent = "✖ Verification failed. Check network.";
         }
-    } else {
-        customerInfo.textContent = "";
-    }
+    }, 600);
 });
 
-// 2. Purchase Logic
+// ==================== PURCHASE LOGIC ====================
 document.getElementById('cableForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
     try {
         const planValue = planSelect.value;
         const uid = localStorage.getItem('uid') || localStorage.getItem('userEmail');
         const selectedProvider = providerSelect.value;
 
-        if(!planValue) return showMessage("Please select a package");
-        if(!uid) return showMessage("Session expired. Please re-login.");
-        if(!selectedProvider) return showMessage("Please select a provider");
-        if(customerInfo.textContent.includes("✖")) return showMessage("Invalid IUC number provided");
+        if(!planValue || !uid || !selectedProvider) return showMessage("All fields are required");
+        if(customerInfo.textContent.includes("✖")) return showMessage("Invalid IUC number");
 
         const parsedPlan = JSON.parse(planValue);
-        
         const payload = {
             uid,
             providerID: providerMap[selectedProvider],
             planDetails: parsedPlan,
             iuc: iucInput.value.trim(),
-            pin: Number(pinInput.value) // Ensure PIN is a number
+            pin: Number(pinInput.value)
         };
 
         showMessage("Processing Subscription...", "success");
@@ -95,24 +103,18 @@ document.getElementById('cableForm').addEventListener('submit', async (e) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const data = await res.json();
-        
         if (data.success) {
             showMessage("Subscription Successful!", "success");
             setTimeout(() => { window.location.reload(); }, 3000);
         } else {
-            // Check for staged backend errors from index.js
-            if (data.error === "KYC_REQUIRED") {
-                window.location.href = "../kyc_status.html";
-            } else if (data.error === "PIN_REQUIRED") {
-                window.location.href = "../pinsetup.html";
-            } else {
-                showMessage(data.error || "Transaction Failed");
-            }
+            if (data.error === "KYC_REQUIRED") window.location.href = "../kyc_status.html";
+            else if (data.error === "PIN_REQUIRED") window.location.href = "../pinsetup.html";
+            else showMessage(data.error || "Transaction Failed");
         }
     } catch (err) {
-        showMessage("Connection Error: Check internet");
+        showMessage("Connection Error");
     }
 });
 
@@ -138,9 +140,7 @@ planSelect.addEventListener('change', function() {
             totalVal.textContent = `₦${data.total.toLocaleString()}`;
             priceDisplay.style.display = 'block';
         } catch(e) { priceDisplay.style.display = 'none'; }
-    } else {
-        priceDisplay.style.display = 'none';
-    }
+    } else { priceDisplay.style.display = 'none'; }
 });
 
 document.getElementById('showPin').addEventListener('change', function() {

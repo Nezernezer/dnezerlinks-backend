@@ -2,55 +2,45 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
-const serviceMap = {
-    "1": "gotv",
-    "2": "dstv",
-    "3": "startimes",
-    "4": "showmax"
-};
-
 router.post('/validate', async (req, res) => {
     const { iuc, providerID } = req.body;
-    const serviceName = serviceMap[String(providerID)];
-
-    console.log(`Validating IUC: ${iuc} for Service: ${serviceName}`);
-
-    if (!serviceName) {
-        return res.json({ success: false, error: "Invalid Provider Selected" });
-    }
 
     try {
-        const token = process.env.VTUNAIJA_API_KEY;
-        const url = `https://vtunaija.com.ng/api/merchant/verify-smart-customer/?smart_no=${iuc}&service=${serviceName}`;
+        const token = process.env.VTUNAIJA_API_KEY ? process.env.VTUNAIJA_API_KEY.trim() : "";
+        const url = "https://vtunaija.com.ng/api/cablesub/verify/";
         
-        const response = await axios.get(url, {
+        // VTUNAIJA expects a POST request for verification
+        const response = await axios.post(url, {
+            cablename: String(providerID), // Uses 1, 2, 3, or 4
+            smart_card_number: String(iuc).trim()
+        }, {
             headers: { 
-                'Authorization': `Token ${token.trim()}`,
+                'Authorization': `Token ${token}`,
                 'Content-Type': 'application/json'
             }
         });
 
-        console.log("VTUNAIJA RAW RESPONSE:", response.data);
+        console.log("DEBUG - IUC:", iuc, "ProviderID:", providerID, "Response:", response.data);
 
-        // VTUNAIJA status checks
-        if (response.data.status === 'success' || response.data.invalid === false) {
-            return res.json({ 
+        if (response.data.status === 'success') {
+            res.json({ 
                 success: true, 
-                customerName: response.data.customer_name || response.data.name 
+                customerName: response.data.Customer_Name || response.data.name
             });
         } else {
-            // Log exactly why it failed
-            console.log("API returned failure status:", response.data.msg || response.data.error);
-            return res.json({ success: false, error: "Iuc/smartcard number not valid" });
+            res.json({ 
+                success: false, 
+                error: response.data.api_response || "Iuc/smartcard number not valid" 
+            });
         }
     } catch (error) {
-        console.error("AXIOS ERROR DETAILS:", error.response?.data || error.message);
-        return res.status(500).json({ success: false, error: "Validation server unreachable" });
+        console.error("API ERROR:", error.response?.data || error.message);
+        res.status(500).json({ success: false, error: "Validation failed. Please try again." });
     }
 });
 
 router.post('/buy', async (req, res) => {
-    res.json({ success: true, message: "Endpoint Ready" });
+    res.json({ success: true, message: "Purchase route ready" });
 });
 
 module.exports = router;
