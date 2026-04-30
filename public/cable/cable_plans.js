@@ -45,7 +45,7 @@ iucInput.addEventListener('input', async function() {
             const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ iuc, providerID: providerMap[provider] })
+                body: JSON.stringify({ iuc: iuc.replace(/\s/g, ""), providerID: providerMap[provider] })
             });
             const data = await res.json();
             if (data.success && data.customerName) {

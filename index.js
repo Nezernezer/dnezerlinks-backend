@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const apiRoutes = require('./routes/api');
+const cabletvRoutes = require('./routes/cabletvRoutes');
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -19,11 +19,10 @@ app.use(express.json());
 
 // Unified Security Gatekeeper
 const securityGatekeeper = async (req, res, next) => {
-    // Skip check for root path or non-POST requests that don't have a UID
+    // Skip for root or GET requests
     if (req.path === '/' || req.method === 'GET') return next();
 
     const { uid, pin } = req.body;
-    
     if (!uid) return res.status(400).json({ success: false, error: 'User ID is required' });
 
     try {
@@ -39,12 +38,12 @@ const securityGatekeeper = async (req, res, next) => {
 
         // 2. PIN Existence Check
         const storedPin = user.transaction_pin || user.pin;
-        if (!storedPin) {
-            return res.json({ success: false, error: 'PIN_REQUIRED' });
-        }
+        if (!storedPin) return res.json({ success: false, error: 'PIN_REQUIRED' });
 
-        // 3. PIN Verification (Only for purchase routes)
-        if (req.path.includes('/buy') || req.path.includes('/pay')) {
+        // 3. PIN Verification (Triggers on any purchase/payment endpoint)
+        // Using originalUrl ensures we catch it even if nested
+        const isPurchase = req.originalUrl.includes('/buy') || req.originalUrl.includes('/pay');
+        if (isPurchase) {
             if (String(storedPin) !== String(pin)) {
                 return res.status(400).json({ success: false, error: 'Invalid PIN' });
             }
@@ -57,8 +56,11 @@ const securityGatekeeper = async (req, res, next) => {
     }
 };
 
+// Apply Gatekeeper to all /api routes
 app.use('/api', securityGatekeeper);
-app.use('/api', apiRoutes);
+
+// Link your cable routes specifically
+app.use('/api/cabletv', cabletvRoutes);
 
 app.get('/', (req, res) => res.send("Dnezerlinks API is running."));
 
