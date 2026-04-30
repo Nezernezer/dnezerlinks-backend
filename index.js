@@ -37,7 +37,7 @@ const securityGatekeeper = async (req, res, next) => {
         
         if ((user.kyc_status || '').toUpperCase() !== 'VERIFIED') return res.json({ success: false, error: 'KYC_REQUIRED' });
 
-        const storedPin = user.transaction_pin || user.pin;
+        const storedPin = user.transaction_pin || user.pin || user.vtu_pin;
         if (!storedPin) return res.json({ success: false, error: 'PIN_REQUIRED' });
 
         if (req.path.includes('/buy') || req.path.includes('/pay')) {
