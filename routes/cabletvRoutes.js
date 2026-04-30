@@ -13,37 +13,44 @@ router.post('/validate', async (req, res) => {
     const { iuc, providerID } = req.body;
     const serviceName = serviceMap[String(providerID)];
 
+    console.log(`Validating IUC: ${iuc} for Service: ${serviceName}`);
+
     if (!serviceName) {
         return res.json({ success: false, error: "Invalid Provider Selected" });
     }
 
     try {
+        const token = process.env.VTUNAIJA_API_KEY;
         const url = `https://vtunaija.com.ng/api/merchant/verify-smart-customer/?smart_no=${iuc}&service=${serviceName}`;
         
         const response = await axios.get(url, {
-            headers: { 'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}` }
+            headers: { 
+                'Authorization': `Token ${token.trim()}`,
+                'Content-Type': 'application/json'
+            }
         });
 
-        console.log("API RAW RESPONSE:", response.data);
+        console.log("VTUNAIJA RAW RESPONSE:", response.data);
 
-        // Check if API says invalid or if it found a name
-        if (response.data.invalid === false || response.data.customer_name || response.data.name) {
-            res.json({ 
+        // VTUNAIJA status checks
+        if (response.data.status === 'success' || response.data.invalid === false) {
+            return res.json({ 
                 success: true, 
                 customerName: response.data.customer_name || response.data.name 
             });
         } else {
-            res.json({ success: false, error: "Iuc/smartcard number not valid" });
+            // Log exactly why it failed
+            console.log("API returned failure status:", response.data.msg || response.data.error);
+            return res.json({ success: false, error: "Iuc/smartcard number not valid" });
         }
     } catch (error) {
-        console.error("Validation API Error:", error.response?.data || error.message);
-        res.status(500).json({ success: false, error: "Validation server unreachable" });
+        console.error("AXIOS ERROR DETAILS:", error.response?.data || error.message);
+        return res.status(500).json({ success: false, error: "Validation server unreachable" });
     }
 });
 
 router.post('/buy', async (req, res) => {
-    // This will hit after the Pin/KYC Gatekeeper in index.js passes
-    res.json({ success: true, message: "Purchase logic goes here" });
+    res.json({ success: true, message: "Endpoint Ready" });
 });
 
 module.exports = router;
