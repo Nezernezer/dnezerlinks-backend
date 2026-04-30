@@ -32,6 +32,7 @@ const securityGatekeeper = async (req, res, next) => {
 
     // 3. For ALL other requests (Buying/Paying), strictly check UID and PIN
     const { uid, pin } = req.body;
+    if (!uid || uid.includes(".")) return res.status(400).json({ success: false, error: "Invalid Session: Please re-login" });
     
     if (!uid) {
         return res.status(400).json({ success: false, error: 'Auth Error: Session Missing' });
