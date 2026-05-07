@@ -1,148 +1,106 @@
-const cablePlans = [
-    { id: 1, provider: "GOTV", vtu_id: 1, name: "GOtv Smallie - monthly", base: 1900 },
-    { id: 2, provider: "GOTV", vtu_id: 2, name: "GOtv Jinja", base: 3900 },
-    { id: 3, provider: "GOTV", vtu_id: 3, name: "GOtv Jolli", base: 5800 },
-    { id: 4, provider: "GOTV", vtu_id: 4, name: "GOtv Max", base: 8500 },
-    { id: 5, provider: "GOTV", vtu_id: 5, name: "GOtv Supa - monthly", base: 11400 },
-    { id: 84, provider: "GOTV", vtu_id: 84, name: "GOtv Supa Plus - monthly", base: 16800 },
-    { id: 6, provider: "DSTV", vtu_id: 6, name: "DStv Padi", base: 4400 },
-    { id: 7, provider: "DSTV", vtu_id: 7, name: "DStv Yanga", base: 6000 },
-    { id: 8, provider: "DSTV", vtu_id: 8, name: "DStv Confam", base: 11000 },
-    { id: 9, provider: "DSTV", vtu_id: 9, name: "DStv Compact", base: 19000 },
-    { id: 13, provider: "STARTIMES", vtu_id: 13, name: "Nova (Dish) - 1 Month", base: 2100 },
-    { id: 14, provider: "STARTIMES", vtu_id: 14, name: "Basic (Antenna) - 1 Month", base: 4000 },
-    { id: 115, provider: "SHOWMAX", vtu_id: 115, name: "Showmax Full", base: 3500 }
-];
-
-const providerMap = { "GOTV": 1, "DSTV": 2, "STARTIMES": 3, "SHOWMAX": 4 };
-
-const providerSelect = document.getElementById('provider');
-const planSelect = document.getElementById('planList');
-const iucInput = document.getElementById('iuc');
-const customerInfo = document.getElementById('customerInfo');
-const pinInput = document.getElementById('pin');
-const statusBox = document.getElementById('statusBox');
-const totalVal = document.getElementById('totalVal');
-const priceDisplay = document.getElementById('priceDisplay');
-
-function showMessage(text, type = 'error') {
-    if(!statusBox) return;
-    statusBox.textContent = text;
-    statusBox.style.display = 'block';
-    statusBox.style.backgroundColor = type === 'success' ? '#d4edda' : '#f8d7da';
-    statusBox.style.color = type === 'success' ? '#155724' : '#721c24';
-    setTimeout(() => { statusBox.style.display = 'none'; }, 5000);
-}
-
-// ==================== IMPROVED IUC VALIDATION (DEBOUNCED) ====================
-let iucValidationTimeout = null;
-
-iucInput.addEventListener('input', function() {
-    const rawIuc = this.value.trim();
-    const iuc = rawIuc.replace(/\s/g, "");
-    const provider = providerSelect.value;
-
-    if (iucValidationTimeout) clearTimeout(iucValidationTimeout);
-
-    if (iuc.length < 9 || !provider) {
-        customerInfo.textContent = "";
-        customerInfo.style.color = "";
-        return;
-    }
-
-    customerInfo.style.color = "#888";
-    customerInfo.textContent = "Verifying...";
-
-    iucValidationTimeout = setTimeout(async () => {
-        try {
-            const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ iuc: iuc, providerID: providerMap[provider] })
-            });
-
-            const data = await res.json();
-            if (data.success && data.customerName) {
-                customerInfo.style.color = "#28a745";
-                customerInfo.textContent = `✔ ${data.customerName}`;
-            } else {
-                customerInfo.style.color = "#dc3545";
-                customerInfo.textContent = "✖ IUC/Smartcard number is not valid";
-            }
-        } catch (e) {
-            customerInfo.style.color = "#dc3545";
-            customerInfo.textContent = "✖ Verification failed. Check network.";
-        }
-    }, 600);
-});
-
-// ==================== PURCHASE LOGIC ====================
-document.getElementById('cableForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try {
-        const planValue = planSelect.value;
-        const uid = localStorage.getItem('uid') || localStorage.getItem('userEmail');
-        const selectedProvider = providerSelect.value;
-
-        if(!planValue || !uid || !selectedProvider) return showMessage("All fields are required");
-        if(customerInfo.textContent.includes("✖")) return showMessage("Invalid IUC number");
-
-        const parsedPlan = JSON.parse(planValue);
-        const payload = {
-            uid,
-            providerID: providerMap[selectedProvider],
-            planDetails: parsedPlan,
-            iuc: iucInput.value.trim(),
-            pin: Number(pinInput.value)
-        };
-
-        showMessage("Processing Subscription...", "success");
-
-        const res = await fetch('https://dnezerlinks-backend.onrender.com/api/cabletv/buy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        if (data.success) {
-            showMessage("Subscription Successful!", "success");
-            setTimeout(() => { window.location.reload(); }, 3000);
-        } else {
-            if (data.error === "KYC_REQUIRED") window.location.href = "../kyc_status.html";
-            else if (data.error === "PIN_REQUIRED") window.location.href = "../pinsetup.html";
-            else showMessage(data.error || "Transaction Failed");
-        }
-    } catch (err) {
-        showMessage("Connection Error");
-    }
-});
-
-providerSelect.addEventListener('change', () => {
-    const prov = providerSelect.value;
-    planSelect.innerHTML = '<option value="">-- Select Package --</option>';
-    customerInfo.textContent = "";
-    if (prov) {
-        cablePlans.filter(p => p.provider === prov).forEach(p => {
-            const total = p.base + (p.base < 5000 ? 500 : p.base < 15000 ? 800 : p.base < 30000 ? 1300 : 2200);
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify({ vtu_id: p.vtu_id, total: total, name: p.name, base: p.base });
-            opt.textContent = `${p.name} - ₦${total.toLocaleString()}`;
-            planSelect.appendChild(opt);
-        });
-    }
-});
-
-planSelect.addEventListener('change', function() {
-    if (this.value) {
-        try {
-            const data = JSON.parse(this.value);
-            totalVal.textContent = `₦${data.total.toLocaleString()}`;
-            priceDisplay.style.display = 'block';
-        } catch(e) { priceDisplay.style.display = 'none'; }
-    } else { priceDisplay.style.display = 'none'; }
-});
-
-document.getElementById('showPin').addEventListener('change', function() {
-    pinInput.style.webkitTextSecurity = this.checked ? "none" : "disc";
-});
+const localPlans = {
+    "1": [
+        { id: 1, name: "GOtv Smallie - monthly - ₦1,900", price: 1900 },
+        { id: 2, name: "GOtv Jinja - ₦3,900", price: 3900 },
+        { id: 3, name: "GOtv Jolli - ₦5,800", price: 5800 },
+        { id: 4, name: "GOtv Max - ₦8,500", price: 8500 },
+        { id: 5, name: "GOtv Supa - monthly - ₦11,400", price: 11400 },
+        { id: 82, name: "GOtv Smallie - quarterly - ₦5,100", price: 5100 },
+        { id: 83, name: "GOtv Smallie - yearly - ₦15,000", price: 15000 },
+        { id: 84, name: "GOtv Supa Plus - monthly - ₦16,800", price: 16800 }
+    ],
+    "2": [
+        { id: 6, name: "DStv Padi - ₦4,400", price: 4400 },
+        { id: 7, name: "DStv Yanga - ₦6,000", price: 6000 },
+        { id: 8, name: "DStv Confam - ₦11,000", price: 11000 },
+        { id: 9, name: "DStv Compact - ₦19,000", price: 19000 },
+        { id: 10, name: "DStv Compact Plus - ₦30,000", price: 30000 },
+        { id: 11, name: "DStv Premium - ₦44,500", price: 44500 },
+        { id: 12, name: "DStv Premium-Asia - ₦50,500", price: 50500 },
+        { id: 44, name: "DStv Premium-French - ₦69,000", price: 69000 },
+        { id: 45, name: "DStv Confam + ExtraView - ₦17,000", price: 17000 },
+        { id: 46, name: "DStv Yanga + ExtraView - ₦12,000", price: 12000 },
+        { id: 47, name: "DStv Padi + ExtraView - ₦10,400", price: 10400 },
+        { id: 48, name: "DStv Compact + Extra View - ₦25,000", price: 25000 },
+        { id: 49, name: "DStv Compact + French Touch - ₦26,000", price: 26000 },
+        { id: 50, name: "DStv Premium + Extra View - ₦50,500", price: 50500 },
+        { id: 51, name: "DStv Compact + French Touch + ExtraView - ₦32,000", price: 32000 },
+        { id: 52, name: "DStv Compact Plus + French Plus - ₦54,500", price: 54500 },
+        { id: 53, name: "DStv Compact Plus + French Touch - ₦37,000", price: 37000 },
+        { id: 54, name: "DStv Compact Plus + Extra View - ₦36,000", price: 36000 },
+        { id: 55, name: "DStv Compact Plus + FrenchPlus + Extra View - ₦60,500", price: 60500 },
+        { id: 56, name: "DStv Compact + French Plus - ₦43,500", price: 43500 },
+        { id: 57, name: "DStv Premium + French + Extra View - ₦75,000", price: 75000 },
+        { id: 58, name: "DStv French Plus Add-on - ₦24,500", price: 24500 },
+        { id: 59, name: "DStv Great Wall Standalone - ₦3,800", price: 3800 },
+        { id: 60, name: "DStv French Touch Add-on - ₦7,000", price: 7000 },
+        { id: 61, name: "ExtraView Access - ₦6,000", price: 6000 },
+        { id: 62, name: "DStv Yanga + Showmax - ₦7,750", price: 7750 },
+        { id: 63, name: "Great Wall Standalone + Showmax - ₦7,300", price: 7300 },
+        { id: 64, name: "DStv Compact Plus + Showmax - ₦31,750", price: 31750 },
+        { id: 65, name: "DStv Confam + Showmax - ₦12,750", price: 12750 },
+        { id: 66, name: "DStv Compact + Showmax - ₦20,750", price: 20750 },
+        { id: 67, name: "DStv Padi + Showmax - ₦7,900", price: 7900 },
+        { id: 68, name: "DStv Asia + Showmax - ₦18,400", price: 18400 },
+        { id: 69, name: "DStv Premium + French + Showmax - ₦69,000", price: 69000 },
+        { id: 70, name: "DStv Premium + Showmax - ₦44,500", price: 44500 },
+        { id: 71, name: "DStv Indian - ₦14,900", price: 14900 },
+        { id: 72, name: "DStv Premium E.Africa/Indian - ₦16,530", price: 16530 },
+        { id: 73, name: "DStv FTA Plus - ₦1,600", price: 1600 },
+        { id: 74, name: "DStv PREMIUM HD - ₦39,000", price: 39000 },
+        { id: 75, name: "DStv Access - ₦2,000", price: 2000 },
+        { id: 76, name: "DStv Family - ₦4,000", price: 4000 },
+        { id: 77, name: "DStv India Add-on - ₦14,900", price: 14900 },
+        { id: 78, name: "DSTV MOBILE - ₦790", price: 790 },
+        { id: 79, name: "DStv Movie Bundle Add-on - ₦3,500", price: 3500 },
+        { id: 80, name: "DStv PVR Access Service - ₦4,000", price: 4000 },
+        { id: 81, name: "DStv Premium W/Afr + Showmax - ₦50,500", price: 50500 }
+    ],
+    "3": [
+        { id: 13, name: "Nova (Dish) - 1 Month - ₦2,100", price: 2100 },
+        { id: 14, name: "Basic (Antenna) - 1 Month - ₦4,000", price: 4000 },
+        { id: 15, name: "Basic (Dish) - 1 Month - ₦5,100", price: 5100 },
+        { id: 16, name: "Classic (Antenna) - 1 Month - ₦6,000", price: 6000 },
+        { id: 17, name: "Super (Dish) - 1 Month - ₦9,800", price: 9800 },
+        { id: 21, name: "Nova (Antenna) - 1 Week - ₦700", price: 700 },
+        { id: 22, name: "Basic (Antenna) - 1 Week - ₦1,400", price: 1400 },
+        { id: 23, name: "Basic (Dish) - 1 Week - ₦1,700", price: 1700 },
+        { id: 24, name: "Classic (Antenna) - 1 Week - ₦2,000", price: 2000 },
+        { id: 25, name: "Super (Dish) - 1 Week - ₦3,300", price: 3300 },
+        { id: 26, name: "Chinese (Dish) - 1 Month - ₦21,000", price: 21000 },
+        { id: 27, name: "Nova (Antenna) - 1 Month - ₦2,100", price: 2100 },
+        { id: 28, name: "Classic (Dish) - 1 Week - ₦2,300", price: 2300 },
+        { id: 29, name: "Classic (Dish) - 1 Month - ₦7,400", price: 7400 },
+        { id: 30, name: "Nova (Dish) - 1 Week - ₦700", price: 700 },
+        { id: 31, name: "Super (Antenna) - 1 Week - ₦3,200", price: 3200 },
+        { id: 32, name: "Super (Antenna) - 1 Month - ₦9,500", price: 9500 },
+        { id: 33, name: "Classic (Dish) - 1 Week - ₦2,500", price: 2500 },
+        { id: 34, name: "Global (Dish) - 1 Month - ₦21,000", price: 21000 },
+        { id: 35, name: "Global (Dish) - 1 Week - ₦7,000", price: 7000 },
+        { id: 36, name: "Startimes SHS - Weekly (S) - ₦2,800", price: 2800 },
+        { id: 37, name: "Startimes SHS - Weekly (M) - ₦4,620", price: 4620 },
+        { id: 38, name: "Startimes SHS - Weekly (L) - ₦4,900", price: 4900 },
+        { id: 39, name: "Startimes SHS - Weekly (XL) - ₦9,100", price: 9100 },
+        { id: 40, name: "Startimes SHS - Monthly (S) - ₦12,000", price: 12000 },
+        { id: 41, name: "Startimes SHS - Monthly (M) - ₦19,800", price: 19800 },
+        { id: 42, name: "Startimes SHS - Monthly (L) - ₦21,000", price: 21000 },
+        { id: 43, name: "Startimes SHS - Monthly (XL) - ₦39,000", price: 39000 }
+    ],
+    "4": [
+        { id: 115, name: "Showmax Full - ₦3,500", price: 3500 },
+        { id: 116, name: "Showmax Mobile Only - ₦1,600", price: 1600 },
+        { id: 117, name: "Full Sports Mobile Only - ₦5,400", price: 5400 },
+        { id: 118, name: "Sports Mobile Only - ₦4,000", price: 4000 },
+        { id: 119, name: "Full - 3 Months - ₦8,400", price: 8400 },
+        { id: 120, name: "Mobile Only - 3 Months - ₦3,800", price: 3800 },
+        { id: 121, name: "Sports Mobile Only - 3 Months - ₦12,000", price: 12000 },
+        { id: 122, name: "Sports Only - ₦3,200", price: 3200 },
+        { id: 123, name: "Sports Only - 3 Months - ₦9,600", price: 9600 },
+        { id: 124, name: "Full Sports Mobile Only - 3 Months - ₦16,200", price: 16200 },
+        { id: 125, name: "Mobile Only - 6 Months - ₦6,700", price: 6700 },
+        { id: 126, name: "Full - 6 Months - ₦14,700", price: 14700 },
+        { id: 127, name: "Full Sports Mobile Only - 6 Months - ₦32,400", price: 32400 },
+        { id: 128, name: "Sports Mobile Only - 6 Months - ₦24,000", price: 24000 },
+        { id: 129, name: "Sports Only - 6 Months - ₦18,200", price: 18200 }
+    ]
+};
