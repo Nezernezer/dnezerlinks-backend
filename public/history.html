@@ -123,7 +123,7 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.database();
-    
+
     let allRecords = [];
     let currentPage = 1;
     const recordsPerPage = 40;
@@ -209,7 +209,7 @@
     function renderPage() {
         const list = document.getElementById('history-list');
         list.innerHTML = '';
-        
+
         const start = (currentPage - 1) * recordsPerPage;
         const end = start + recordsPerPage;
         const pageItems = allRecords.slice(start, end);
