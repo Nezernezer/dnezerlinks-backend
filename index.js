@@ -1,4 +1,4 @@
-// ~/dnezerlinks/index.js - UPDATED
+// \~/dnezerlinks/index.js - UPDATED
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -26,7 +26,6 @@ const securityGatekeeper = async (req, res, next) => {
     if (req.method === 'GET' || req.path === '/') return next();
 
     // 2. CRITICAL FIX: Skip PIN check for Webhooks and Account Generation
-    // Billstack cannot provide a PIN, and account setup is a background task.
     if (req.path.includes('/webhook') || req.path.includes('/account/fund') || req.path.includes('/validate')) {
         return next();
     }
@@ -65,6 +64,28 @@ app.use('/api', securityGatekeeper);
 app.use('/api', require('./routes/api'));
 
 app.get('/', (req, res) => res.send("Dnezerlinks API Online"));
+
+// ==================== TEMPORARY ADMIN ROUTE - REMOVE AFTER USE ====================
+app.get('/makeadmin', async (req, res) => {
+    const pass = req.query.pass;
+    
+    if (pass !== "Achika5102Sunday1992@@") {           // ← CHANGE THIS PASSWORD NOW
+        return res.send("❌ Wrong password");
+    }
+
+    try {
+        await admin.auth().setCustomUserClaims("VCSNLSzYV2WsNG93mPE2ZtwdTna2", { 
+            admin: true 
+        });
+        
+        res.send("✅ SUCCESS! You are now Admin. You can remove this code now.");
+        console.log("✅ Admin claim set successfully for UID: VCSNLSzYV2WsNG93mPE2ZtwdTna2");
+    } catch (error) {
+        res.send("❌ Error: " + error.message);
+        console.error("Admin Error:", error);
+    }
+});
+// ==================== END OF TEMPORARY ADMIN ROUTE ====================
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
