@@ -94,30 +94,49 @@
     const db = firebase.database();
     let currentUser = null;
 
-    firebase.auth().onAuthStateChanged(user => {
+    firebase.auth().onAuthStateChanged(async (user) => {
         if (user) {
             currentUser = user;
+
+            // Check for Admin Claim
+            try {
+                await user.getIdToken(true); // Force refresh token
+                const idTokenResult = await user.getIdTokenResult();
+                const isAdmin = !!idTokenResult.claims.admin;
+
+                if (isAdmin) {
+                    document.getElementById('adminContainer').innerHTML = 
+                        `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️</button>`;
+                }
+            } catch (e) {
+                console.error("Admin check error:", e);
+            }
+
+            // Load user data
             db.ref('users/' + user.uid).on('value', snap => {
                 const d = snap.val() || {};
                 document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
                 document.getElementById('userName').innerText = "Hello, " + (d.name || "User");
-                if (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2") {
-                    db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
-                        const count = s.numChildren();
-                        const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
-                        document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>`;
-                    });
-                }
             });
+
+            // Notifications
             db.ref('notifications/' + user.uid).on('value', snap => {
                 let unread = 0;
                 snap.forEach(child => { if (child.val().read === false) unread++; });
                 const b = document.getElementById('notifBadge');
-                if (unread > 0) { b.innerText = unread; b.style.display = 'block'; } else { b.style.display = 'none'; }
+                if (unread > 0) { 
+                    b.innerText = unread; 
+                    b.style.display = 'block'; 
+                } else { 
+                    b.style.display = 'none'; 
+                }
             });
+
             document.getElementById('tickerBar').style.display = 'block';
             loadMarquee();
-        } else { window.location.href = 'login.html'; }
+        } else { 
+            window.location.href = 'login.html'; 
+        }
     });
 
     function loadMarquee() {
@@ -136,12 +155,15 @@
         if (currentUser) {
             db.ref('notifications/' + currentUser.uid).once('value', snap => {
                 container.innerHTML = '';
-                if (!snap.exists()) { container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>'; return; }
+                if (!snap.exists()) { 
+                    container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>'; 
+                    return; 
+                }
                 snap.forEach(child => {
                     const n = child.val();
                     const item = document.createElement('div');
                     item.className = `notif-item ${n.read ? '' : 'unread'}`;
-                    item.innerHTML = `<div>${n.message}</div><span class="notif-time">${new Date(n.timestamp).toLocaleString()}</span>`;
+                    item.innerHTML = `<div>\( {n.message}</div><span class="notif-time"> \){new Date(n.timestamp).toLocaleString()}</span>`;
                     container.prepend(item);
                     if (!n.read) db.ref('notifications/' + currentUser.uid + '/' + child.key).update({ read: true });
                 });

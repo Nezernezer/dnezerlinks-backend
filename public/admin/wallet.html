@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Wallet Manager | Dnezerlinks</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f4f7f6; }
         body { font-family: 'Segoe UI', sans-serif; background: #fff; margin: 0; padding: 0; }
@@ -16,19 +16,15 @@
         .header-top h2 { margin: 0; font-size: 1.4rem; }
         .search-container { margin-top: 15px; }
         .search-box { width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; background: rgba(255,255,255,0.1); color: white; outline: none; font-size: 14px; }
-        .search-box::placeholder { color: rgba(255,255,255,0.7); }
         .content-area { padding: 15px; background: white; }
-        .user-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; transition: 0.2s; }
+        .user-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
         .user-info b { color: #333; font-size: 14px; display: block; }
-        .user-info span { color: #666; font-size: 11px; display: block; }
         .balance-tag { color: var(--primary); font-weight: 800; font-size: 16px; margin-top: 5px; }
         .fund-btn { background: var(--accent); color: #000; border: none; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; }
-        .fund-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         #authStatus { font-size: 10px; color: #4caf50; font-weight: bold; }
     </style>
 </head>
 <body>
-
 <div class="header-top">
     <div class="nav-links">
         <a href="index.html">← ADMIN HUB</a>
@@ -36,14 +32,12 @@
     </div>
     <h2>Funding Center</h2>
     <div class="search-container">
-        <input type="text" id="searchInput" class="search-box" placeholder="Search customer name or phone..." onkeyup="filterUsers()">
+        <input type="text" id="searchInput" class="search-box" placeholder="Search customer..." onkeyup="filterUsers()">
     </div>
 </div>
-
 <div class="content-area" id="walletList">
     <p style="text-align:center; color:#888;">Connecting to secure vault...</p>
 </div>
-
 <script>
     const config = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
@@ -54,65 +48,38 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
-
     let allUsers = {};
 
-    // 1. MASTER SESSION GUARD
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async (user) => {
         if (user) {
-            if (user.uid === MASTER_ADMIN_UID) {
+            const idTokenResult = await user.getIdTokenResult();
+            if (idTokenResult.claims.admin === true) {
                 document.getElementById('authStatus').innerText = "Session Active ●";
                 startLiveSync();
             } else {
                 alert("ACCESS DENIED");
                 window.location.href = "../home.html";
             }
-        } else {
-            window.location.href = "../login.html";
-        }
+        } else { window.location.href = "../login.html"; }
     });
 
-    // 2. ANTI-TIMEOUT REFRESH (Every 10 minutes)
-    setInterval(() => {
-        if (auth.currentUser) {
-            auth.currentUser.getIdToken(true).then(() => console.log("Master Session Refreshed"));
-        }
-    }, 600000);
-
-    // 3. LIVE SYNC WITH AUTO-RECOVERY
     function startLiveSync() {
         db.ref('users').on('value', snap => {
             allUsers = snap.val() || {};
             render();
-        }, error => {
-            if (error.code === "PERMISSION_DENIED") {
-                console.warn("Permission lost. Reloading Master Key...");
-                location.reload();
-            } else {
-                alert("Read Denied: " + error.message);
-            }
         });
     }
 
     function render() {
         const container = document.getElementById('walletList');
         container.innerHTML = "";
-        const uids = Object.keys(allUsers);
-
-        if(uids.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#888;">No users found.</p>';
-            return;
-        }
-
-        uids.forEach(uid => {
+        Object.keys(allUsers).forEach(uid => {
             const u = allUsers[uid];
             container.innerHTML += `
-                <div class="user-card" data-search="${(u.name||'').toLowerCase()} ${(u.phone||'').toLowerCase()}">
+                <div class="user-card" data-search="${(u.name||'').toLowerCase()}">
                     <div class="user-info">
-                        <b>${u.name || 'Unknown User'}</b>
-                        <span>${u.phone || 'No Phone'}</span>
-                        <div class="balance-tag">₦${Number(u.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                        <b>${u.name || 'Unknown'}</b>
+                        <div class="balance-tag">₦${Number(u.balance || 0).toLocaleString()}</div>
                     </div>
                     <button class="fund-btn" onclick="fund('${uid}', '${u.name}', this)">MANAGE</button>
                 </div>`;
@@ -120,46 +87,24 @@
     }
 
     async function fund(uid, name, btn) {
-        const amt = prompt(`Adjust wallet for ${name}:\nExample: 500 to add, -500 to deduct.`);
-        if (amt === null) return; 
-        
-        const val = parseFloat(amt);                            
-        if (isNaN(val)) { 
-            alert("❌ Invalid amount entered."); 
-            return;
-        }                                                       
-        
-        btn.disabled = true;                                            
-        btn.innerText = "WAIT...";                              
-        
-        try {                                                               
-            const result = await db.ref('users/' + uid + '/balance').transaction(currentBal => {                                                
-                return (Number(currentBal) || 0) + val;
-            });
-
-            if (result.committed) {                                             
-                const action = val >= 0 ? "credited" : "debited";                                                                               
-                await db.ref('notifications/' + uid).push({                         
-                    message: `💰 Your wallet has been ${action} with ₦${Math.abs(val).toLocaleString()}. New Balance: ₦${result.snapshot.val().toLocaleString()}`,
-                    timestamp: Date.now(),                                          
-                    read: false
-                });
-                alert(`✅ Successfully updated ${name}'s balance.`);
+        const amt = prompt(`Adjust wallet for ${name}:`);
+        if (amt === null) return;
+        const val = parseFloat(amt);
+        if (isNaN(val)) return alert("Invalid amount.");
+        btn.disabled = true;
+        try {
+            const result = await db.ref('users/'+uid+'/balance').transaction(c => (Number(c)||0) + val);
+            if (result.committed) {
+                await db.ref('notifications/'+uid).push({ message: `Wallet updated by ₦${val}`, timestamp: Date.now(), read: false });
+                alert("Success!");
             }
-        } catch (error) {
-            console.error(error);
-            alert("❌ UPDATE FAILED: " + error.message);                
-        } finally {
-            btn.disabled = false;                                           
-            btn.innerText = "MANAGE";
-        }                                                           
+        } catch (e) { alert(e.message); } finally { btn.disabled = false; }
     }
 
-    function filterUsers() {                                            
+    function filterUsers() {
         const term = document.getElementById('searchInput').value.toLowerCase();
         document.querySelectorAll('.user-card').forEach(card => {
-            const match = card.getAttribute('data-search').includes(term);
-            card.style.display = match ? 'flex' : 'none';
+            card.style.display = card.getAttribute('data-search').includes(term) ? 'flex' : 'none';
         });
     }
 </script>
