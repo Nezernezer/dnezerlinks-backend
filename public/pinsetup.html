@@ -8,24 +8,36 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        :root { --primary: #0d47a1; --bg: #f8f9fa; --error: #d32f2f; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; }
+        :root { --primary: #0d47a1; --bg: #f8f9fa; --error: #d32f2f; --success: #2e7d32; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; margin: 0; }
         .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 350px; width: 100%; text-align: center; }
         h2 { color: var(--primary); margin-bottom: 10px; }
         p { font-size: 14px; color: #666; margin-bottom: 20px; }
+        
+        #statusMsg { padding: 12px; margin-bottom: 20px; border-radius: 8px; display: none; font-size: 14px; text-align: center; font-weight: 500; }
+        .error-msg { background: #ffebee; color: var(--error); border: 1px solid #ef9a9a; }
+        .success-msg { background: #e8f5e9; color: var(--success); border: 1px solid #a5d6a7; }
+
         label { display: block; text-align: left; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 5px; }
-        input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 18px; text-align: center; letter-spacing: 5px; outline: none; }
-        input:focus { border-color: var(--primary); }
-        button { width: 100%; padding: 12px; border-radius: 6px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        input[type="password"], input[type="text"] { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; font-size: 18px; text-align: center; letter-spacing: 5px; outline: none; }
+        
+        /* Show PIN Checkbox Styling */
+        .show-pin-container { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 20px; cursor: pointer; }
+        .show-pin-container input { width: auto; margin: 0 10px 0 0; letter-spacing: normal; cursor: pointer; }
+        .show-pin-container span { font-size: 13px; color: #555; font-weight: 600; }
+
+        button { width: 100%; padding: 15px; border-radius: 8px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 1rem; }
+        button:disabled { background: #ccc; cursor: not-allowed; opacity: 0.7; }
         .lock-notice { background: #ffebee; color: var(--error); padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; display: none; border: 1px solid var(--error); }
-        .back-link { margin-top: 15px; display: block; color: var(--primary); text-decoration: none; font-size: 14px; }
-    </script>
+        .back-link { margin-top: 15px; display: block; color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; }
+    </style>
 </head>
 <body>
 
     <div class="card">
         <h2 id="pageTitle">Set Transaction PIN</h2>
+        <div id="statusMsg"></div>
+
         <div id="lockNotice" class="lock-notice">
             ⚠️ <b>Account Locked</b><br>
             You cannot change your PIN while your account is locked. Please contact support.
@@ -34,16 +46,21 @@
 
         <div id="oldPinContainer" style="display: none;">
             <label>Current PIN</label>
-            <input type="password" id="oldPin" maxlength="4" placeholder="****" inputmode="numeric">
+            <input type="password" id="oldPin" class="pin-field" maxlength="4" placeholder="****" inputmode="numeric">
         </div>
 
-        <label>New 4-Digit PIN</label>
-        <input type="password" id="newPin" maxlength="4" placeholder="****" inputmode="numeric">
+        <label id="newPinLabel">New 4-Digit PIN</label>
+        <input type="password" id="newPin" class="pin-field" maxlength="4" placeholder="****" inputmode="numeric">
 
         <label>Confirm New PIN</label>
-        <input type="password" id="confirmPin" maxlength="4" placeholder="****" inputmode="numeric">
+        <input type="password" id="confirmPin" class="pin-field" maxlength="4" placeholder="****" inputmode="numeric">
 
-        <button id="saveBtn" disabled>Loading...</button>
+        <label class="show-pin-container">
+            <input type="checkbox" id="showPinToggle">
+            <span>Show PIN</span>
+        </label>
+
+        <button id="saveBtn" disabled>Checking Status...</button>
         <a href="home.html" class="back-link">← Return to Home</a>
     </div>
 
@@ -61,74 +78,106 @@
 
         const saveBtn = document.getElementById('saveBtn');
         const lockNotice = document.getElementById('lockNotice');
+        const statusMsg = document.getElementById('statusMsg');
+        const showPinToggle = document.getElementById('showPinToggle');
         let isLocked = false;
         let hasPin = false;
 
+        function showMessage(msg, isError = true) {
+            statusMsg.textContent = msg;
+            statusMsg.style.display = 'block';
+            statusMsg.className = isError ? 'error-msg' : 'success-msg';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Toggle PIN Visibility Logic
+        showPinToggle.addEventListener('change', function() {
+            const type = this.checked ? 'text' : 'password';
+            document.querySelectorAll('.pin-field').forEach(field => {
+                field.type = type;
+            });
+        });
+
         auth.onAuthStateChanged(async (user) => {
-            if (user) {
+            if (!user) {
+                window.location.href = "login.html";
+                return;
+            }
+            try {
                 const snap = await database.ref('users/' + user.uid).once('value');
                 const data = snap.val() || {};
-                
-                // 1. Check Lock Status
                 if (data.status === "locked") {
                     isLocked = true;
                     lockNotice.style.display = "block";
                     saveBtn.disabled = true;
                     saveBtn.innerText = "Locked";
-                    // Disable inputs
                     document.querySelectorAll('input').forEach(i => i.disabled = true);
                 } else {
+                    if (data.transaction_pin) {
+                        hasPin = true;
+                        document.getElementById('pageTitle').innerText = "Change PIN";
+                        document.getElementById('oldPinContainer').style.display = "block";
+                        saveBtn.innerText = "Update PIN";
+                    } else {
+                        saveBtn.innerText = "Save PIN";
+                    }
                     saveBtn.disabled = false;
-                    saveBtn.innerText = data.transaction_pin ? "Update PIN" : "Save PIN";
                 }
-
-                // 2. Check if PIN exists
-                if (data.transaction_pin) {
-                    hasPin = true;
-                    document.getElementById('pageTitle').innerText = "Change PIN";
-                    document.getElementById('oldPinContainer').style.display = "block";
-                }
-            } else {
-                window.location.href = "login.html";
+            } catch (error) {
+                showMessage("Failed to load user data.");
             }
         });
 
         saveBtn.onclick = async () => {
             const user = auth.currentUser;
+            if (!user || isLocked) return;
+
             const oldP = document.getElementById('oldPin').value;
             const newP = document.getElementById('newPin').value;
             const confP = document.getElementById('confirmPin').value;
 
-            if (newP.length !== 4 || isNaN(newP)) return alert("PIN must be 4 digits.");
-            if (newP !== confP) return alert("New PINs do not match.");
+            statusMsg.style.display = 'none';
+
+            if (newP.length !== 4 || isNaN(newP)) {
+                showMessage("PIN must be exactly 4 digits.");
+                return;
+            }
+            if (newP !== confP) {
+                showMessage("The confirmation PIN does not match.");
+                return;
+            }
 
             saveBtn.disabled = true;
             saveBtn.innerText = "Saving...";
 
-            const userRef = database.ref('users/' + user.uid);
-            const snap = await userRef.once('value');
-            const data = snap.val();
+            try {
+                const userRef = database.ref('users/' + user.uid);
+                const snap = await userRef.once('value');
+                const data = snap.val();
 
-            // Verify Old PIN if changing
-            if (hasPin && String(oldP) !== String(data.transaction_pin)) {
-                alert("Incorrect current PIN.");
+                if (hasPin) {
+                    if (String(oldP).trim() !== String(data.transaction_pin).trim()) {
+                        showMessage("The current PIN you entered is incorrect.");
+                        saveBtn.disabled = false;
+                        saveBtn.innerText = "Update PIN";
+                        return;
+                    }
+                }
+
+                await userRef.update({
+                    transaction_pin: newP.trim(),
+                    failed_attempts: 0, 
+                    last_failed_time: 0
+                });
+
+                showMessage("PIN updated successfully! Redirecting...", false);
+                setTimeout(() => { window.location.href = "home.html"; }, 2000);
+
+            } catch (error) {
+                showMessage("Failed to save PIN.");
                 saveBtn.disabled = false;
-                saveBtn.innerText = "Update PIN";
-                return;
+                saveBtn.innerText = hasPin ? "Update PIN" : "Save PIN";
             }
-
-            // Perform Update
-            userRef.update({
-                transaction_pin: newP,
-                failed_attempts: 0, // Reset failures on successful manual change
-                last_failed_time: 0
-            }).then(() => {
-                alert("PIN updated successfully!");
-                window.location.href = "home.html";
-            }).catch(() => {
-                alert("Error saving PIN.");
-                saveBtn.disabled = false;
-            });
         };
     </script>
 </body>

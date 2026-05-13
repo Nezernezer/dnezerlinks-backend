@@ -5,63 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cable TV - Dnezerlinks</title>
     <style>
-        :root { --primary: #007bff; }
-        
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            min-height: 100vh;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-        }
-
-        /* Perfect Center Alignment */
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #mainContent {
-            width: 100%;
-            max-width: 450px;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .card {
-            width: 100%;
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            box-sizing: border-box;
-        }
-
-        h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
-
-        #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
-        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-        .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-
+        :root { --primary: #007bff; --error: #c62828; --success: #2e7d32; }
+        body, html { margin: 0; padding: 0; width: 100%; min-height: 100vh; font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #mainContent { width: 100%; max-width: 450px; padding: 20px; box-sizing: border-box; }
+        .card { width: 100%; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
+        h2 { color: var(--primary); text-align: center; margin: 0 0 10px 0; font-size: 1.5rem; }
+        #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; border: 1px solid transparent; }
+        .error-msg { background: #ffebee; color: var(--error); border-color: #ef9a9a; }
+        .success-msg { background: #e8f5e9; color: var(--success); border-color: #a5d6a7; }
         label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
         input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
-
         .price-display { background: #e3f2fd; padding: 12px; margin-top: 15px; border-radius: 8px; text-align: center; border: 1px dashed var(--primary); display: none; }
-
         button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-
         #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
-        .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
-        .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; position: relative; }
+        .pin-container { position: relative; width: 100%; margin: 15px 0; }
+        .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; border: 1px solid #ccc; border-radius: 8px; padding: 10px; box-sizing: border-box; }
+        .toggle-pin { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.7rem; font-weight: bold; padding: 5px; margin: 0; width: auto; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
-
-        @media (max-width: 360px) {
-            .card { padding: 15px; }
-        }
     </style>
 </head>
 <body>
@@ -72,7 +34,7 @@
         <h2>🛰️ Cable TV</h2>
         <div id="statusMsg"></div>
 
-        <label>Select Provider</label>
+        <label for="provider">Select Provider</label>
         <select id="provider" onchange="populatePlans()">
             <option value="">Choose Provider</option>
             <option value="1">GOtv</option>
@@ -81,7 +43,7 @@
             <option value="4">Showmax</option>
         </select>
 
-        <label>Select Package</label>
+        <label for="planList">Select Package</label>
         <select id="planList" onchange="updatePriceDisplay()">
             <option value="">Select Provider First</option>
         </select>
@@ -91,8 +53,9 @@
             <b id="totalVal" style="font-size: 1.4rem; color: var(--primary);">₦0</b>
         </div>
 
-        <label>IUC / SmartCard Number</label>
-        <input type="text" id="iuc" placeholder="Enter Decoder Number" oninput="autoLookupCustomer()">
+        <label for="iuc">IUC / SmartCard Number</label>
+        <!-- name and autocomplete added for browser history suggestions -->
+        <input type="text" id="iuc" name="iuc_history" autocomplete="on" placeholder="Enter Decoder Number" oninput="autoLookupCustomer()" inputmode="numeric">
         <div id="customerInfo" style="margin-top: 5px; font-size: 0.85rem; font-weight: bold; min-height: 1.2rem;"></div>
 
         <button id="buyBtn" onclick="validateUserAndOpenModal()">Activate Subscription</button>
@@ -102,12 +65,15 @@
 <div id="pinModal">
     <div class="modal-content">
         <h3>Enter PIN</h3>
-        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
-        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
-        
-        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-bottom: 10px;" id="toggleBtn">Show PIN</button>
-        
-        <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Confirm Payment</button>
+        <div id="pinError" style="color: var(--error); font-size: 0.85rem; margin-bottom: 5px; min-height: 1rem;"></div>
+
+        <div class="pin-container">
+            <!-- one-time-code blocks password saving popups -->
+            <input type="password" id="txnPin" name="txn_pin_field" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="one-time-code">
+            <button type="button" class="toggle-pin" onclick="togglePinVisibility()">SHOW</button>
+        </div>
+
+        <button id="confirmBtn" onclick="verifyAndPay()">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
     </div>
 </div>
@@ -116,6 +82,199 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="cable_plans.js"></script>
-<script src="handler.js"></script>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+
+    let lookupTimeout;
+    let isIucVerified = false;
+
+    // Early wake up for Render Backend
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/validate", { method: "HEAD" }).catch(() => {});
+    });
+
+    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
+
+    function showMessage(msg, isError = true) {
+        const msgDiv = document.getElementById('statusMsg');
+        msgDiv.textContent = msg;
+        msgDiv.style.display = 'block';
+        msgDiv.className = isError ? 'error-msg' : 'success-msg';
+    }
+
+    function togglePinVisibility() {
+        const pinInput = document.getElementById('txnPin');
+        const toggleBtn = document.querySelector('.toggle-pin');
+        if (pinInput.type === "password") {
+            pinInput.type = "text";
+            toggleBtn.textContent = "HIDE";
+        } else {
+            pinInput.type = "password";
+            toggleBtn.textContent = "SHOW";
+        }
+    }
+
+    function populatePlans() {
+        const providerID = document.getElementById("provider").value;
+        const planList = document.getElementById("planList");
+        planList.innerHTML = '<option value="">-- Choose Package --</option>';
+        document.getElementById("priceDisplay").style.display = "none";
+        document.getElementById("statusMsg").style.display = "none";
+        isIucVerified = false;
+        document.getElementById("customerInfo").innerText = "";
+
+        if (providerID && typeof localPlans !== 'undefined' && localPlans[providerID]) {
+            localPlans[providerID].forEach(plan => {
+                let opt = document.createElement("option");
+                opt.value = plan.id;
+                opt.textContent = plan.name;
+                opt.dataset.price = plan.price;
+                planList.appendChild(opt);
+            });
+        }
+    }
+
+    function updatePriceDisplay() {
+        const planList = document.getElementById("planList");
+        const selected = planList.options[planList.selectedIndex];
+        if (selected && selected.dataset.price) {
+            document.getElementById("priceDisplay").style.display = "block";
+            document.getElementById("totalVal").innerText = "₦" + parseFloat(selected.dataset.price).toLocaleString();
+        }
+    }
+
+    async function autoLookupCustomer() {
+        const iuc = document.getElementById("iuc").value.trim();
+        const provider = document.getElementById("provider").value;
+        const infoDiv = document.getElementById("customerInfo");
+        if (iuc.length < 8) { infoDiv.innerText = ""; isIucVerified = false; return; }
+        if (!provider) { infoDiv.innerText = "Select provider first"; return; }
+
+        if (lookupTimeout) clearTimeout(lookupTimeout);
+        infoDiv.style.color = "orange";
+        infoDiv.innerText = "Verifying...";
+
+        lookupTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/validate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ iuc, providerID: provider })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    infoDiv.style.color = "green";
+                    infoDiv.innerText = "✅ " + data.customerName;
+                    isIucVerified = true;
+                } else {
+                    infoDiv.style.color = "red";
+                    infoDiv.innerText = "❌ Invalid Number";
+                    isIucVerified = false;
+                }
+            } catch (e) { infoDiv.innerText = "Network error"; isIucVerified = false; }
+        }, 1200);
+    }
+
+    async function validateUserAndOpenModal() {
+        if (!isIucVerified) return showMessage("Please verify IUC number first.");
+        const buyBtn = document.getElementById('buyBtn');
+        buyBtn.disabled = true;
+
+        try {
+            const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
+            const data = snap.val() || {};
+            if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") { window.location.href = "../kyc_status.html"; return; }
+            if (!data.transaction_pin && !data.pin) { window.location.href = "../pinsetup.html?return=cable"; return; }
+
+            document.getElementById('pinModal').style.display = 'flex';
+            document.getElementById('txnPin').value = '';
+            document.getElementById('pinError').textContent = '';
+        } catch (e) { showMessage("Validation error."); }
+        finally { buyBtn.disabled = false; }
+    }
+
+    function closePinModal() { document.getElementById('pinModal').style.display = 'none'; }
+
+    async function verifyAndPay() {
+        const enteredPin = document.getElementById('txnPin').value;
+        const pinErr = document.getElementById('pinError');
+        const confirmBtn = document.getElementById('confirmBtn');
+
+        if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
+
+        confirmBtn.disabled = true;
+        confirmBtn.innerText = "Verifying...";
+
+        const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
+        const userData = snap.val();
+        const storedPin = userData.transaction_pin || userData.pin;
+
+        if (String(enteredPin) === String(storedPin)) {
+            executePurchase(userData.balance, auth.currentUser.uid, enteredPin);
+        } else {
+            pinErr.textContent = "Incorrect Transaction PIN!";
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = "Confirm Payment";
+        }
+    }
+
+    async function executePurchase(balance, uid, pin) {
+        const planList = document.getElementById("planList");
+        const selected = planList.options[planList.selectedIndex];
+        const amount = parseFloat(selected.dataset.price);
+        const confirmBtn = document.getElementById('confirmBtn');
+        const buyBtn = document.getElementById('buyBtn');
+
+        if (balance < amount) {
+            closePinModal();
+            return showMessage("Insufficient Balance, please fund your wallet.");
+        }
+
+        confirmBtn.disabled = true;
+        confirmBtn.innerText = "Processing...";
+
+        try {
+            const res = await fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/pay", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    pin, uid, iuc: document.getElementById("iuc").value.trim(),
+                    providerID: document.getElementById("provider").value,
+                    planID: selected.value, amount
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                closePinModal();
+                showMessage("✅ Subscription Successful!", false);
+                setTimeout(() => window.location.href = "../home.html", 2500);
+            } else {
+                closePinModal();
+                showMessage(data.error || "Transaction Failed");
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = "Confirm Payment";
+                buyBtn.disabled = false;
+            }
+        } catch (e) {
+            closePinModal();
+            showMessage("Server error. Please try again.");
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = "Confirm Payment";
+            buyBtn.disabled = false;
+        }
+    }
+</script>
 </body>
 </html>

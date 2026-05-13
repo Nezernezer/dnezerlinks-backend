@@ -15,7 +15,17 @@
         .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
         #acc-number { font-size: 1.4rem; color: #222; font-weight: bold; }
         .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
-        #status-msg { text-align: center; color: #007bff; font-weight: bold; padding: 20px; }
+        
+        /* Animation Styling */
+        #status-msg { 
+            text-align: center; 
+            font-weight: bold; 
+            padding: 20px; 
+            font-size: 1.1rem;
+            min-height: 60px;
+            transition: color 0.5s ease, opacity 0.5s ease;
+        }
+        
         #account-ui { display: none; }
     </style>
 </head>
@@ -29,7 +39,8 @@
         <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
     </div>
 
-    <div id="status-msg">searching for your account details...</div>
+    <!-- This is where the animated text will appear -->
+    <div id="status-msg">Initiating account setup...</div>
 
     <div id="account-ui">
         <div class="bank-card">
@@ -62,28 +73,70 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // Text Animation Logic
+    function startLoadingAnimations() {
+        const statusMsg = document.getElementById("status-msg");
+        const messages = [
+            { text: "Sending a request to create account, this may take a while...", color: "#E67E22", time: 15000 }, // Orange
+            { text: "Generating your dedicated account number, Please wait...", color: "#3498DB", time: 15000 },  // Blue
+            { text: "Processing account details, please stay on the page.", color: "#27AE60", time: 30000 },     // Green
+            { text: "Your account number will be ready soon, please be patient.", color: "#8E44AD", time: 30000 }      // Purple
+        ];
+
+        let index = 0;
+
+        function updateText() {
+            if (index < messages.length) {
+                const current = messages[index];
+                statusMsg.innerText = current.text;
+                statusMsg.style.color = current.color;
+                
+                setTimeout(() => {
+                    index++;
+                    updateText();
+                }, current.time);
+            } else {
+                // Loop: Alternate between 3 and 4 (index 2 and 3)
+                index = (index === 2) ? 3 : 2;
+                const current = messages[index];
+                statusMsg.innerText = current.text;
+                statusMsg.style.color = current.color;
+                setTimeout(updateText, current.time);
+            }
+        }
+        updateText();
+    }
+
     firebase.auth().onAuthStateChanged(async (user) => {
         if (!user) return window.location.href = 'login.html';
 
-        // Listen only to the UID folder (Standardized)
         const userRef = db.ref(`users/${user.uid}`);
-        
+        let animationStarted = false;
+
         userRef.on('value', async (snap) => {
             const data = snap.val() || {};
 
             if (data.account_number) {
-                // UI Update
                 document.getElementById("wallet-balance").innerText = "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
                 document.getElementById("bank-name").innerText = data.bank_name;
                 document.getElementById("acc-number").innerText = data.account_number;
-                document.getElementById("acc-name").innerText = data.account_name || "Dnezerlinks Customer";
+                document.getElementById("acc-name").innerText = data.account_name || "Customer";
 
                 document.getElementById("status-msg").style.display = "none";
                 document.getElementById("account-ui").style.display = "block";
             } else {
-                document.getElementById("status-msg").innerText = "Generating your account... Please wait.";
-                
-                // CALL THE NEW ROUTE
+                // Kick off the colorful animations
+                if (!animationStarted) {
+                    animationStarted = true;
+                    startLoadingAnimations();
+                }
+
+                // Name splitting logic
+                const rawName = data.name || "";
+                const nameParts = rawName.trim().split(/\s+/);
+                let fName = nameParts[0] || "Customer";
+                let lName = nameParts[1] ? nameParts[1].substring(0, 2) : user.uid.substring(0, 3);
+
                 try {
                     await fetch('https://dnezerlinks-backend.onrender.com/api/account/fund', {
                         method: 'POST',
@@ -91,12 +144,13 @@
                         body: JSON.stringify({
                             uid: user.uid,
                             email: user.email,
-                            first_name: "Customer",
-                            last_name: user.uid.substring(0,5)
+                            first_name: fName,
+                            last_name: lName,
+                            phone: data.phone || "08000000000"
                         })
                     });
                 } catch (err) {
-                    console.error("Account generation failed:", err);
+                    console.error("Fetch Error:", err);
                 }
             }
         });

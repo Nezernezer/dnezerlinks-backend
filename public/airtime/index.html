@@ -6,131 +6,99 @@
     <title>Buy Airtime - Dnezerlinks</title>
     <style>
         :root { --primary: #007bff; }
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background-color: #f4f7f6; 
-            margin: 0; 
-            padding: 20px; 
-        }
-        .card { 
-            max-width: 450px; 
-            margin: 20px auto; 
-            background: white; 
-            padding: 25px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-        }
-        h2 { color: var(--primary); text-align: center; }
-        label { font-weight: bold; margin-top: 15px; display: block; }
-        input, select { 
-            padding: 12px; 
-            margin-top: 5px; 
-            border: 1px solid #ddd; 
-            border-radius: 8px; 
-            width: 100%; 
-            box-sizing: border-box; 
-        }
-        button { 
-            margin-top: 20px; 
-            padding: 15px; 
-            background: var(--primary); 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
+
+        body, html {
+            margin: 0;
+            padding: 0;
             width: 100%;
-        }
-        #pinModal { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            display: none; align-items: center; justify-content: center; 
-        }
-        .modal-content { 
-            background: white; padding: 30px; border-radius: 15px; 
-            width: 300px; text-align: center; 
-        }
-        .pin-input { 
-            font-size: 2rem; text-align: center; letter-spacing: 5px; 
-            width: 100%; margin: 15px 0;
-        }
-        .toggle-pin {
-            background: #6c757d; margin-top: 8px; padding: 8px; border-radius: 6px; font-size: 0.9rem;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
         }
 
-        /* Dnezerlinks Animated Progress Bar */
-        #loadingScreen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #f4f7f6; display: flex; align-items: center; justify-content: center;
-            flex-direction: column; z-index: 9999;
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 20px;
         }
-        .dnezer-text {
-            font-size: 2.2rem; font-weight: bold; color: var(--primary);
-            margin-bottom: 20px; animation: pulse 2s infinite;
+
+        #mainContent {
+            width: 100%;
+            max-width: 450px;
+            padding: 20px;
+            box-sizing: border-box;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 0.7; transform: scale(0.98); }
-            50% { opacity: 1; transform: scale(1.03); }
+
+        .card {
+            width: 100%;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-sizing: border-box;
         }
-        .progress-container {
-            width: 280px; height: 8px; background: #e0e0e0; border-radius: 999px;
-            overflow: hidden; position: relative;
-        }
-        .progress-bar {
-            height: 100%; width: 40%; background: linear-gradient(90deg, #007bff, #00c6ff);
-            border-radius: 999px; animation: loading 1.8s infinite linear;
-            box-shadow: 0 0 15px rgba(0, 123, 255, 0.6);
-        }
-        @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(350%); }
-        }
-        .progress-text {
-            margin-top: 12px; color: #555; font-size: 0.95rem;
+
+        h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
+
+        #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
+        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+
+        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
+        input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
+
+        button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
+        .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
+        .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+        @media (max-width: 360px) {
+            .card { padding: 15px; }
+            body { padding-top: 10px; }
         }
     </style>
 </head>
 <body>
 
-<div id="loadingScreen">
-    <div class="dnezer-text">Dnezerlinks</div>
-    <div class="progress-container">
-        <div class="progress-bar"></div>
-    </div>
-    <div class="progress-text">Preparing secure transaction...</div>
-</div>
-
-<div id="mainContent" style="display: none;">
+<div id="mainContent">
+    <a href="../home.html" style="color: var(--primary); text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 10px;">← Back to Dashboard</a>
     <div class="card">
-        <a href="../home.html" style="color: var(--primary); text-decoration: none; font-weight: bold; margin-bottom: 10px; display: inline-block;">← Back to Dashboard</a>
-        <h2>📱 Airtime Purchase</h2>
+        <h2>📱 Buy Airtime</h2>
+        <div id="statusMsg"></div>
 
         <label>Phone Number</label>
-        <input type="tel" id="phone" placeholder="e.g. 08123456789" oninput="autoLookupNetwork()">
+        <input type="tel" id="phone" placeholder="e.g. 08123456789" list="recentNumbers" oninput="autoLookupNetwork()">
+        <datalist id="recentNumbers"></datalist>
 
         <label>Select Network</label>
         <select id="network">
             <option value="">Choose Network</option>
-            <option value="MTN">MTN</option>
-            <option value="GLO">Glo</option>
-            <option value="AIRTEL">Airtel</option>
-            <option value="9MOBILE">9mobile</option>
+            <option value="mtn">MTN</option>
+            <option value="glo">Glo</option>
+            <option value="airtel">Airtel</option>
+            <option value="9mobile">9mobile</option>
         </select>
 
-        <label>Amount</label>
-        <input type="number" id="amount" placeholder="Enter Amount">
+        <label>Amount (₦)</label>
+        <input type="number" id="amount" placeholder="Min 100" min="100">
 
-        <button id="buyBtn" onclick="openPinModal()">Buy Airtime</button>
+        <button id="buyBtn" onclick="validateUserAndOpenModal()">Buy Airtime</button>
     </div>
 </div>
 
 <div id="pinModal">
     <div class="modal-content">
         <h3>Enter PIN</h3>
+        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
         <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
-        <button onclick="togglePinVisibility()" class="toggle-pin" id="toggleBtn">Show PIN</button>
-        <button id="confirmBtn" onclick="verifyAndPay()" style="width: 100%;">Confirm</button>
-        <button onclick="closePinModal()" style="background:#f44336; color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; width:100%; margin-top: 10px;">Cancel</button>
+        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="toggleBtn">Show PIN</button>
+        <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
+        <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
     </div>
 </div>
 
@@ -139,141 +107,185 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
 <script>
-const firebaseConfig = {
-    apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
-    authDomain: "dnezerlinks.firebaseapp.com",
-    databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
-    projectId: "dnezerlinks",
-    appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
-};
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
 
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
-const auth = firebase.auth();
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+    const networkMap = { "mtn": "1", "glo": "2", "9mobile": "3", "airtel": "4" };
 
-window.onload = () => { 
-    fetch("https://dnezerlinks-backend.onrender.com/").catch(() => {}); 
-};
+    window.onload = () => {
+        fetch("https://dnezerlinks-backend.onrender.com/").catch(() => {});
+        loadRecentPhone();
+    };
 
-auth.onAuthStateChanged(user => {
-    if (user) {
-        database.ref('users/' + user.uid).on('value', snap => {
+    function showMessage(msg, isError = true) {
+        const msgDiv = document.getElementById('statusMsg');
+        msgDiv.textContent = msg;
+        msgDiv.style.display = 'block';
+        msgDiv.className = isError ? 'error-msg' : 'success-msg';
+    }
+
+    function loadRecentPhone() {
+        const savedPhone = localStorage.getItem('last_phone');
+        if (savedPhone) {
+            const list = document.getElementById('recentNumbers');
+            list.innerHTML = `<option value="${savedPhone}">Recently Used</option>`;
+            document.getElementById('phone').value = savedPhone;
+            autoLookupNetwork();
+        }
+    }
+
+    auth.onAuthStateChanged(user => {
+        if (!user) window.location.href = "../login.html";
+    });
+
+    async function validateUserAndOpenModal() {
+        const user = auth.currentUser;
+        const phone = document.getElementById('phone').value;
+        const network = document.getElementById('network').value;
+        const amount = document.getElementById('amount').value;
+        const buyBtn = document.getElementById('buyBtn');
+
+        if (!network || !amount || amount < 100 || phone.length < 11) {
+            return showMessage("Please enter valid details (min ₦100).");
+        }
+
+        buyBtn.disabled = true;
+        buyBtn.innerText = "Checking status...";
+
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
             const data = snap.val() || {};
-            
+
             if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") {
-                window.location.href = "../kyc_status.html"; 
-                return;
-            }
-            if (!data.transaction_pin) {
-                window.location.href = "../pinsetup.html"; 
+                window.location.href = "../kyc_status.html";
                 return;
             }
 
-            document.getElementById('loadingScreen').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-        });
-    } else {
-        window.location.href = "../login.html";
-    }
-});
+            if (!data.transaction_pin && !data.pin) {
+                window.location.href = "../pinsetup.html?return=airtime";
+                return;
+            }
 
-function autoLookupNetwork() {
-    let phone = document.getElementById('phone').value;
-    if (phone.length >= 4) {
-        const prefix = phone.substring(0, 4);
-        const networks = {
-            'MTN': ['0803', '0806', '0810', '0813', '0814', '0816', '0703', '0706', '0903', '0906', '0913', '0916', '0702', '0704', '0707'],
-            'GLO': ['0805', '0807', '0811', '0815', '0705', '0905', '0915'],
-            'AIRTEL': ['0802', '0808', '0812', '0701', '0708', '0901', '0902', '0904', '0907', '0912', '0911'],
-            '9MOBILE': ['0809', '0817', '0818', '0908', '0909']
-        };
-        for (const [name, prefixes] of Object.entries(networks)) {
-            if (prefixes.includes(prefix)) {
-                document.getElementById('network').value = name;
-                break;
+            document.getElementById('pinModal').style.display = 'flex';
+            document.getElementById('txnPin').value = '';
+            document.getElementById('pinError').textContent = '';
+
+        } catch (e) {
+            showMessage("Error validating account.");
+        } finally {
+            buyBtn.disabled = false;
+            buyBtn.innerText = "Buy Airtime";
+        }
+    }
+
+    function autoLookupNetwork() {
+        let phone = document.getElementById('phone').value.trim();
+        if (phone.length >= 4) {
+            const prefix = phone.substring(0, 4);
+            const networks = {
+                'mtn': ['0803', '0806', '0810', '0813', '0814', '0816', '0703', '0706', '0903', '0906', '0913', '0916', '0702', '0704', '0707'],
+                'glo': ['0805', '0807', '0811', '0815', '0705', '0905', '0915'],
+                'airtel': ['0802', '0808', '0812', '0701', '0708', '0901', '0902', '0904', '0907', '0912', '0911'],
+                '9mobile': ['0809', '0817', '0818', '0908', '0909']
+            };
+            for (const [name, prefixes] of Object.entries(networks)) {
+                if (prefixes.includes(prefix)) {
+                    document.getElementById('network').value = name;
+                    break;
+                }
             }
         }
     }
-}
 
-function openPinModal() {
-    if(!document.getElementById('amount').value || !document.getElementById('phone').value) {
-        return alert("Fill all fields");
+    function closePinModal() { document.getElementById('pinModal').style.display = 'none'; }
+
+    function togglePinVisibility() {
+        const pinInput = document.getElementById('txnPin');
+        const toggleBtn = document.getElementById('toggleBtn');
+        pinInput.type = (pinInput.type === "password") ? "text" : "password";
+        toggleBtn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
     }
-    document.getElementById('pinModal').style.display = 'flex';
-    document.getElementById('txnPin').value = '';
-}
 
-function closePinModal() { 
-    document.getElementById('pinModal').style.display = 'none'; 
-}
+    async function verifyAndPay() {
+        const enteredPin = document.getElementById('txnPin').value;
+        const user = auth.currentUser;
+        const btn = document.getElementById('confirmBtn');
+        const pinErr = document.getElementById('pinError');
 
-function togglePinVisibility() {
-    const pinInput = document.getElementById('txnPin');
-    const toggleBtn = document.getElementById('toggleBtn');
-    if (pinInput.type === "password") {
-        pinInput.type = "text";
-        toggleBtn.textContent = "Hide PIN";
-    } else {
-        pinInput.type = "password";
-        toggleBtn.textContent = "Show PIN";
-    }
-}
+        if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
 
-async function verifyAndPay() {
-    const enteredPin = document.getElementById('txnPin').value;
-    const user = auth.currentUser;
-    const btn = document.getElementById('confirmBtn');
-    btn.disabled = true; 
-    btn.innerText = "Verifying...";
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+        pinErr.textContent = ""; 
 
-    try {
-        const snap = await database.ref('users/' + user.uid).once('value');
-        if (String(enteredPin) === String(snap.val().transaction_pin)) {
-            executePurchase(snap.val().balance, user.uid);
-        } else {
-            alert("Incorrect PIN");
-            btn.disabled = false; 
-            btn.innerText = "Confirm";
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val();
+            const storedPin = data.transaction_pin || data.pin;
+
+            if (String(enteredPin) === String(storedPin)) {
+                executePurchase(data.balance, user.uid);
+            } else {
+                pinErr.textContent = "Incorrect PIN!";
+                btn.disabled = false;
+                btn.innerText = "Confirm Payment";
+            }
+        } catch(e) {
+            pinErr.textContent = "Validation error.";
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
         }
-    } catch(e) {
-        alert("Error checking PIN");
-        btn.disabled = false; 
-        btn.innerText = "Confirm";
-    }
-}
-
-async function executePurchase(balance, uid) {
-    const amount = document.getElementById('amount').value;
-    const phone = document.getElementById('phone').value;
-    const network = document.getElementById('network').value;
-    const networkMap = { "MTN": "1", "GLO": "2", "9MOBILE": "3", "AIRTEL": "4" };
-
-    if (parseFloat(balance) < parseFloat(amount)) {
-        alert("Insufficient Balance");
-        return closePinModal();
     }
 
-    try {
-        const res = await fetch("https://dnezerlinks-backend.onrender.com/api/airtime/buy", {
-            method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid, phone, amount, networkID: networkMap[network] })
-        });
-        const data = await res.json();
-        if (data.success) {
-            alert("Successful!");
-            window.location.href = "../home.html";
-        } else {
-            alert(data.error || "Transaction Failed");
+    async function executePurchase(balance, uid) {
+        const network = document.getElementById("network").value;
+        const phone = document.getElementById("phone").value;
+        const amount = Number(document.getElementById("amount").value);
+        const pin = document.getElementById("txnPin").value.trim();
+        const btn = document.getElementById('confirmBtn');
+        const pinErr = document.getElementById('pinError');
+
+        if (balance < amount) {
             closePinModal();
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
+            return showMessage("Insufficient Balance");
         }
-    } catch (e) {
-        alert("Network Error. Please try again.");
-        closePinModal();
+
+        try {
+            const response = await fetch("https://dnezerlinks-backend.onrender.com/api/airtime/buy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pin, uid, phone, networkID: networkMap[network], amount })
+            });
+            const res = await response.json();
+            
+            if (res.success) {
+                localStorage.setItem('last_phone', phone);
+                closePinModal();
+                showMessage("Transaction Successful!", false);
+                setTimeout(() => { window.location.href = "../home.html"; }, 2000);
+            } else {
+                // FAIL: Reset button so they can fix and try again
+                pinErr.textContent = res.error || "Transaction Failed";
+                btn.disabled = false;
+                btn.innerText = "Confirm Payment";
+            }
+        } catch (e) {
+            // ERROR: Reset button on network failure
+            pinErr.textContent = "Network Error. Try again.";
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
+        }
     }
-}
 </script>
 </body>
 </html>
