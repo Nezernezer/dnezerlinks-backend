@@ -3,75 +3,92 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-const billstack = axios.create({
-    baseURL: 'https://api.billstack.co/v2/thirdparty',
-    headers: { 
-        'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json'
-    }
-});
+// Reusable Billstack request helper
+const billstackApi = async (endpoint, payload) => {
+    return await axios({
+        method: 'POST',
+        url: `https://api.billstack.co/v2/thirdparty/${endpoint}`,
+        headers: {
+            'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        data: payload,
+        timeout: 20000
+    });
+};
 
 router.post('/fund', async (req, res) => {
     const { uid, email, first_name, last_name, phone } = req.body;
 
     try {
-        const cleanEmail = email.toLowerCase().trim();
-        const cleanPhone = phone ? phone.replace(/\s+/g, '') : "08000000000";
-        
-        const payload = {
-            email: cleanEmail,
-            firstName: first_name || "Customer",
-            lastName: last_name || "User",
-            phone: cleanPhone,
-            reference: `DZN-${uid.slice(0,4)}-${Date.now()}`
-        };
+        if (!uid || !email) throw new Error("User identification missing");
 
-        // STEP 1: Register Customer (Fixes "Email not Found")
-        console.log(`[Dnezerlinks] Registering: ${cleanEmail}`);
+        const cleanEmail = email.toLowerCase().trim();
+        const cleanFirst = (first_name || "Customer").trim();
+        const cleanLast = (last_name || "Dnezer").trim();
+        const cleanPhone = phone ? phone.replace(/\s+/g, '') : "08000000000";
+
+        // STEP 1: Register Customer on Billstack (Fixes "Email not Found")
         try {
-            await billstack.post('/createCustomer', {
-                email: payload.email,
-                firstName: payload.firstName,
-                lastName: payload.lastName,
-                phone: payload.phone
+            console.log(`[Account] Registering ${cleanEmail}...`);
+            await billstackApi('createCustomer', {
+                email: cleanEmail,
+                firstName: cleanFirst,
+                lastName: cleanLast,
+                phone: cleanPhone
             });
-            // CRITICAL: Give Billstack 2 seconds to index the new customer
-            await new Promise(r => setTimeout(r, 2000));
+            // Small delay for system propagation
+            await new Promise(r => setTimeout(r, 1000));
         } catch (e) {
-            console.log("Customer already exists or error ignored.");
+            console.log("[Account] Customer already exists on Billstack.");
         }
 
-        // STEP 2: Waterfall Generation
+        // STEP 2: Waterfall Generation (PalmPay -> 9PSB -> Providus)
         const banks = ["PALMPAY", "9PSB", "PROVIDUS"];
-        let account = null;
+        let finalAccount = null;
+        let lastError = "";
 
         for (const bank of banks) {
             try {
-                console.log(`[Dnezerlinks] Trying bank: ${bank}`);
-                const response = await billstack.post('/generateVirtualAccount', { ...payload, bank });
-                if (response.data?.status && response.data.data?.account?.[0]) {
-                    account = response.data.data.account[0];
-                    break;
+                console.log(`[Account] Attempting ${bank}...`);
+                const response = await billstackApi('generateVirtualAccount', {
+                    email: cleanEmail,
+                    firstName: cleanFirst,
+                    lastName: cleanLast,
+                    phone: cleanPhone,
+                    bank: bank,
+                    reference: `ACC-${uid.substring(0,5)}-${Date.now()}`
+                });
+
+                if (response.data?.status === true && response.data.data?.account?.[0]) {
+                    finalAccount = response.data.data.account[0];
+                    break; 
                 }
-            } catch (e) {
-                console.error(`${bank} failed: ${e.response?.data?.message || e.message}`);
+            } catch (err) {
+                lastError = err.response?.data?.message || err.message;
             }
         }
 
-        if (!account) throw new Error("All bank gateways are currently busy. Try again in 1 minute.");
+        if (!finalAccount) throw new Error(`Gateway Busy: ${lastError}`);
 
-        // STEP 3: Save to Firebase
-        const accName = `${payload.lastName} ${payload.firstName[0]} - Dnezerlinks`;
+        // STEP 3: Save to Firebase with Dnezerlinks branding
+        const displayName = `${cleanLast} ${cleanFirst[0]} - Dnezerlinks`;
         await db.ref(`users/${uid}`).update({
-            bank_name: account.bank_name,
-            account_number: account.account_number,
-            account_name: accName,
+            bank_name: finalAccount.bank_name,
+            account_number: finalAccount.account_number,
+            account_name: displayName,
             email: cleanEmail
         });
 
-        res.json({ success: true, ...account, account_name: accName });
+        res.json({
+            success: true,
+            bank_name: finalAccount.bank_name,
+            account_number: finalAccount.account_number,
+            account_name: displayName
+        });
 
     } catch (err) {
+        console.error("[Account Error]:", err.message);
         res.status(400).json({ success: false, error: err.message });
     }
 });
