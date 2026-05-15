@@ -24,16 +24,15 @@ app.use(express.json());
 
 // ================= SECURITY GATEKEEPER =================
 const securityGatekeeper = async (req, res, next) => {
-    // Allow GET routes and root
     if (req.method === 'GET' || req.path === '/') {
         return next();
     }
 
-    // ================= BYPASS ROUTES =================
-    // We must include the full path including /api prefix
+    // Fix: Remove the /api prefix here because app.use('/api') already consumes it
     const bypassRoutes = [
-        '/api/webhook/billstack',
-        '/api/account/fund'
+        '/webhook/billstack',
+        '/account/fund',
+        '/fund' // Adding this just in case
     ];
 
     if (bypassRoutes.includes(req.path)) {
@@ -41,14 +40,10 @@ const securityGatekeeper = async (req, res, next) => {
         return next();
     }
 
-    // ================= PROTECTED ROUTES LOGIC =================
     const { uid, pin } = req.body;
 
-    if (!uid || String(uid).includes('.')) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid Session: Please re-login'
-        });
+    if (!uid) {
+        return res.status(400).json({ success: false, error: 'Invalid Session' });
     }
 
     try {
@@ -56,54 +51,36 @@ const securityGatekeeper = async (req, res, next) => {
         const user = snapshot.val();
 
         if (!user) {
-            return res.status(404).json({
-                success: false,
-                error: 'Account not found'
-            });
+            return res.status(404).json({ success: false, error: 'Account not found' });
         }
 
-        // Validate PIN for financial services (Airtime, Data, etc.)
-        const storedPin = user.transaction_pin || user.pin;
-        if (!storedPin || String(storedPin).trim() !== String(pin || '').trim()) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid PIN'
-            });
+        // Flexible PIN check: Handles both 'transaction_pin' and 'pin'
+        const storedPin = String(user.transaction_pin || user.pin || "").trim();
+        const providedPin = String(pin || "").trim();
+
+        if (!storedPin || storedPin !== providedPin) {
+            console.log(`[Gatekeeper] PIN Mismatch for ${uid}`);
+            return res.status(400).json({ success: false, error: 'Invalid PIN' });
         }
 
         req.user = user;
         next();
-
     } catch (error) {
         console.error("Gatekeeper Error:", error.message);
-        return res.status(500).json({
-            success: false,
-            error: 'Authentication Error'
-        });
+        return res.status(500).json({ success: false, error: 'Authentication Error' });
     }
 };
 
 // ================= ROUTES =================
+// The Gatekeeper is applied to everything under /api
 app.use('/api', securityGatekeeper);
 app.use('/api', require('./routes/api'));
 
-// ================= HEALTH CHECK =================
-app.get('/health', (req, res) => {
-    res.json({
-        success: true,
-        status: 'online',
-        timestamp: Date.now()
-    });
-});
+// ================= HEALTH CHECK & ROOT =================
+app.get('/health', (req, res) => res.json({ success: true }));
+app.get('/', (req, res) => res.send('Dnezerlinks API Online'));
 
-// ================= ROOT =================
-app.get('/', (req, res) => {
-    res.send('Dnezerlinks API Online');
-});
-
-// ================= START SERVER =================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 Server started on port ${PORT}`);
-    console.log('✅ Webhook URL: https://dnezerlinks-backend.onrender.com/api/webhook/billstack');
+    console.log(`🚀 Dnezerlinks Server started on port ${PORT}`);
 });
