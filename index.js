@@ -2,18 +2,18 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// ================= FIREBASE INIT =================
-try {
-    if (!admin.apps.length) {
+// ================= FIREBASE ADMIN INIT =================
+if (!admin.apps.length) {
+    try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
         console.log("✅ Firebase Admin Initialized");
+    } catch (error) {
+        console.error("❌ Firebase Init Error:", error.message);
     }
-} catch (error) {
-    console.error("❌ FIREBASE INIT ERROR:", error.message);
 }
 
 const app = express();
@@ -24,62 +24,46 @@ app.use(express.json());
 
 // ================= SECURITY GATEKEEPER =================
 const securityGatekeeper = async (req, res, next) => {
-    if (req.method === 'GET' || req.path === '/') {
-        return next();
-    }
+    if (req.method === 'GET' || req.path === '/') return next();
 
-    // Fix: Remove the /api prefix here because app.use('/api') already consumes it
-    const bypassRoutes = [
-        '/webhook/billstack',
-        '/account/fund',
-        '/fund' // Adding this just in case
-    ];
-
+    // Bypass list for Dnezerlinks account generation and webhooks
+    const bypassRoutes = ['/account/fund', '/webhook/billstack'];
+    
     if (bypassRoutes.includes(req.path)) {
         console.log(`[Gatekeeper] Bypassing security for: ${req.path}`);
         return next();
     }
 
     const { uid, pin } = req.body;
-
-    if (!uid) {
-        return res.status(400).json({ success: false, error: 'Invalid Session' });
-    }
+    if (!uid) return res.status(401).json({ success: false, error: "Session expired" });
 
     try {
-        const snapshot = await admin.database().ref(`users/${uid}`).once('value');
-        const user = snapshot.val();
-
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'Account not found' });
-        }
-
-        // Flexible PIN check: Handles both 'transaction_pin' and 'pin'
-        const storedPin = String(user.transaction_pin || user.pin || "").trim();
+        const snap = await admin.database().ref(`users/${uid}`).once('value');
+        const user = snap.val();
+        
+        // Flexible PIN check for other transaction routes
+        const storedPin = String(user?.transaction_pin || user?.pin || "").trim();
         const providedPin = String(pin || "").trim();
 
         if (!storedPin || storedPin !== providedPin) {
-            console.log(`[Gatekeeper] PIN Mismatch for ${uid}`);
-            return res.status(400).json({ success: false, error: 'Invalid PIN' });
+            return res.status(400).json({ success: false, error: "Invalid PIN" });
         }
-
+        
         req.user = user;
         next();
-    } catch (error) {
-        console.error("Gatekeeper Error:", error.message);
-        return res.status(500).json({ success: false, error: 'Authentication Error' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: "Authentication Error" });
     }
 };
 
-// ================= ROUTES =================
-// The Gatekeeper is applied to everything under /api
+// ================= ROUTE REGISTRATION =================
 app.use('/api', securityGatekeeper);
-app.use('/api', require('./routes/api'));
+app.use('/api/account', require('./routes/accountRoutes'));
+app.use('/api/webhook', require('./routes/webhookRoutes'));
 
-// ================= HEALTH CHECK & ROOT =================
-app.get('/health', (req, res) => res.json({ success: true }));
-app.get('/', (req, res) => res.send('Dnezerlinks API Online'));
+app.get('/', (req, res) => res.send('Dnezerlinks API Active'));
 
+// ================= START SERVER =================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Dnezerlinks Server started on port ${PORT}`);
