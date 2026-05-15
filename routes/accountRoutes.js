@@ -12,18 +12,14 @@ const billstack = axios.create({
 });
 
 router.post('/fund', async (req, res) => {
-    const { uid, email, first_name, last_name, phone, pin } = req.body;
+    // Removed 'pin' from the required fields here
+    const { uid, email, first_name, last_name, phone } = req.body;
 
     try {
-        if (!uid || !email || !pin) throw new Error("Incomplete request data (UID, Email, or PIN missing)");
+        console.log(`[Account Gen] Request for UID: ${uid}, Email: ${email}`);
 
-        // 1. PIN VALIDATION (Fixes "Invalid PIN" error)
-        const userRef = db.ref(`users/${uid}`);
-        const userSnap = await userRef.once('value');
-        const userData = userSnap.val();
-
-        if (!userData || String(userData.pin) !== String(pin)) {
-            return res.status(400).json({ success: false, error: "Invalid PIN" });
+        if (!uid || !email) {
+            throw new Error("Missing UID or Email in request");
         }
 
         const cleanEmail = email.toLowerCase().trim();
@@ -31,23 +27,24 @@ router.post('/fund', async (req, res) => {
             email: cleanEmail,
             firstName: first_name || "Customer",
             lastName: last_name || "Dnezer",
-            phone: phone ? phone.replace(/\s+/g, '') : "08000000000"
+            phone: phone || "08000000000"
         };
 
-        // 2. REGISTER CUSTOMER (Prevents "Email not Found" state error)
+        // 1. REGISTER CUSTOMER
         try {
             await billstack.post('/createCustomer', payload);
-            await new Promise(r => setTimeout(r, 2000)); // Delay for Billstack sync
+            await new Promise(r => setTimeout(r, 2000)); 
         } catch (e) {
-            console.log("[Account] Customer verified or updated.");
+            console.log("Customer setup confirmed.");
         }
 
-        // 3. WATERFALL GENERATION (PalmPay -> 9PSB -> Providus)
+        // 2. WATERFALL GENERATION
         const banks = ["PALMPAY", "9PSB", "PROVIDUS"];
         let account = null;
 
         for (const bank of banks) {
             try {
+                console.log(`Trying ${bank}...`);
                 const response = await billstack.post('/generateVirtualAccount', {
                     ...payload,
                     bank: bank,
@@ -59,15 +56,15 @@ router.post('/fund', async (req, res) => {
                     break;
                 }
             } catch (err) {
-                console.error(`[Bank Fail] ${bank}:`, err.response?.data?.message || err.message);
+                console.error(`${bank} fail:`, err.response?.data?.message || err.message);
             }
         }
 
-        if (!account) throw new Error("Bank gateways are currently unresponsive. Please try again.");
+        if (!account) throw new Error("All bank gateways are currently busy. Try again.");
 
-        // 4. SAVE TO FIREBASE
+        // 3. SAVE TO FIREBASE
         const accName = `${payload.lastName} ${payload.firstName[0]} - Dnezerlinks`;
-        await userRef.update({
+        await db.ref(`users/${uid}`).update({
             bank_name: account.bank_name,
             account_number: account.account_number,
             account_name: accName,
@@ -76,8 +73,9 @@ router.post('/fund', async (req, res) => {
 
         res.json({ success: true, ...account, account_name: accName });
 
-    } catch (err) {
-        res.status(400).json({ success: false, error: err.message });
+    } catch (error) {
+        console.error("Fund Error:", error.message);
+        res.status(400).json({ success: false, error: error.message });
     }
 });
 
