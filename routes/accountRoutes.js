@@ -3,92 +3,80 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// Reusable Billstack request helper
-const billstackApi = async (endpoint, payload) => {
-    return await axios({
-        method: 'POST',
-        url: `https://api.billstack.co/v2/thirdparty/${endpoint}`,
-        headers: {
-            'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        data: payload,
-        timeout: 20000
-    });
-};
+const billstack = axios.create({
+    baseURL: 'https://api.billstack.co/v2/thirdparty',
+    headers: { 
+        'Authorization': `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+    }
+});
 
 router.post('/fund', async (req, res) => {
-    const { uid, email, first_name, last_name, phone } = req.body;
+    const { uid, email, first_name, last_name, phone, pin } = req.body;
 
     try {
-        if (!uid || !email) throw new Error("User identification missing");
+        if (!uid || !email || !pin) throw new Error("Incomplete request data (UID, Email, or PIN missing)");
 
-        const cleanEmail = email.toLowerCase().trim();
-        const cleanFirst = (first_name || "Customer").trim();
-        const cleanLast = (last_name || "Dnezer").trim();
-        const cleanPhone = phone ? phone.replace(/\s+/g, '') : "08000000000";
+        // 1. PIN VALIDATION (Fixes "Invalid PIN" error)
+        const userRef = db.ref(`users/${uid}`);
+        const userSnap = await userRef.once('value');
+        const userData = userSnap.val();
 
-        // STEP 1: Register Customer on Billstack (Fixes "Email not Found")
-        try {
-            console.log(`[Account] Registering ${cleanEmail}...`);
-            await billstackApi('createCustomer', {
-                email: cleanEmail,
-                firstName: cleanFirst,
-                lastName: cleanLast,
-                phone: cleanPhone
-            });
-            // Small delay for system propagation
-            await new Promise(r => setTimeout(r, 1000));
-        } catch (e) {
-            console.log("[Account] Customer already exists on Billstack.");
+        if (!userData || String(userData.pin) !== String(pin)) {
+            return res.status(400).json({ success: false, error: "Invalid PIN" });
         }
 
-        // STEP 2: Waterfall Generation (PalmPay -> 9PSB -> Providus)
+        const cleanEmail = email.toLowerCase().trim();
+        const payload = {
+            email: cleanEmail,
+            firstName: first_name || "Customer",
+            lastName: last_name || "Dnezer",
+            phone: phone ? phone.replace(/\s+/g, '') : "08000000000"
+        };
+
+        // 2. REGISTER CUSTOMER (Prevents "Email not Found" state error)
+        try {
+            await billstack.post('/createCustomer', payload);
+            await new Promise(r => setTimeout(r, 2000)); // Delay for Billstack sync
+        } catch (e) {
+            console.log("[Account] Customer verified or updated.");
+        }
+
+        // 3. WATERFALL GENERATION (PalmPay -> 9PSB -> Providus)
         const banks = ["PALMPAY", "9PSB", "PROVIDUS"];
-        let finalAccount = null;
-        let lastError = "";
+        let account = null;
 
         for (const bank of banks) {
             try {
-                console.log(`[Account] Attempting ${bank}...`);
-                const response = await billstackApi('generateVirtualAccount', {
-                    email: cleanEmail,
-                    firstName: cleanFirst,
-                    lastName: cleanLast,
-                    phone: cleanPhone,
+                const response = await billstack.post('/generateVirtualAccount', {
+                    ...payload,
                     bank: bank,
-                    reference: `ACC-${uid.substring(0,5)}-${Date.now()}`
+                    reference: `DZN-${uid.slice(0, 5)}-${Date.now()}`
                 });
 
-                if (response.data?.status === true && response.data.data?.account?.[0]) {
-                    finalAccount = response.data.data.account[0];
-                    break; 
+                if (response.data?.status && response.data.data?.account?.[0]) {
+                    account = response.data.data.account[0];
+                    break;
                 }
             } catch (err) {
-                lastError = err.response?.data?.message || err.message;
+                console.error(`[Bank Fail] ${bank}:`, err.response?.data?.message || err.message);
             }
         }
 
-        if (!finalAccount) throw new Error(`Gateway Busy: ${lastError}`);
+        if (!account) throw new Error("Bank gateways are currently unresponsive. Please try again.");
 
-        // STEP 3: Save to Firebase with Dnezerlinks branding
-        const displayName = `${cleanLast} ${cleanFirst[0]} - Dnezerlinks`;
-        await db.ref(`users/${uid}`).update({
-            bank_name: finalAccount.bank_name,
-            account_number: finalAccount.account_number,
-            account_name: displayName,
+        // 4. SAVE TO FIREBASE
+        const accName = `${payload.lastName} ${payload.firstName[0]} - Dnezerlinks`;
+        await userRef.update({
+            bank_name: account.bank_name,
+            account_number: account.account_number,
+            account_name: accName,
             email: cleanEmail
         });
 
-        res.json({
-            success: true,
-            bank_name: finalAccount.bank_name,
-            account_number: finalAccount.account_number,
-            account_name: displayName
-        });
+        res.json({ success: true, ...account, account_name: accName });
 
     } catch (err) {
-        console.error("[Account Error]:", err.message);
         res.status(400).json({ success: false, error: err.message });
     }
 });

@@ -1,33 +1,21 @@
 {
   "rules": {
     "users": {
-      // Required for the webhook to find users by email
       ".indexOn": ["email"],
       "$uid": {
-        // Users can read/write their own data; Master Admin has full access
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
         ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
-
     "transactions": {
       "$uid": {
-        // Indexing for high-performance history loading
-        ".indexOn": ["created_at", "timestamp"],
+        ".indexOn": ["timestamp"],
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
         ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
-
     "processed_webhooks": {
-      // Only the Master Admin (and Admin SDK) can manage webhook logs
       ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
-      ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
-    },
-
-    "settings": {
-      // Prices and app state are public; only Master Admin can edit
-      ".read": "true",
       ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
     }
   }
