@@ -1,26 +1,21 @@
 {
   "rules": {
-    ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
-    ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
-
     "users": {
       ".indexOn": ["email"],
       "$uid": {
-        // Only the owner of the account or the Admin can read/write
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
-
     "transactions": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".indexOn": ["timestamp"],
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
-    
-    "settings": {
-      ".read": "true",
+    "processed_webhooks": {
+      ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
       ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
     }
   }
