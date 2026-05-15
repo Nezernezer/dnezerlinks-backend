@@ -1,0 +1,16 @@
+[debug] [2026-05-15T05:43:56.129Z] ----------------------------------------------------------------------
+[debug] [2026-05-15T05:43:56.169Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase deploy
+[debug] [2026-05-15T05:43:56.172Z] CLI Version:   15.7.0
+[debug] [2026-05-15T05:43:56.173Z] Platform:      android
+[debug] [2026-05-15T05:43:56.173Z] Node Version:  v25.8.2
+[debug] [2026-05-15T05:43:56.174Z] Time:          Fri May 15 2026 06:43:56 GMT+0100 (West Africa Time)
+[debug] [2026-05-15T05:43:56.176Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-15T05:49:37.690Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-15T05:49:37.705Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-05-15T05:49:37.707Z] [iam] checking project dnezerlinks for permissions ["firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update"]
+[debug] [2026-05-15T05:49:37.716Z] Checked if tokens are valid: false, expires at: 1778824099462
+[debug] [2026-05-15T05:49:37.718Z] Checked if tokens are valid: false, expires at: 1778824099462
+[debug] [2026-05-15T05:49:37.720Z] > refreshing access token with scopes: []
+[debug] [2026-05-15T05:49:37.738Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-05-15T05:49:37.739Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]

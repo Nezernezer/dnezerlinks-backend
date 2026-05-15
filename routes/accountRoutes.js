@@ -1,4 +1,4 @@
-const express = require('express');
+‘const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
@@ -25,15 +25,14 @@ router.post('/fund', async (req, res) => {
             phone: phone || "08000000000"
         };
 
-        // 1. Ensure Customer exists on Billstack
+        // Ensure customer exists on Billstack
         try {
             await billstack.post('/createCustomer', payload);
-            await new Promise(r => setTimeout(r, 2000)); 
-        } catch (e) {
-            console.log("Customer setup confirmed.");
+        } catch (e) { 
+            console.log("Customer setup verified."); 
         }
 
-        // 2. SEQUENTIAL WATERFALL: PalmPay -> 9PSB -> WEMA -> Sterling -> Providus
+        // SEQUENCE: PalmPay -> 9PSB -> WEMA -> Sterling -> Providus
         const banks = ["PALMPAY", "9PSB", "WEMA", "STERLING", "PROVIDUS"];
         let account = null;
 
@@ -41,6 +40,7 @@ router.post('/fund', async (req, res) => {
             try {
                 console.log(`[Waterfall] Requesting ${bank}...`);
                 
+                // The code pauses here until Billstack sends a response for THIS specific bank
                 const response = await billstack.post('/generateVirtualAccount', {
                     ...payload,
                     bank: bank,
@@ -49,18 +49,20 @@ router.post('/fund', async (req, res) => {
 
                 if (response.data?.status && response.data.data?.account?.[0]) {
                     account = response.data.data.account[0];
-                    console.log(`✅ ${bank} generated successfully.`);
-                    break; // Exit loop on success
+                    console.log(`✅ Success with ${bank}`);
+                    break; // Stop and exit the loop immediately on success
                 }
             } catch (err) {
-                console.error(`❌ ${bank} failed:`, err.response?.data?.message || err.message);
-                // Loop automatically continues to the next bank
+                // If the bank returns an error, log it and the loop automatically moves to the next bank
+                console.error(`❌ ${bank} responded:`, err.response?.data?.message || err.message);
             }
         }
 
-        if (!account) throw new Error("All bank gateways are currently busy. Please try again.");
+        if (!account) {
+            throw new Error("All bank gateways are currently busy. Please try again.");
+        }
 
-        // 3. SAVE & BRAND FOR DNEZERLINKS
+        // Save to Firebase for Dnezerlinks branding
         const accName = `${payload.lastName} ${payload.firstName[0]} - Dnezerlinks`;
         await db.ref(`users/${uid}`).update({
             bank_name: account.bank_name,
@@ -77,3 +79,4 @@ router.post('/fund', async (req, res) => {
 });
 
 module.exports = router;
+
