@@ -52,32 +52,40 @@ router.post('/fund', async (req, res) => {
                     }
                 );
 
+                // Log full response for debugging
+                console.log(`📥 Response from ${bank}:`, JSON.stringify(response.data, null, 2));
+
                 const resData = response.data;
                 const accountData = resData.data || resData;
 
-                if (accountData.account_number || accountData.accountNumber) {
+                // Better success check
+                if (resData.status === true && (accountData?.account_number || accountData?.accountNumber)) {
                     accountCreated = {
                         bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
                         account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
                     };
                     console.log(`✅ SUCCESS with ${bank} - Stopping further attempts`);
-                    break;   // ← Important: Stop on first success
+                    break;
+                } else {
+                    // Log why it failed
+                    const failMsg = resData.message || resData.error || "No account_number returned";
+                    console.log(`⚠️ ${bank} returned but failed: ${failMsg}`);
+                    errors.push({ bank, error: failMsg });
                 }
 
             } catch (bankError) {
                 const errDetail = bankError.response?.data || bankError.message;
                 errors.push({ bank, error: errDetail });
-                console.error(`❌ ${bank} failed:`, errDetail);
+                console.error(`❌ ${bank} Error:`, errDetail);
             }
         }
 
-        // Final check
         if (!accountCreated || !accountCreated.account_number) {
             console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "All banks failed. Please try again later.",
+                error: "Service temporarily unavailable. Please try again in a few minutes.",
                 details: errors
             });
         }
@@ -92,11 +100,11 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Account successfully saved to Firebase for UID: ${uid}`);
+        console.log(`✅ Account saved to Firebase for UID: ${uid}`);
 
         res.json({
             success: true,
-            message: `Virtual account created successfully with ${accountCreated.bank_name}`,
+            message: `Virtual account created with ${accountCreated.bank_name}`,
             account: accountCreated
         });
 
