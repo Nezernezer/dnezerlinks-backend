@@ -6,15 +6,27 @@
     <title>Fund Wallet - Dnezerlinks</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .container { max-width: 550px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
         .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        .bank-card { border: 2px dashed #007bff; padding: 15px; border-radius: 10px; background: #eef6ff; }
+        
+        .bank-card { 
+            border: 2px solid #007bff; 
+            padding: 15px; 
+            border-radius: 10px; 
+            background: #eef6ff; 
+            margin-bottom: 15px;
+        }
         .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; display: block; }
-        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; display: block; }
+        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; display: block; }
         .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
-        #acc-number { font-size: 1.4rem; color: #222; font-weight: bold; }
-        .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        #acc-number { font-size: 1.35rem; color: #222; font-weight: bold; }
+
+        .copy-btn { 
+            background: #007bff; color: white; border: none; padding: 6px 12px; 
+            border-radius: 5px; cursor: pointer; font-size: 0.9rem;
+        }
+        .copy-btn:hover { background: #0056b3; }
 
         #status-msg {
             text-align: center;
@@ -22,11 +34,12 @@
             padding: 20px;
             font-size: 1.1rem;
             min-height: 100px;
-            transition: all 0.4s ease;
         }
         .error { color: #e74c3c !important; }
         .success { color: #27ae60 !important; }
-        #account-ui { display: none; }
+
+        .multiple-accounts { margin-top: 20px; }
+        .multiple-accounts h3 { color: #007bff; text-align: center; margin: 15px 0 10px; }
     </style>
 </head>
 <body>
@@ -42,19 +55,17 @@
 
     <div id="status-msg">Checking account status...</div>
 
-    <div id="account-ui">
-        <div class="bank-card">
-            <span class="label">BANK NAME</span>
-            <span class="value" id="bank-name">---</span>
-            <span class="label">ACCOUNT NUMBER</span>
-            <div class="acc-num-row">
-                <span id="acc-number">----------</span>
-                <button class="copy-btn" onclick="copyAccount()">Copy</button>
-            </div>
-            <span class="label" style="margin-top:15px;">ACCOUNT NAME</span>
-            <span class="value" id="acc-name">---</span>
+    <div id="account-ui" style="display: none;">
+        <!-- Primary Account -->
+        <div id="primary-account"></div>
+
+        <!-- Multiple Accounts -->
+        <div id="multiple-accounts" class="multiple-accounts" style="display: none;">
+            <h3>Other Virtual Accounts</h3>
+            <div id="other-accounts-list"></div>
         </div>
-        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:10px;">
+
+        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:15px;">
             Note: A 2% fee applies to all automated deposits.
         </p>
     </div>
@@ -82,28 +93,45 @@
         const statusMsg = document.getElementById("status-msg");
         const messages = [
             "Checking your account status...",
-            "Sending request to Billstack...",
-            "Generating dedicated account number...",
-            "Processing your details, please wait..."
+            "Connecting to Billstack...",
+            "Generating virtual accounts...",
+            "Please wait while we process..."
         ];
         let i = 0;
-
         if (animationInterval) clearInterval(animationInterval);
-        
         animationInterval = setInterval(() => {
-            statusMsg.innerText = messages[i];
-            i = (i + 1) % messages.length;
-        }, 3500);
+            statusMsg.innerText = messages[i % messages.length];
+            i++;
+        }, 3200);
     }
 
     function stopAnimationAndShow(message, isError = false) {
-        if (animationInterval) {
-            clearInterval(animationInterval);
-            animationInterval = null;
-        }
+        if (animationInterval) clearInterval(animationInterval);
         const status = document.getElementById("status-msg");
         status.innerText = message;
         status.className = isError ? "error" : "success";
+    }
+
+    function createAccountCard(account, isPrimary = false) {
+        return `
+            <div class="bank-card">
+                <span class="label">${isPrimary ? 'PRIMARY ACCOUNT' : 'ACCOUNT'}</span>
+                <span class="value">${account.bank_name}</span>
+                <span class="label">ACCOUNT NUMBER</span>
+                <div class="acc-num-row">
+                    <span style="font-size:1.35rem; font-weight:bold;">${account.account_number}</span>
+                    <button class="copy-btn" onclick="copyAccount('${account.account_number}')">Copy</button>
+                </div>
+                <span class="label" style="margin-top:8px;">ACCOUNT NAME</span>
+                <span class="value">${account.account_name}</span>
+            </div>
+        `;
+    }
+
+    function copyAccount(number) {
+        navigator.clipboard.writeText(number).then(() => {
+            alert("Account number copied!");
+        });
     }
 
     firebase.auth().onAuthStateChanged(async (user) => {
@@ -114,21 +142,18 @@
         userRef.on('value', async (snap) => {
             const data = snap.val() || {};
 
-            // === ACCOUNT ALREADY EXISTS ===
             if (data.account_number) {
+                // Show from Firebase
                 document.getElementById("wallet-balance").innerText = 
                     "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
 
-                document.getElementById("bank-name").innerText = data.bank_name || "N/A";
-                document.getElementById("acc-number").innerText = data.account_number;
-                document.getElementById("acc-name").innerText = data.account_name || "Customer";
-
+                document.getElementById("primary-account").innerHTML = createAccountCard(data, true);
                 document.getElementById("status-msg").style.display = "none";
                 document.getElementById("account-ui").style.display = "block";
                 return;
             }
 
-            // === NO ACCOUNT → CREATE ONE ===
+            // No account yet → Create via backend
             if (!animationInterval) startLoadingAnimations();
 
             const rawName = data.name || "";
@@ -151,28 +176,34 @@
 
                 const result = await response.json();
 
-                // Stop animation and show backend message
                 if (result.success) {
-                    stopAnimationAndShow(result.message || "Account created successfully!");
+                    stopAnimationAndShow(result.message || "Accounts generated successfully!");
+
+                    // Display Primary Account
+                    document.getElementById("primary-account").innerHTML = 
+                        createAccountCard(result.primaryAccount || result.account, true);
+
+                    // Display Other Accounts if any
+                    if (result.allAccounts && result.allAccounts.length > 1) {
+                        let html = '';
+                        for (let i = 1; i < result.allAccounts.length; i++) {
+                            html += createAccountCard(result.allAccounts[i]);
+                        }
+                        document.getElementById("other-accounts-list").innerHTML = html;
+                        document.getElementById("multiple-accounts").style.display = "block";
+                    }
+
+                    document.getElementById("status-msg").style.display = "none";
+                    document.getElementById("account-ui").style.display = "block";
                 } else {
-                    stopAnimationAndShow(
-                        result.error || result.details || "Failed to create account. Please refresh.", 
-                        true
-                    );
+                    stopAnimationAndShow(result.error || "Failed to create accounts", true);
                 }
             } catch (err) {
                 console.error(err);
-                stopAnimationAndShow("Network error. Please check your connection and refresh the page.", true);
+                stopAnimationAndShow("Network error. Please refresh and try again.", true);
             }
         });
     });
-
-    function copyAccount() {
-        const num = document.getElementById("acc-number").innerText;
-        if (num && num.length > 5) {
-            navigator.clipboard.writeText(num).then(() => alert("Account number copied to clipboard!"));
-        }
-    }
 </script>
 </body>
 </html>

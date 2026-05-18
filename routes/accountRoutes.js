@@ -17,22 +17,25 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
+        // Return existing account if any
         if (userData?.account_number) {
             return res.json({ success: true, account: userData });
         }
 
-        console.log(`\n🔄 Starting account creation for UID: ${uid}`);
+        console.log(`\n🔄 Starting account creation for UID: ${uid} - All banks mode`);
 
-        let accountCreated = null;
+        const successfulAccounts = [];
         const errors = [];
 
         for (const bank of SUPPORTED_BANKS) {
             try {
-                console.log(`Trying ${bank}...`);
+                const uniqueReference = `VA_\( {uid}_ \){bank}_${Date.now()}`;
+
+                console.log(`Trying ${bank} with ref: ${uniqueReference}`);
 
                 const payload = {
                     email: email.trim().toLowerCase(),
-                    reference: `VA_\( {uid}_ \){Date.now()}`,
+                    reference: uniqueReference,
                     firstName: first_name.trim(),
                     lastName: last_name.trim(),
                     phone: phone.trim().replace(/\D/g, ''),
@@ -52,25 +55,23 @@ router.post('/fund', async (req, res) => {
                     }
                 );
 
-                // Log full response for debugging
                 console.log(`📥 Response from ${bank}:`, JSON.stringify(response.data, null, 2));
 
                 const resData = response.data;
                 const accountData = resData.data || resData;
 
-                // Better success check
                 if (resData.status === true && (accountData?.account_number || accountData?.accountNumber)) {
-                    accountCreated = {
+                    const newAccount = {
                         bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
-                        account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
+                        account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`,
+                        bank_code: bank
                     };
-                    console.log(`✅ SUCCESS with ${bank} - Stopping further attempts`);
-                    break;
+                    successfulAccounts.push(newAccount);
+                    console.log(`✅ SUCCESS with ${bank}`);
                 } else {
-                    // Log why it failed
-                    const failMsg = resData.message || resData.error || "No account_number returned";
-                    console.log(`⚠️ ${bank} returned but failed: ${failMsg}`);
+                    const failMsg = resData.message || "Failed to generate account";
+                    console.log(`⚠️ ${bank} failed: ${failMsg}`);
                     errors.push({ bank, error: failMsg });
                 }
 
@@ -81,31 +82,34 @@ router.post('/fund', async (req, res) => {
             }
         }
 
-        if (!accountCreated || !accountCreated.account_number) {
+        if (successfulAccounts.length === 0) {
             console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "Service temporarily unavailable. Please try again in a few minutes.",
+                error: "Could not create any virtual account at the moment.",
                 details: errors
             });
         }
 
-        // Save to Firebase
+        // Save the FIRST successful account to Firebase (main account)
+        const primaryAccount = successfulAccounts[0];
+
         await userRef.update({
-            bank_name: accountCreated.bank_name,
-            account_number: accountCreated.account_number,
-            account_name: accountCreated.account_name,
+            bank_name: primaryAccount.bank_name,
+            account_number: primaryAccount.account_number,
+            account_name: primaryAccount.account_name,
             email: email.trim().toLowerCase(),
             balance: userData?.balance || 0,
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Account saved to Firebase for UID: ${uid}`);
+        console.log(`✅ Primary account saved to Firebase (${primaryAccount.bank_name})`);
 
         res.json({
             success: true,
-            message: `Virtual account created with ${accountCreated.bank_name}`,
-            account: accountCreated
+            message: `Successfully created ${successfulAccounts.length} account(s)`,
+            primaryAccount: primaryAccount,
+            allAccounts: successfulAccounts   // Return all for future use
         });
 
     } catch (err) {
