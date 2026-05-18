@@ -17,7 +17,7 @@ router.post('/fund', async (req, res) => {
         }
 
         // Call Billstack V2 API
-        const response = await axios.post('https://api.billstack.co/v2/virtual-accounts',
+        const response = await axios.post('https://api.billstack.co/v2/thirdparty/generateVirtualAccount',
             { 
                 email: email, 
                 first_name: first_name, 
