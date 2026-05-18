@@ -1,27 +1,30 @@
 {
   "rules": {
-    ".read": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
-    ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
+    // Master Admin Global Rules
+    ".read": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
+    ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
     "users": {
       ".indexOn": ["email"],
       "$uid": {
-        // Only the owner of the account or the Admin can read/write
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        // Access granted if it's the specific account owner OR the Master Admin
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
 
     "transactions": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        // Access granted if it's the specific transaction owner OR the Master Admin
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
-    
+
     "settings": {
+      // Settings can be viewed by public/frontend, but edited only by Master Admin
       ".read": "true",
-      ".write": "auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+      ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
     }
   }
 }
