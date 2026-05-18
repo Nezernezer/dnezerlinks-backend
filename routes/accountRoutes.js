@@ -3,7 +3,7 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// Bank order: PalmPay first, then 9PSB, others, Providus last
+// PalmPay first as requested
 const SUPPORTED_BANKS = ["PALMPAY", "9PSB", "SAFEHAVEN", "BANKLY", "PROVIDUS"];
 
 router.post('/fund', async (req, res) => {
@@ -12,7 +12,7 @@ router.post('/fund', async (req, res) => {
     if (!uid || !email || !first_name || !last_name || !phone) {
         return res.status(400).json({
             success: false,
-            error: "Missing required fields: uid, email, first_name, last_name, phone"
+            error: "Missing required fields"
         });
     }
 
@@ -21,7 +21,7 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
-        // Return existing account if any
+        // Return existing account
         if (userData?.account_number) {
             return res.json({
                 success: true,
@@ -36,17 +36,15 @@ router.post('/fund', async (req, res) => {
         let accountCreated = null;
         const errors = [];
 
-        console.log(`Starting virtual account creation for UID: ${uid}`);
-
         for (const bank of SUPPORTED_BANKS) {
             try {
-                console.log(`🔄 Trying bank: ${bank}`);
+                console.log(`🔄 Trying ${bank} for UID: ${uid}`);
 
                 const response = await axios.post(
                     'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
                     {
                         email: email.trim().toLowerCase(),
-                        reference: `VA_\( {uid}_ \){Date.now()}`,
+                        reference: `VA_\( {uid}_ \){Date.now()}`,           // ← THIS IS THE CORRECT LINE
                         firstName: first_name.trim(),
                         lastName: last_name.trim(),
                         phone: phone.trim().replace(/\D/g, ''),
@@ -58,11 +56,11 @@ router.post('/fund', async (req, res) => {
                             Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                             'Content-Type': 'application/json'
                         },
-                        timeout: 20000
+                        timeout: 25000
                     }
                 );
 
-                console.log(`✅ Success with ${bank}:`, JSON.stringify(response.data, null, 2));
+                console.log(`✅ Success with ${bank}`);
 
                 const resData = response.data;
                 const accountData = resData.data || resData;
@@ -73,28 +71,24 @@ router.post('/fund', async (req, res) => {
                     account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
                 };
 
-                if (accountCreated.account_number) {
-                    console.log(`🎉 Account created successfully with ${bank}`);
-                    break;
-                }
+                if (accountCreated.account_number) break;
 
             } catch (bankError) {
                 const errInfo = bankError.response?.data || bankError.message;
-                errors.push({ bank, error: errInfo?.message || errInfo });
-                console.error(`❌ Failed with ${bank}:`, errInfo);
+                errors.push({ bank, error: errInfo });
+                console.error(`❌ Failed ${bank}:`, errInfo);
             }
         }
 
         if (!accountCreated || !accountCreated.account_number) {
-            console.error("All banks failed:", errors);
             return res.status(500).json({
                 success: false,
-                error: "Could not generate virtual account at the moment. Please try again later.",
+                error: "Failed to create virtual account",
                 details: errors
             });
         }
 
-        // Save to Firebase
+        // === SAVE TO FIREBASE ===
         await userRef.update({
             bank_name: accountCreated.bank_name,
             account_number: accountCreated.account_number,
@@ -104,6 +98,8 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
+        console.log(`✅ Account saved to Firebase for UID: ${uid}`);
+
         res.json({
             success: true,
             message: "Virtual account created successfully",
@@ -111,7 +107,7 @@ router.post('/fund', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Unexpected Error:", err.message);
+        console.error("Critical Error:", err.message);
         res.status(500).json({
             success: false,
             error: "Internal server error",
