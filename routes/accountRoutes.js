@@ -3,7 +3,6 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// Bank priority: PalmPay first → Providus last
 const SUPPORTED_BANKS = ["PALMPAY", "9PSB", "SAFEHAVEN", "BANKLY", "PROVIDUS"];
 
 router.post('/fund', async (req, res) => {
@@ -18,7 +17,6 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
-        // Return existing account
         if (userData?.account_number) {
             return res.json({ success: true, account: userData });
         }
@@ -54,20 +52,17 @@ router.post('/fund', async (req, res) => {
                     }
                 );
 
-                console.log(`✅ SUCCESS with ${bank}`);
-
                 const resData = response.data;
                 const accountData = resData.data || resData;
 
-                accountCreated = {
-                    bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
-                    account_number: accountData.account_number || accountData.accountNumber,
-                    account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
-                };
-
-                if (accountCreated.account_number) {
-                    console.log(`🎉 Account created with ${bank} - Stopping further attempts`);
-                    break;                    // ← Stops immediately on success
+                if (accountData.account_number || accountData.accountNumber) {
+                    accountCreated = {
+                        bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
+                        account_number: accountData.account_number || accountData.accountNumber,
+                        account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
+                    };
+                    console.log(`✅ SUCCESS with ${bank} - Stopping further attempts`);
+                    break;   // ← Important: Stop on first success
                 }
 
             } catch (bankError) {
@@ -77,7 +72,7 @@ router.post('/fund', async (req, res) => {
             }
         }
 
-        // If no bank succeeded
+        // Final check
         if (!accountCreated || !accountCreated.account_number) {
             console.error("All banks failed", errors);
             return res.status(500).json({
@@ -97,7 +92,7 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Account saved to Firebase for UID: ${uid}`);
+        console.log(`✅ Account successfully saved to Firebase for UID: ${uid}`);
 
         res.json({
             success: true,
