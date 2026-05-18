@@ -3,17 +3,14 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// PalmPay first as requested
+// Bank priority: PalmPay first → Providus last
 const SUPPORTED_BANKS = ["PALMPAY", "9PSB", "SAFEHAVEN", "BANKLY", "PROVIDUS"];
 
 router.post('/fund', async (req, res) => {
     const { uid, email, first_name, last_name, phone } = req.body;
 
     if (!uid || !email || !first_name || !last_name || !phone) {
-        return res.status(400).json({
-            success: false,
-            error: "Missing required fields"
-        });
+        return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
     try {
@@ -23,34 +20,31 @@ router.post('/fund', async (req, res) => {
 
         // Return existing account
         if (userData?.account_number) {
-            return res.json({
-                success: true,
-                account: {
-                    bank_name: userData.bank_name,
-                    account_number: userData.account_number,
-                    account_name: userData.account_name
-                }
-            });
+            return res.json({ success: true, account: userData });
         }
+
+        console.log(`\n🔄 Starting account creation for UID: ${uid}`);
 
         let accountCreated = null;
         const errors = [];
 
         for (const bank of SUPPORTED_BANKS) {
             try {
-                console.log(`🔄 Trying ${bank} for UID: ${uid}`);
+                console.log(`Trying ${bank}...`);
+
+                const payload = {
+                    email: email.trim().toLowerCase(),
+                    reference: `VA_\( {uid}_ \){Date.now()}`,
+                    firstName: first_name.trim(),
+                    lastName: last_name.trim(),
+                    phone: phone.trim().replace(/\D/g, ''),
+                    bank: bank,
+                    currency: "NGN"
+                };
 
                 const response = await axios.post(
                     'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
-                    {
-                        email: email.trim().toLowerCase(),
-                        reference: `VA_\( {uid}_ \){Date.now()}`,           // ← THIS IS THE CORRECT LINE
-                        firstName: first_name.trim(),
-                        lastName: last_name.trim(),
-                        phone: phone.trim().replace(/\D/g, ''),
-                        bank: bank,
-                        currency: "NGN"
-                    },
+                    payload,
                     {
                         headers: {
                             Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
@@ -60,7 +54,7 @@ router.post('/fund', async (req, res) => {
                     }
                 );
 
-                console.log(`✅ Success with ${bank}`);
+                console.log(`✅ SUCCESS with ${bank}`);
 
                 const resData = response.data;
                 const accountData = resData.data || resData;
@@ -71,24 +65,29 @@ router.post('/fund', async (req, res) => {
                     account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`
                 };
 
-                if (accountCreated.account_number) break;
+                if (accountCreated.account_number) {
+                    console.log(`🎉 Account created with ${bank} - Stopping further attempts`);
+                    break;                    // ← Stops immediately on success
+                }
 
             } catch (bankError) {
-                const errInfo = bankError.response?.data || bankError.message;
-                errors.push({ bank, error: errInfo });
-                console.error(`❌ Failed ${bank}:`, errInfo);
+                const errDetail = bankError.response?.data || bankError.message;
+                errors.push({ bank, error: errDetail });
+                console.error(`❌ ${bank} failed:`, errDetail);
             }
         }
 
+        // If no bank succeeded
         if (!accountCreated || !accountCreated.account_number) {
+            console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "Failed to create virtual account",
+                error: "All banks failed. Please try again later.",
                 details: errors
             });
         }
 
-        // === SAVE TO FIREBASE ===
+        // Save to Firebase
         await userRef.update({
             bank_name: accountCreated.bank_name,
             account_number: accountCreated.account_number,
@@ -102,17 +101,13 @@ router.post('/fund', async (req, res) => {
 
         res.json({
             success: true,
-            message: "Virtual account created successfully",
+            message: `Virtual account created successfully with ${accountCreated.bank_name}`,
             account: accountCreated
         });
 
     } catch (err) {
         console.error("Critical Error:", err.message);
-        res.status(500).json({
-            success: false,
-            error: "Internal server error",
-            details: err.message
-        });
+        res.status(500).json({ success: false, error: "Internal server error" });
     }
 });
 
