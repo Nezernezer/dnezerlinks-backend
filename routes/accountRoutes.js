@@ -3,8 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// Try PalmPay first, then fallbacks
-const SUPPORTED_BANKS = ["PALMPAY", "PROVIDUS", "SAFEHAVEN", "BANKLY", "9PSB"];
+// Bank order: PalmPay first, then 9PSB, others, Providus last
+const SUPPORTED_BANKS = ["PALMPAY", "9PSB", "SAFEHAVEN", "BANKLY", "PROVIDUS"];
 
 router.post('/fund', async (req, res) => {
     const { uid, email, first_name, last_name, phone } = req.body;
@@ -36,19 +36,20 @@ router.post('/fund', async (req, res) => {
         let accountCreated = null;
         const errors = [];
 
-        // Try banks one by one (PalmPay first)
+        console.log(`Starting virtual account creation for UID: ${uid}`);
+
         for (const bank of SUPPORTED_BANKS) {
             try {
-                console.log(`🔄 Trying bank: ${bank} for UID: ${uid}`);
+                console.log(`🔄 Trying bank: ${bank}`);
 
                 const response = await axios.post(
                     'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
                     {
                         email: email.trim().toLowerCase(),
-                        reference: `VA_\( {uid}_ \){Date.now()}`,           // ← FIXED
+                        reference: `VA_\( {uid}_ \){Date.now()}`,
                         firstName: first_name.trim(),
                         lastName: last_name.trim(),
-                        phone: phone.trim().replace(/\D/g, ''),        // Clean phone number
+                        phone: phone.trim().replace(/\D/g, ''),
                         bank: bank,
                         currency: "NGN"
                     },
@@ -73,8 +74,8 @@ router.post('/fund', async (req, res) => {
                 };
 
                 if (accountCreated.account_number) {
-                    console.log(`🎉 Account successfully created with ${bank}`);
-                    break; // Exit loop on success
+                    console.log(`🎉 Account created successfully with ${bank}`);
+                    break;
                 }
 
             } catch (bankError) {
@@ -84,12 +85,11 @@ router.post('/fund', async (req, res) => {
             }
         }
 
-        // If no account was created
         if (!accountCreated || !accountCreated.account_number) {
             console.error("All banks failed:", errors);
             return res.status(500).json({
                 success: false,
-                error: "Billstack could not generate virtual account at the moment. Try again later.",
+                error: "Could not generate virtual account at the moment. Please try again later.",
                 details: errors
             });
         }
@@ -111,7 +111,7 @@ router.post('/fund', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Unexpected Error in /account/fund:", err.message);
+        console.error("Unexpected Error:", err.message);
         res.status(500).json({
             success: false,
             error: "Internal server error",

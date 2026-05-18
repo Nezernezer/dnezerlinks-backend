@@ -15,17 +15,17 @@
         .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
         #acc-number { font-size: 1.4rem; color: #222; font-weight: bold; }
         .copy-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
-        
-        /* Animation Styling */
-        #status-msg { 
-            text-align: center; 
-            font-weight: bold; 
-            padding: 20px; 
+
+        #status-msg {
+            text-align: center;
+            font-weight: bold;
+            padding: 20px;
             font-size: 1.1rem;
-            min-height: 60px;
-            transition: color 0.5s ease, opacity 0.5s ease;
+            min-height: 100px;
+            transition: all 0.4s ease;
         }
-        
+        .error { color: #e74c3c !important; }
+        .success { color: #27ae60 !important; }
         #account-ui { display: none; }
     </style>
 </head>
@@ -34,13 +34,13 @@
 <div class="container">
     <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
     <h2>Fund Wallet</h2>
+    
     <div class="balance-box">
         <span style="font-size: 0.9rem;">Wallet Balance</span><br>
         <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
     </div>
 
-    <!-- This is where the animated text will appear -->
-    <div id="status-msg">Initiating account setup...</div>
+    <div id="status-msg">Checking account status...</div>
 
     <div id="account-ui">
         <div class="bank-card">
@@ -54,7 +54,9 @@
             <span class="label" style="margin-top:15px;">ACCOUNT NAME</span>
             <span class="value" id="acc-name">---</span>
         </div>
-        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:10px;">Note: A 2% fee applies to all automated deposits.</p>
+        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:10px;">
+            Note: A 2% fee applies to all automated deposits.
+        </p>
     </div>
 </div>
 
@@ -70,95 +72,106 @@
         projectId: "dnezerlinks",
         appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Text Animation Logic
+    let animationInterval = null;
+
     function startLoadingAnimations() {
         const statusMsg = document.getElementById("status-msg");
         const messages = [
-            { text: "Sending a request to create account, this may take a while...", color: "#E67E22", time: 15000 }, // Orange
-            { text: "Generating your dedicated account number, Please wait...", color: "#3498DB", time: 15000 },  // Blue
-            { text: "Processing account details, please stay on the page.", color: "#27AE60", time: 30000 },     // Green
-            { text: "Your account number will be ready soon, please be patient.", color: "#8E44AD", time: 30000 }      // Purple
+            "Checking your account status...",
+            "Sending request to Billstack...",
+            "Generating dedicated account number...",
+            "Processing your details, please wait..."
         ];
+        let i = 0;
 
-        let index = 0;
+        if (animationInterval) clearInterval(animationInterval);
+        
+        animationInterval = setInterval(() => {
+            statusMsg.innerText = messages[i];
+            i = (i + 1) % messages.length;
+        }, 3500);
+    }
 
-        function updateText() {
-            if (index < messages.length) {
-                const current = messages[index];
-                statusMsg.innerText = current.text;
-                statusMsg.style.color = current.color;
-                
-                setTimeout(() => {
-                    index++;
-                    updateText();
-                }, current.time);
-            } else {
-                // Loop: Alternate between 3 and 4 (index 2 and 3)
-                index = (index === 2) ? 3 : 2;
-                const current = messages[index];
-                statusMsg.innerText = current.text;
-                statusMsg.style.color = current.color;
-                setTimeout(updateText, current.time);
-            }
+    function stopAnimationAndShow(message, isError = false) {
+        if (animationInterval) {
+            clearInterval(animationInterval);
+            animationInterval = null;
         }
-        updateText();
+        const status = document.getElementById("status-msg");
+        status.innerText = message;
+        status.className = isError ? "error" : "success";
     }
 
     firebase.auth().onAuthStateChanged(async (user) => {
         if (!user) return window.location.href = 'login.html';
 
         const userRef = db.ref(`users/${user.uid}`);
-        let animationStarted = false;
 
         userRef.on('value', async (snap) => {
             const data = snap.val() || {};
 
+            // === ACCOUNT ALREADY EXISTS ===
             if (data.account_number) {
-                document.getElementById("wallet-balance").innerText = "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById("bank-name").innerText = data.bank_name;
+                document.getElementById("wallet-balance").innerText = 
+                    "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+                document.getElementById("bank-name").innerText = data.bank_name || "N/A";
                 document.getElementById("acc-number").innerText = data.account_number;
                 document.getElementById("acc-name").innerText = data.account_name || "Customer";
 
                 document.getElementById("status-msg").style.display = "none";
                 document.getElementById("account-ui").style.display = "block";
-            } else {
-                // Kick off the colorful animations
-                if (!animationStarted) {
-                    animationStarted = true;
-                    startLoadingAnimations();
-                }
+                return;
+            }
 
-                // Name splitting logic
-                const rawName = data.name || "";
-                const nameParts = rawName.trim().split(/\s+/);
-                let fName = nameParts[0] || "Customer";
-                let lName = nameParts[1] ? nameParts[1].substring(0, 2) : user.uid.substring(0, 3);
+            // === NO ACCOUNT → CREATE ONE ===
+            if (!animationInterval) startLoadingAnimations();
 
-                try {
-                    await fetch('https://dnezerlinks-backend.onrender.com/api/account/fund', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            uid: user.uid,
-                            email: user.email,
-                            first_name: fName,
-                            last_name: lName,
-                            phone: data.phone || "08000000000"
-                        })
-                    });
-                } catch (err) {
-                    console.error("Fetch Error:", err);
+            const rawName = data.name || "";
+            const nameParts = rawName.trim().split(/\s+/);
+            const fName = nameParts[0] || "User";
+            const lName = nameParts[1] || user.uid.substring(0, 4);
+
+            try {
+                const response = await fetch('https://dnezerlinks-backend.onrender.com/api/account/fund', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        uid: user.uid,
+                        email: user.email,
+                        first_name: fName,
+                        last_name: lName,
+                        phone: data.phone || "08000000000"
+                    })
+                });
+
+                const result = await response.json();
+
+                // Stop animation and show backend message
+                if (result.success) {
+                    stopAnimationAndShow(result.message || "Account created successfully!");
+                } else {
+                    stopAnimationAndShow(
+                        result.error || result.details || "Failed to create account. Please refresh.", 
+                        true
+                    );
                 }
+            } catch (err) {
+                console.error(err);
+                stopAnimationAndShow("Network error. Please check your connection and refresh the page.", true);
             }
         });
     });
 
     function copyAccount() {
         const num = document.getElementById("acc-number").innerText;
-        navigator.clipboard.writeText(num).then(() => alert("Copied to clipboard!"));
+        if (num && num.length > 5) {
+            navigator.clipboard.writeText(num).then(() => alert("Account number copied to clipboard!"));
+        }
     }
 </script>
 </body>
