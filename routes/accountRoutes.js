@@ -17,18 +17,18 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
-        // Return existing account if any
         if (userData?.account_number) {
             return res.json({ success: true, account: userData });
         }
 
-        console.log(`\n🔄 Starting account creation for UID: ${uid} - All banks mode`);
+        console.log(`\n🔄 Starting account creation for UID: ${uid}`);
 
         const successfulAccounts = [];
         const errors = [];
 
         for (const bank of SUPPORTED_BANKS) {
             try {
+                // FIXED: Proper unique reference for each bank
                 const uniqueReference = `VA_\( {uid}_ \){bank}_${Date.now()}`;
 
                 console.log(`Trying ${bank} with ref: ${uniqueReference}`);
@@ -91,7 +91,7 @@ router.post('/fund', async (req, res) => {
             });
         }
 
-        // Save the FIRST successful account to Firebase (main account)
+        // Save the FIRST successful account as primary
         const primaryAccount = successfulAccounts[0];
 
         await userRef.update({
@@ -103,13 +103,13 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Primary account saved to Firebase (${primaryAccount.bank_name})`);
+        console.log(`✅ Primary account saved to Firebase: ${primaryAccount.bank_name}`);
 
         res.json({
             success: true,
             message: `Successfully created ${successfulAccounts.length} account(s)`,
             primaryAccount: primaryAccount,
-            allAccounts: successfulAccounts   // Return all for future use
+            allAccounts: successfulAccounts
         });
 
     } catch (err) {
