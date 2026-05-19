@@ -23,17 +23,27 @@ const formatAccountName = (firstName, lastName) => {
 };
 
 /**
- * Generate virtual account via Billstack.
- * Billstack assigns the bank automatically.
+ * Generate virtual account via Billstack for a specific chosen bank.
  */
-const generateVirtualAccount = async ({ email, first_name, last_name, phone }) => {
+const generateVirtualAccount = async ({ email, first_name, last_name, phone, requested_bank }) => {
+    // Map frontend keys to Billstack's expected naming slugs
+    let selectedBankSlug = requested_bank.toLowerCase();
+    if (selectedBankSlug === 'palmpay') selectedBankSlug = 'palmpay'; 
+    if (selectedBankSlug === 'wema') selectedBankSlug = 'wema';
+    if (selectedBankSlug === '9psb') selectedBankSlug = '9psb';
+    if (selectedBankSlug === 'safehaven') selectedBankSlug = 'safehaven';
+    if (selectedBankSlug === 'bankly') selectedBankSlug = 'bankly';
+    if (selectedBankSlug === 'providus') selectedBankSlug = 'providus';
+
     const payload = {
         email: normalizeEmail(email),
         name: `${first_name.trim()} ${last_name.trim()}`,
-        phone: normalizePhone(phone)
+        phone: normalizePhone(phone),
+        bank: selectedBankSlug // Passing the specific bank parameter to Billstack
     };
 
-    console.log('📤 Generating virtual account — payload:', JSON.stringify(payload, null, 2));
+    console.log(`📤 Sending targeted request to Billstack for lane: ${selectedBankSlug}`);
+    console.log('📤 Payload details:', JSON.stringify(payload, null, 2));
 
     const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
         headers: getBillstackHeaders(),
@@ -47,19 +57,17 @@ const generateVirtualAccount = async ({ email, first_name, last_name, phone }) =
 |--------------------------------------------------------------------------
 | Diagnostic – test Billstack directly without touching Firebase
 | POST /api/account/test-billstack
-| Body: { email, first_name, last_name, phone }
-| Remove once confirmed working
 |--------------------------------------------------------------------------
 */
 router.post('/test-billstack', async (req, res) => {
-    const { email, first_name, last_name, phone } = req.body;
+    const { email, first_name, last_name, phone, requested_bank } = req.body;
 
-    if (!email || !first_name || !last_name || !phone) {
-        return res.status(400).json({ error: 'Missing fields' });
+    if (!email || !first_name || !last_name || !phone || !requested_bank) {
+        return res.status(400).json({ error: 'Missing fields, including requested_bank' });
     }
 
     try {
-        const data = await generateVirtualAccount({ email, first_name, last_name, phone });
+        const data = await generateVirtualAccount({ email, first_name, last_name, phone, requested_bank });
         return res.json({ success: true, billstackResponse: data });
     } catch (error) {
         return res.json({
@@ -72,26 +80,19 @@ router.post('/test-billstack', async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| POST /api/account/create
-| Generate a virtual account for a user.
+| POST /api/account/fund
+| Generate a targeted virtual account for one specific lane only.
 |--------------------------------------------------------------------------
 */
-router.post('/create', async (req, res) => {
+router.post('/fund', async (req, res) => {
     try {
-        const { uid, email, first_name, last_name, phone } = req.body;
-
-        // ---- Authentication (you must implement your own) ----
-        // Example: verify Firebase Auth token from header
-        // const decodedToken = await admin.auth().verifyIdToken(req.headers.authorization);
-        // if (decodedToken.uid !== uid) {
-        //     return res.status(403).json({ error: 'Unauthorized' });
-        // }
+        const { uid, email, first_name, last_name, phone, requested_bank } = req.body;
 
         // ---- Input Validation ----
-        if (!uid || !email || !first_name || !last_name || !phone) {
+        if (!uid || !email || !first_name || !last_name || !phone || !requested_bank) {
             return res.status(400).json({
                 success: false,
-                error: 'Missing required fields'
+                error: 'Missing required routing fields'
             });
         }
 
@@ -117,34 +118,39 @@ router.post('/create', async (req, res) => {
             });
         }
 
-        // ---- Check existing accounts (non‑transactional read) ----
+        // ---- Duplicate Lane Check ----
         const userRef = db.ref(`users/${uid}`);
         const snapshot = await userRef.once('value');
         const userData = snapshot.val() || {};
 
-        const existingAccounts = userData.virtual_accounts
-            ? Object.values(userData.virtual_accounts)
-            : [];
+        const existingAccounts = userData.virtual_accounts ? Object.values(userData.virtual_accounts) : [];
 
-        if (existingAccounts.length > 0) {
-            console.log(`ℹ️ Accounts already exist for UID: ${uid}`);
+        // Stop execution if the exact bank clicked already exists under the user node
+        const laneAlreadyExists = existingAccounts.some(acc => 
+            acc && acc.bank_name && acc.bank_name.toLowerCase().includes(requested_bank.toLowerCase())
+        );
+
+        if (laneAlreadyExists) {
+            console.log(`ℹ️ Account line for ${requested_bank} already exists for UID: ${uid}`);
             return res.json({
                 success: true,
-                message: 'Accounts already exist',
-                primaryAccount: existingAccounts[0],
+                message: `Account lane for ${requested_bank} is already active.`,
                 allAccounts: existingAccounts
             });
         }
 
-        // ---- Generate new virtual account ----
-        console.log(`\n🔄 Generating virtual account for UID: ${uid}`);
+        // ---- Targeted Generation ----
+        console.log(`\n🔄 Generating ${requested_bank} virtual account link line for UID: ${uid}`);
 
         let responseData;
         try {
-            responseData = await generateVirtualAccount({ email, first_name, last_name, phone });
+            // Pass the requested_bank parameter forward
+            responseData = await generateVirtualAccount({ 
+                email, first_name, last_name, phone, requested_bank 
+            });
         } catch (error) {
             const err = error.response?.data || error.message;
-            console.error('❌ Billstack Error:', JSON.stringify(err, null, 2));
+            console.error('❌ Billstack API Error:', JSON.stringify(err, null, 2));
             return res.status(500).json({
                 success: false,
                 error: 'Failed to generate virtual account',
@@ -154,19 +160,18 @@ router.post('/create', async (req, res) => {
 
         console.log('📥 Billstack Response:', JSON.stringify(responseData, null, 2));
 
-        // Billstack may return 200 with status: false / success: false
         if (responseData?.status === false || responseData?.success === false) {
             return res.status(400).json({
                 success: false,
-                error: responseData.message || 'Billstack rejected the request',
+                error: responseData.message || 'Billstack rejected the targeted request',
                 billstackResponse: responseData
             });
         }
 
-        // Extract account details (handle both flat and nested response shapes)
+        // ---- Response Extraction & Verification ----
         const data = responseData.data || responseData;
         const accountNumber = data.accountNumber || data.account_number;
-        const bankName = data.bankName || data.bank_name || data.bank?.name;
+        const returnedBankName = data.bankName || data.bank_name || data.bank?.name || '';
         const accountName = data.accountName || data.account_name || formatAccountName(first_name, last_name);
 
         if (!accountNumber) {
@@ -178,84 +183,60 @@ router.post('/create', async (req, res) => {
             });
         }
 
+        // CRUCIAL ANTI-RANDOM FILTER: Check if returned bank matches what the user requested
+        const isCorrectLane = returnedBankName.toLowerCase().includes(requested_bank.toLowerCase());
+        
+        if (!isCorrectLane) {
+            console.warn(`⚠️ Filter Intercepted: User requested ${requested_bank} but Billstack provided ${returnedBankName}. Aborting save.`);
+            return res.status(422).json({
+                success: false,
+                error: `The system could not allocate a ${requested_bank} account at this moment. Please try again later.`
+            });
+        }
+
+        // ---- Save Validated Account to Firebase ----
         const account = {
-            bank_name: bankName || 'Unknown Bank',
+            bank_name: returnedBankName, 
             account_number: accountNumber,
             account_name: accountName,
             created_at: Date.now()
         };
 
-        // ---- Save to Firebase using a Transaction (race‑condition safe) ----
         try {
-            await userRef.transaction((currentData) => {
-                if (currentData === null) {
-                    currentData = {};
-                }
+            // Secure push directly into the virtual_accounts tree node to support multiple banks
+            const virtualAccountsRef = db.ref(`users/${uid}/virtual_accounts`);
+            await virtualAccountsRef.push(account);
 
-                // If another request already saved accounts, abort
-                if (currentData.virtual_accounts && Object.keys(currentData.virtual_accounts).length > 0) {
-                    return; // undefined signals abort
-                }
-
-                // Use push() to create a unique key for each account (allows multiple later)
-                if (!currentData.virtual_accounts) {
-                    currentData.virtual_accounts = {};
-                }
-                const newAccountKey = currentData.virtual_accounts
-                    ? Object.keys(currentData.virtual_accounts).length.toString()
-                    : '0';
-                currentData.virtual_accounts[newAccountKey] = account;
-
-                // Set top‑level fields for easy access
-                currentData.email = normalizeEmail(email);
-                currentData.bank_name = account.bank_name;
-                currentData.account_number = account.account_number;
-                currentData.account_name = account.account_name;
-                currentData.balance = currentData.balance || 0;
-                currentData.updatedAt = Date.now();
-
-                return currentData; // commit
+            // Maintain legacy root shortcuts for backward compatibility in top-level lookups
+            await userRef.update({
+                email: normalizeEmail(email),
+                bank_name: account.bank_name,
+                account_number: account.account_number,
+                account_name: account.account_name,
+                updatedAt: Date.now()
             });
 
-            console.log('✅ Account saved to Firebase (transaction committed)');
-
-            // Since we wrote inside the transaction, the account is now safely stored
+            console.log(`✅ Verified ${returnedBankName} account successfully saved to its target lane.`);
+            
             return res.json({
                 success: true,
-                message: 'Virtual account created successfully',
-                primaryAccount: account,
-                allAccounts: [account]
+                message: 'Virtual account lane registered successfully',
+                primaryAccount: account
             });
 
-        } catch (transactionError) {
-            console.error('❌ Firebase transaction error:', transactionError);
-            // If transaction fails because another request created accounts first,
-            // we return the existing ones gracefully.
-            const finalSnapshot = await userRef.once('value');
-            const finalData = finalSnapshot.val() || {};
-            const finalAccounts = finalData.virtual_accounts
-                ? Object.values(finalData.virtual_accounts)
-                : [];
-            if (finalAccounts.length > 0) {
-                return res.json({
-                    success: true,
-                    message: 'Accounts already exist (detected after transaction)',
-                    primaryAccount: finalAccounts[0],
-                    allAccounts: finalAccounts
-                });
-            }
-
+        } catch (dbError) {
+            console.error('❌ Firebase write failure:', dbError);
             return res.status(500).json({
                 success: false,
-                error: 'Failed to save account to Firebase'
+                error: 'Failed to save account node to database'
             });
         }
 
     } catch (error) {
-        console.error('❌ Critical Error:', error);
+        console.error('❌ Critical failure:', error);
         return res.status(500).json({
             success: false,
-            error: 'Internal server error'
+            error: 'Internal server processing error'
         });
     }
 });
