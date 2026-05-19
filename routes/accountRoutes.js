@@ -21,7 +21,7 @@ router.post('/fund', async (req, res) => {
             return res.json({ success: true, account: userData });
         }
 
-        console.log(`\n🔄 Creating virtual account for UID: ${uid} | Email: ${email}`);
+        console.log(`\n🔄 Pre-creating account for UID: ${uid} | Email: ${email}`);
 
         const successfulAccounts = [];
         const errors = [];
@@ -29,6 +29,10 @@ router.post('/fund', async (req, res) => {
         const cleanEmail = email.trim().toLowerCase();
         const firstName = first_name.trim();
         const lastName = last_name.trim();
+
+        // Firstname + last 2 letters of Lastname
+        const nameSuffix = lastName.length >= 2 ? lastName.slice(-2) : lastName;
+        const displayAccountName = `${firstName} ${nameSuffix}`.trim();
 
         for (const bank of SUPPORTED_BANKS) {
             try {
@@ -67,14 +71,16 @@ router.post('/fund', async (req, res) => {
                     const newAccount = {
                         bank_name: accountData.bank_name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
-                        account_name: accountData.account_name || `${lastName} ${firstName}`,
+                        account_name: accountData.account_name || displayAccountName,
                         bank_code: bank
                     };
                     successfulAccounts.push(newAccount);
                     console.log(`✅ SUCCESS with ${bank}`);
-                    break;                    // Stop after first success (recommended)
+                    break;
                 } else {
-                    errors.push({ bank, error: resData.message || "Failed" });
+                    const failMsg = resData.message || "Unknown error";
+                    errors.push({ bank, error: failMsg });
+                    console.log(`⚠️ ${bank} failed: ${failMsg}`);
                 }
 
             } catch (bankError) {
@@ -88,7 +94,7 @@ router.post('/fund', async (req, res) => {
             console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "Could not create virtual account. Please try again later or contact support.",
+                error: "Email not found or service issue. Please try again with a verified Gmail/Yahoo email.",
                 details: errors
             });
         }
@@ -104,13 +110,10 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Account saved to Firebase`);
-
         res.json({
             success: true,
             message: "Virtual account created successfully",
-            primaryAccount: primary,
-            allAccounts: successfulAccounts
+            primaryAccount: primary
         });
 
     } catch (err) {
