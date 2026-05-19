@@ -29,7 +29,7 @@ const formatAccountName = (firstName, lastName) => {
 */
 const generateVirtualAccount = async ({ email, first_name, last_name, phone }) => {
     const payload = {
-        customer: normalizeEmail(email),
+        email: normalizeEmail(email),
         name: `${first_name.trim()} ${last_name.trim()}`,
         phone: normalizePhone(phone)
     };
