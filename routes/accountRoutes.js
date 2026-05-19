@@ -3,18 +3,11 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-const RESERVE_ACCOUNT_URL =
-    'https://api.billstack.co/v2/thirdparty/reserveAccount';
+// ✅ Correct endpoint and correct field names per Billstack docs
+const GENERATE_ACCOUNT_URL =
+    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount';
 
-const SUPPORTED_BANKS = [
-    'PALMPAY',
-    '9PSB',
-    'SAFEHAVEN',
-    'BANKLY',
-    'PROVIDUS'
-];
-
-// ✅ Called at request time — always picks up the live env var value
+// Called at request time so env var is always fresh
 const getBillstackHeaders = () => ({
     Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
     'Content-Type': 'application/json'
@@ -22,43 +15,29 @@ const getBillstackHeaders = () => ({
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase();
 const normalizePhone = (phone = '') => phone.replace(/\D/g, '');
-const generateReference = (uid, bank) => `VA_${uid}_${bank}_${Date.now()}`;
 
 const formatAccountName = (firstName, lastName) => {
-    const cleanFirstName = firstName.trim();
-    const cleanLastName = lastName.trim().substring(0, 2);
-    return `${cleanFirstName} ${cleanLastName}`.trim();
+    return `${firstName.trim()} ${lastName.trim().substring(0, 2)}`.trim();
 };
 
-const extractAccountData = (responseData, bank, first_name, last_name) => {
-    const data = responseData.data || responseData;
-    const accountNumber = data.account_number || data.accountNumber;
-
-    if (!accountNumber) return null;
-
-    return {
-        bank_name: data.bank_name || data.bank?.name || `${bank} Bank`,
-        account_number: accountNumber,
-        account_name: formatAccountName(first_name, last_name),
-        bank_code: bank
-    };
-};
-
-const reserveAccount = async ({ uid, email, first_name, last_name, phone, bank }) => {
+/*
+|--------------------------------------------------------------------------
+| Generate Virtual Account
+| Billstack assigns the bank automatically — you do NOT specify one.
+| Fields: customer (email), name (full name), phone
+|--------------------------------------------------------------------------
+*/
+const generateVirtualAccount = async ({ email, first_name, last_name, phone }) => {
     const payload = {
-        email: normalizeEmail(email),
-        reference: generateReference(uid, bank),
-        firstName: first_name.trim(),
-        lastName: last_name.trim(),
-        phone: normalizePhone(phone),
-        bank,
-        currency: 'NGN'
+        customer: normalizeEmail(email),
+        name: `${first_name.trim()} ${last_name.trim()}`,
+        phone: normalizePhone(phone)
     };
 
-    console.log(`📤 Reserving ${bank} account — payload:`, JSON.stringify(payload, null, 2));
+    console.log('📤 Generating virtual account — payload:', JSON.stringify(payload, null, 2));
 
-    const response = await axios.post(RESERVE_ACCOUNT_URL, payload, {
-        headers: getBillstackHeaders(),  // ✅ Fresh headers on every call
+    const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
+        headers: getBillstackHeaders(),
         timeout: 25000
     });
 
@@ -67,10 +46,10 @@ const reserveAccount = async ({ uid, email, first_name, last_name, phone, bank }
 
 /*
 |--------------------------------------------------------------------------
-| Diagnostic endpoint — test Billstack connectivity without Firebase
+| Diagnostic — test Billstack directly without touching Firebase
 | POST /api/account/test-billstack
 | Body: { email, first_name, last_name, phone }
-| Remove this route once everything is confirmed working
+| Remove once confirmed working
 |--------------------------------------------------------------------------
 */
 router.post('/test-billstack', async (req, res) => {
@@ -81,26 +60,8 @@ router.post('/test-billstack', async (req, res) => {
     }
 
     try {
-        const payload = {
-            email: normalizeEmail(email),
-            reference: `TEST_${Date.now()}`,
-            firstName: first_name.trim(),
-            lastName: last_name.trim(),
-            phone: normalizePhone(phone),
-            bank: 'PALMPAY',
-            currency: 'NGN'
-        };
-
-        console.log('🧪 Test payload:', JSON.stringify(payload, null, 2));
-        console.log('🔑 Key present:', !!process.env.BILLSTACK_SECRET_KEY);
-
-        const response = await axios.post(RESERVE_ACCOUNT_URL, payload, {
-            headers: getBillstackHeaders(),
-            timeout: 25000
-        });
-
-        return res.json({ success: true, billstackResponse: response.data });
-
+        const data = await generateVirtualAccount({ email, first_name, last_name, phone });
+        return res.json({ success: true, billstackResponse: data });
     } catch (error) {
         return res.json({
             success: false,
@@ -112,7 +73,6 @@ router.post('/test-billstack', async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| Main fund route
 | POST /api/account/fund
 |--------------------------------------------------------------------------
 */
@@ -130,13 +90,13 @@ router.post('/fund', async (req, res) => {
         if (!process.env.BILLSTACK_SECRET_KEY) {
             return res.status(500).json({
                 success: false,
-                error: 'Billstack API key is not configured on this server'
+                error: 'Billstack API key is not configured'
             });
         }
 
         /*
         |----------------------------------------------------------------------
-        | Check for existing accounts in Firebase
+        | Return existing accounts if already created
         |----------------------------------------------------------------------
         */
         const userRef = db.ref(`users/${uid}`);
@@ -154,85 +114,79 @@ router.post('/fund', async (req, res) => {
             });
         }
 
-        console.log(`\n🔄 Reserving accounts for UID: ${uid}`);
+        console.log(`\n🔄 Generating virtual account for UID: ${uid}`);
 
-        const successfulAccounts = [];
-        const failedAccounts = [];
-
-        for (const bank of SUPPORTED_BANKS) {
-            try {
-                const responseData = await reserveAccount({
-                    uid, email, first_name, last_name, phone, bank
-                });
-
-                console.log(`📥 ${bank} Response:`, JSON.stringify(responseData, null, 2));
-
-                // Billstack sometimes returns 200 with success: false
-                if (responseData?.status === false || responseData?.success === false) {
-                    const failMessage = responseData.message || 'Billstack rejected the request';
-                    failedAccounts.push({ bank, error: failMessage });
-                    console.log(`⚠️ ${bank} rejected: ${failMessage}`);
-                    continue;
-                }
-
-                const account = extractAccountData(responseData, bank, first_name, last_name);
-
-                if (account) {
-                    successfulAccounts.push(account);
-                    console.log(`✅ ${bank} success`);
-                } else {
-                    const failMessage = responseData.message || 'No account number in response';
-                    failedAccounts.push({ bank, error: failMessage });
-                    console.log(`⚠️ ${bank} — no account number: ${failMessage}`);
-                }
-
-            } catch (error) {
-                const err = error.response?.data || error.message;
-                failedAccounts.push({ bank, error: err });
-                console.error(`❌ ${bank} Error:`, JSON.stringify(err, null, 2));
-            }
-        }
-
-        if (successfulAccounts.length === 0) {
-            console.error('❌ All banks failed:', JSON.stringify(failedAccounts, null, 2));
+        /*
+        |----------------------------------------------------------------------
+        | Single call — Billstack assigns bank automatically
+        |----------------------------------------------------------------------
+        */
+        let responseData;
+        try {
+            responseData = await generateVirtualAccount({ email, first_name, last_name, phone });
+        } catch (error) {
+            const err = error.response?.data || error.message;
+            console.error('❌ Billstack Error:', JSON.stringify(err, null, 2));
             return res.status(500).json({
                 success: false,
-                error: 'Could not create any virtual account',
-                details: failedAccounts
+                error: 'Failed to generate virtual account',
+                details: err
             });
         }
 
-        const primaryAccount = successfulAccounts[0];
+        console.log('📥 Billstack Response:', JSON.stringify(responseData, null, 2));
+
+        // Billstack returns 200 with status: false on errors
+        if (responseData?.status === false || responseData?.success === false) {
+            return res.status(400).json({
+                success: false,
+                error: responseData.message || 'Billstack rejected the request'
+            });
+        }
+
+        // Extract account details — handle both flat and nested response shapes
+        const data = responseData.data || responseData;
+        const accountNumber = data.accountNumber || data.account_number;
+        const bankName = data.bankName || data.bank_name || data.bank?.name;
+        const accountName = data.accountName || data.account_name || formatAccountName(first_name, last_name);
+
+        if (!accountNumber) {
+            console.error('❌ No account number in response:', JSON.stringify(responseData, null, 2));
+            return res.status(500).json({
+                success: false,
+                error: 'No account number returned by Billstack',
+                billstackResponse: responseData
+            });
+        }
+
+        const account = {
+            bank_name: bankName || 'Unknown Bank',
+            account_number: accountNumber,
+            account_name: accountName,
+        };
 
         /*
         |----------------------------------------------------------------------
         | Save to Firebase
         |----------------------------------------------------------------------
         */
-        const virtualAccountsObject = {};
-        successfulAccounts.forEach((account, index) => {
-            virtualAccountsObject[`account_${index}`] = account;
-        });
-
         await userRef.update({
             email: normalizeEmail(email),
-            bank_name: primaryAccount.bank_name,
-            account_number: primaryAccount.account_number,
-            account_name: primaryAccount.account_name,
-            bank_code: primaryAccount.bank_code,
+            bank_name: account.bank_name,
+            account_number: account.account_number,
+            account_name: account.account_name,
             balance: userData.balance || 0,
-            virtual_accounts: virtualAccountsObject,
+            virtual_accounts: { account_0: account },
             updatedAt: Date.now()
         });
 
-        console.log('✅ Accounts saved to Firebase');
+        console.log('✅ Account saved to Firebase');
 
         return res.json({
             success: true,
-            message: `${successfulAccounts.length} account(s) created successfully`,
-            primaryAccount,
-            allAccounts: successfulAccounts,
-            failedAccounts
+            message: 'Virtual account created successfully',
+            primaryAccount: account,
+            allAccounts: [account]
         });
 
     } catch (error) {
