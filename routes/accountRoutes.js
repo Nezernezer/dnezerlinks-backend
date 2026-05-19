@@ -32,7 +32,7 @@ const generateVirtualAccount = async ({ customerEmail, first_name, last_name, ph
 
     const payload = {
         email: normalizeEmail(MERCHANT_EMAIL), // Matches your Billstack Developer Profile Identity
-        customer_email: normalizeEmail(customerEmail), // The user currently interacting with the frontend app
+        email: normalizeEmail(customerEmail), // The user currently interacting with the frontend app
         name: formatAccountName(first_name, last_name),
         phone: normalizePhone(phone),
         bank: selectedBankSlug 
