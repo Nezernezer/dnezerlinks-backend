@@ -17,9 +17,16 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
-        // Return existing account if any
-        if (userData?.account_number) {
-            return res.json({ success: true, account: userData });
+        // FIX 1: Allow users missing the nested node to enter the loop and sync their secondary banks
+        if (userData?.virtual_accounts) {
+            console.log(`ℹ️ All accounts already exist for UID: ${uid}`);
+            const savedAccounts = Object.values(userData.virtual_accounts);
+            return res.json({ 
+                success: true, 
+                account: userData,
+                primaryAccount: savedAccounts[0],
+                allAccounts: savedAccounts
+            });
         }
 
         console.log(`\n🔄 Starting account creation for UID: ${uid} - All banks mode`);
@@ -27,24 +34,31 @@ router.post('/fund', async (req, res) => {
         const successfulAccounts = [];
         const errors = [];
 
+        // FIX 2: Format Name to LastName + First 2 letters of FirstName
+        const formattedLastName = last_name.trim();
+        const formattedFirstName = first_name.trim().substring(0, 2);
+        const combinedAccountName = `${formattedLastName} ${formattedFirstName}`.trim();
+
         for (const bank of SUPPORTED_BANKS) {
             try {
-                const uniqueReference = `VA_\( {uid}_ \){bank}_${Date.now()}`;
+                // FIX 3: Clean, accurate JavaScript template literal syntax
+                const uniqueReference = `VA_${uid}_${bank}_${Date.now()}`;
 
                 console.log(`Trying ${bank} with ref: ${uniqueReference}`);
 
                 const payload = {
                     email: email.trim().toLowerCase(),
                     reference: uniqueReference,
-                    firstName: first_name.trim(),
-                    lastName: last_name.trim(),
+                    firstName: formattedFirstName,
+                    lastName: formattedLastName,
                     phone: phone.trim().replace(/\D/g, ''),
                     bank: bank,
                     currency: "NGN"
                 };
 
+                // FIX 4: Removed trailing slash to prevent LiteSpeed server 404 HTML errors
                 const response = await axios.post(
-                    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
+                    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount',
                     payload,
                     {
                         headers: {
@@ -60,11 +74,11 @@ router.post('/fund', async (req, res) => {
                 const resData = response.data;
                 const accountData = resData.data || resData;
 
-                if (resData.status === true && (accountData?.account_number || accountData?.accountNumber)) {
+                if ((resData.status === true || resData.success === true) && (accountData?.account_number || accountData?.accountNumber)) {
                     const newAccount = {
                         bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
-                        account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`,
+                        account_name: accountData.account_name || accountData.accountName || combinedAccountName,
                         bank_code: bank
                     };
                     successfulAccounts.push(newAccount);
@@ -91,25 +105,34 @@ router.post('/fund', async (req, res) => {
             });
         }
 
-        // Save the FIRST successful account to Firebase (main account)
+        // Select the primary account
         const primaryAccount = successfulAccounts[0];
 
+        // FIX 5: Convert the successful arrays into a clean indexed object map for Firebase RTDB
+        const virtualAccountsObject = {};
+        successfulAccounts.forEach((acc, index) => {
+            virtualAccountsObject[`account_${index}`] = acc;
+        });
+
+        // FIX 6: Write all successfully generated bank nodes to Firebase 
         await userRef.update({
             bank_name: primaryAccount.bank_name,
             account_number: primaryAccount.account_number,
             account_name: primaryAccount.account_name,
+            bank_code: primaryAccount.bank_code,
             email: email.trim().toLowerCase(),
             balance: userData?.balance || 0,
+            virtual_accounts: virtualAccountsObject, 
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Primary account saved to Firebase (${primaryAccount.bank_name})`);
+        console.log(`✅ Accounts saved to Firebase safely.`);
 
         res.json({
             success: true,
             message: `Successfully created ${successfulAccounts.length} account(s)`,
             primaryAccount: primaryAccount,
-            allAccounts: successfulAccounts   // Return all for future use
+            allAccounts: successfulAccounts   
         });
 
     } catch (err) {
@@ -119,4 +142,3 @@ router.post('/fund', async (req, res) => {
 });
 
 module.exports = router;
-
