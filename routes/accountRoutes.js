@@ -17,48 +17,41 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
+        // Return existing account if any
         if (userData?.account_number) {
             return res.json({ success: true, account: userData });
         }
 
-        console.log(`\n🔄 Pre-creating account for UID: ${uid} | Email: ${email}`);
+        console.log(`\n🔄 Starting account creation for UID: ${uid} - All banks mode`);
 
         const successfulAccounts = [];
         const errors = [];
-
-        const cleanEmail = email.trim().toLowerCase();
-        const firstName = first_name.trim();
-        const lastName = last_name.trim();
-
-        // Firstname + last 2 letters of Lastname
-        const nameSuffix = lastName.length >= 2 ? lastName.slice(-2) : lastName;
-        const displayAccountName = `${firstName} ${nameSuffix}`.trim();
 
         for (const bank of SUPPORTED_BANKS) {
             try {
                 const uniqueReference = `VA_\( {uid}_ \){bank}_${Date.now()}`;
 
-                console.log(`Trying ${bank}...`);
+                console.log(`Trying ${bank} with ref: ${uniqueReference}`);
 
                 const payload = {
-                    email: cleanEmail,
+                    email: email.trim().toLowerCase(),
                     reference: uniqueReference,
-                    firstName: firstName,
-                    lastName: lastName,
+                    firstName: first_name.trim(),
+                    lastName: last_name.trim(),
                     phone: phone.trim().replace(/\D/g, ''),
                     bank: bank,
                     currency: "NGN"
                 };
 
                 const response = await axios.post(
-                    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount',
+                    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount/',
                     payload,
                     {
                         headers: {
                             Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                             'Content-Type': 'application/json'
                         },
-                        timeout: 30000
+                        timeout: 25000
                     }
                 );
 
@@ -69,24 +62,23 @@ router.post('/fund', async (req, res) => {
 
                 if (resData.status === true && (accountData?.account_number || accountData?.accountNumber)) {
                     const newAccount = {
-                        bank_name: accountData.bank_name || `${bank} Bank`,
+                        bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
-                        account_name: accountData.account_name || displayAccountName,
+                        account_name: accountData.account_name || accountData.accountName || `${first_name} ${last_name}`,
                         bank_code: bank
                     };
                     successfulAccounts.push(newAccount);
                     console.log(`✅ SUCCESS with ${bank}`);
-                    break;
                 } else {
-                    const failMsg = resData.message || "Unknown error";
-                    errors.push({ bank, error: failMsg });
+                    const failMsg = resData.message || "Failed to generate account";
                     console.log(`⚠️ ${bank} failed: ${failMsg}`);
+                    errors.push({ bank, error: failMsg });
                 }
 
             } catch (bankError) {
                 const errDetail = bankError.response?.data || bankError.message;
                 errors.push({ bank, error: errDetail });
-                console.error(`❌ ${bank} failed:`, errDetail);
+                console.error(`❌ ${bank} Error:`, errDetail);
             }
         }
 
@@ -94,32 +86,37 @@ router.post('/fund', async (req, res) => {
             console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "Email not found or service issue. Please try again with a verified Gmail/Yahoo email.",
+                error: "Could not create any virtual account at the moment.",
                 details: errors
             });
         }
 
-        const primary = successfulAccounts[0];
+        // Save the FIRST successful account to Firebase (main account)
+        const primaryAccount = successfulAccounts[0];
 
         await userRef.update({
-            bank_name: primary.bank_name,
-            account_number: primary.account_number,
-            account_name: primary.account_name,
-            email: cleanEmail,
+            bank_name: primaryAccount.bank_name,
+            account_number: primaryAccount.account_number,
+            account_name: primaryAccount.account_name,
+            email: email.trim().toLowerCase(),
             balance: userData?.balance || 0,
             updatedAt: Date.now()
         });
 
+        console.log(`✅ Primary account saved to Firebase (${primaryAccount.bank_name})`);
+
         res.json({
             success: true,
-            message: "Virtual account created successfully",
-            primaryAccount: primary
+            message: `Successfully created ${successfulAccounts.length} account(s)`,
+            primaryAccount: primaryAccount,
+            allAccounts: successfulAccounts   // Return all for future use
         });
 
     } catch (err) {
         console.error("Critical Error:", err.message);
-        res.status(500).json({ success: false, error: err.message });
+        res.status(500).json({ success: false, error: "Internal server error" });
     }
 });
 
 module.exports = router;
+
