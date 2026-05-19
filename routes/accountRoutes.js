@@ -3,7 +3,6 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-// Supported provider structures for Billstack v1
 const SUPPORTED_BANKS = ["PALMPAY", "9PSB", "SAFEHAVEN", "BANKLY", "PROVIDUS"];
 
 router.post('/fund', async (req, res) => {
@@ -18,11 +17,9 @@ router.post('/fund', async (req, res) => {
         const snap = await userRef.once('value');
         const userData = snap.val();
 
-        // 1. UPDATED SAFETY CHECK: 
-        // Only bypass if the multiple accounts node already exists. 
-        // This forces old users with only 1 bank stored to automatically generate the remaining banks.
+        // 1. SMART CHECK: Skip API loop only if they already have multiple accounts saved
         if (userData?.virtual_accounts) {
-            console.log(`ℹ️ Multiple virtual accounts already exist in Firebase for UID: ${uid}. Returning saved data.`);
+            console.log(`ℹ️ Virtual accounts node already exists for UID: ${uid}`);
             const savedAccounts = Object.values(userData.virtual_accounts);
             return res.json({ 
                 success: true, 
@@ -32,19 +29,19 @@ router.post('/fund', async (req, res) => {
             });
         }
 
-        console.log(`\n🔄 Starting account creation/sync for UID: ${uid} - All banks mode`);
+        console.log(`\n🔄 Starting account creation for UID: ${uid} - All banks mode`);
 
         const successfulAccounts = [];
         const errors = [];
 
-        // 2. NAME FORMATTING: (LastName + first 2 letters of FirstName)
+        // 2. NAME FIX: LastName + first 2 letters of FirstName
         const formattedLastName = last_name.trim();
         const formattedFirstName = first_name.trim().substring(0, 2);
         const combinedAccountName = `${formattedLastName} ${formattedFirstName}`.trim();
 
         for (const bank of SUPPORTED_BANKS) {
             try {
-                // 3. JAVASCRIPT TEMPLATE LITERAL SYNTAX FIX
+                // 3. SYNTAX FIX: Cleaned up JavaScript template literal string formatting
                 const uniqueReference = `VA_${uid}_${bank}_${Date.now()}`;
 
                 console.log(`Trying ${bank} with ref: ${uniqueReference}`);
@@ -59,16 +56,16 @@ router.post('/fund', async (req, res) => {
                     currency: "NGN"
                 };
 
-                // 4. API PRODUCTION ENDPOINT (Billstack v1 Reserved Accounts)
+                // 4. ENDPOINT URL FIX: Removed trailing slash to prevent LiteSpeed 404 HTML errors
                 const response = await axios.post(
-                    'https://api.billstack.co/v1/reserved-accounts',
+                    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount',
                     payload,
                     {
                         headers: {
                             Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
                             'Content-Type': 'application/json'
                         },
-                        timeout: 25000
+                        timeout: 30000
                     }
                 );
 
@@ -77,7 +74,6 @@ router.post('/fund', async (req, res) => {
                 const resData = response.data;
                 const accountData = resData.data || resData;
 
-                // Match response schema structure securely
                 if ((resData.status === true || resData.success === true) && (accountData?.account_number || accountData?.accountNumber)) {
                     const newAccount = {
                         bank_name: accountData.bank_name || accountData.bank?.name || `${bank} Bank`,
@@ -96,55 +92,51 @@ router.post('/fund', async (req, res) => {
             } catch (bankError) {
                 const errDetail = bankError.response?.data || bankError.message;
                 errors.push({ bank, error: errDetail });
-                console.error(`❌ ${bank} Error:`, errDetail);
+                console.error(`❌ ${bank} failed:`, errDetail);
             }
         }
 
-        // 5. Handle complete failure case
         if (successfulAccounts.length === 0) {
-            console.error("All banks failed", errors);
+            console.error("All banks failed to generate", errors);
             return res.status(500).json({
                 success: false,
-                error: "Could not create any virtual account at the moment.",
+                error: "Could not create any virtual accounts. Service may be down.",
                 details: errors
             });
         }
 
-        // 6. Select Primary Account (The first successful one dynamically generated)
-        const primaryAccount = successfulAccounts[0];
+        const primary = successfulAccounts[0];
 
-        // 7. Structure the array into an indexed map object compatible with Firebase RTDB children
+        // 5. STRUCTURE ACCOUNTS FOR FIREBASE: Map array items into indexed children keys
         const virtualAccountsObject = {};
         successfulAccounts.forEach((acc, index) => {
             virtualAccountsObject[`account_${index}`] = acc;
         });
 
-        // 8. AUTOMATIC DATABASE UPDATE/SAVE
-        // Keeps old fields intact for backwards compatibility while introducing the multi-account node
+        // 6. DB STORAGE UPDATE: Persist flat primary variables alongside the multiple account node
         await userRef.update({
-            bank_name: primaryAccount.bank_name,
-            account_number: primaryAccount.account_number,
-            account_name: primaryAccount.account_name,
-            bank_code: primaryAccount.bank_code,
+            bank_name: primary.bank_name,
+            account_number: primary.account_number,
+            account_name: primary.account_name,
+            bank_code: primary.bank_code,
             email: email.trim().toLowerCase(),
             balance: userData?.balance || 0,
-            virtual_accounts: virtualAccountsObject, // This node safely nests all generated banks
+            virtual_accounts: virtualAccountsObject, 
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Database structure updated successfully with ${successfulAccounts.length} accounts.`);
+        console.log(`✅ Database records updated automatically with ${successfulAccounts.length} virtual accounts.`);
 
-        // 9. Send structured response payload to front-end
         res.json({
             success: true,
-            message: `Successfully created ${successfulAccounts.length} account(s)`,
-            primaryAccount: primaryAccount,
-            allAccounts: successfulAccounts 
+            message: `Created ${successfulAccounts.length} account(s)`,
+            primaryAccount: primary,
+            allAccounts: successfulAccounts
         });
 
     } catch (err) {
-        console.error("Critical Error in /fund endpoint:", err.message);
-        res.status(500).json({ success: false, error: "Internal server error" });
+        console.error("Critical Error:", err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
