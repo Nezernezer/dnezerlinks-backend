@@ -21,12 +21,11 @@ router.post('/fund', async (req, res) => {
             return res.json({ success: true, account: userData });
         }
 
-        console.log(`\n🔄 Starting account creation for UID: ${uid}`);
+        console.log(`\n🔄 Creating virtual account for UID: ${uid} | Email: ${email}`);
 
         const successfulAccounts = [];
         const errors = [];
 
-        // Clean data
         const cleanEmail = email.trim().toLowerCase();
         const firstName = first_name.trim();
         const lastName = last_name.trim();
@@ -68,15 +67,14 @@ router.post('/fund', async (req, res) => {
                     const newAccount = {
                         bank_name: accountData.bank_name || `${bank} Bank`,
                         account_number: accountData.account_number || accountData.accountNumber,
-                        account_name: accountData.account_name || `${lastName} ${firstName.substring(0,2)}`,
+                        account_name: accountData.account_name || `${lastName} ${firstName}`,
                         bank_code: bank
                     };
                     successfulAccounts.push(newAccount);
                     console.log(`✅ SUCCESS with ${bank}`);
+                    break;                    // Stop after first success (recommended)
                 } else {
-                    const failMsg = resData.message || "Unknown error";
-                    console.log(`⚠️ ${bank} failed: ${failMsg}`);
-                    errors.push({ bank, error: failMsg });
+                    errors.push({ bank, error: resData.message || "Failed" });
                 }
 
             } catch (bankError) {
@@ -90,14 +88,13 @@ router.post('/fund', async (req, res) => {
             console.error("All banks failed", errors);
             return res.status(500).json({
                 success: false,
-                error: "Could not create virtual account. Please try again later.",
+                error: "Could not create virtual account. Please try again later or contact support.",
                 details: errors
             });
         }
 
         const primary = successfulAccounts[0];
 
-        // Save to Firebase
         await userRef.update({
             bank_name: primary.bank_name,
             account_number: primary.account_number,
@@ -107,11 +104,11 @@ router.post('/fund', async (req, res) => {
             updatedAt: Date.now()
         });
 
-        console.log(`✅ Primary account saved successfully`);
+        console.log(`✅ Account saved to Firebase`);
 
         res.json({
             success: true,
-            message: `Created ${successfulAccounts.length} account(s)`,
+            message: "Virtual account created successfully",
             primaryAccount: primary,
             allAccounts: successfulAccounts
         });
