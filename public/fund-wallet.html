@@ -9,12 +9,12 @@
         .container { max-width: 550px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
         .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        
-        .bank-card { 
-            border: 2px solid #007bff; 
-            padding: 15px; 
-            border-radius: 10px; 
-            background: #eef6ff; 
+
+        .bank-card {
+            border: 2px solid #007bff;
+            padding: 15px;
+            border-radius: 10px;
+            background: #eef6ff;
             margin-bottom: 15px;
         }
         .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; display: block; }
@@ -22,8 +22,8 @@
         .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
         #acc-number { font-size: 1.35rem; color: #222; font-weight: bold; }
 
-        .copy-btn { 
-            background: #007bff; color: white; border: none; padding: 6px 12px; 
+        .copy-btn {
+            background: #007bff; color: white; border: none; padding: 6px 12px;
             border-radius: 5px; cursor: pointer; font-size: 0.9rem;
         }
         .copy-btn:hover { background: #0056b3; }
@@ -47,7 +47,7 @@
 <div class="container">
     <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
     <h2>Fund Wallet</h2>
-    
+
     <div class="balance-box">
         <span style="font-size: 0.9rem;">Wallet Balance</span><br>
         <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
@@ -56,10 +56,8 @@
     <div id="status-msg">Checking account status...</div>
 
     <div id="account-ui" style="display: none;">
-        <!-- Primary Account -->
         <div id="primary-account"></div>
 
-        <!-- Multiple Accounts -->
         <div id="multiple-accounts" class="multiple-accounts" style="display: none;">
             <h3>Other Virtual Accounts</h3>
             <div id="other-accounts-list"></div>
@@ -115,7 +113,7 @@
     function createAccountCard(account, isPrimary = false) {
         return `
             <div class="bank-card">
-                <span class="label">${isPrimary ? 'PRIMARY ACCOUNT' : 'ACCOUNT'}</span>
+                <span class="label">${isPrimary ? 'PRIMARY ACCOUNT' : 'ALTERNATIVE ACCOUNT'}</span>
                 <span class="value">${account.bank_name}</span>
                 <span class="label">ACCOUNT NUMBER</span>
                 <div class="acc-num-row">
@@ -142,18 +140,38 @@
         userRef.on('value', async (snap) => {
             const data = snap.val() || {};
 
-            if (data.account_number) {
-                // Show from Firebase
-                document.getElementById("wallet-balance").innerText = 
-                    "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+            // Render current balance fluidly
+            document.getElementById("wallet-balance").innerText =
+                "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
 
-                document.getElementById("primary-account").innerHTML = createAccountCard(data, true);
-                document.getElementById("status-msg").style.display = "none";
-                document.getElementById("account-ui").style.display = "block";
-                return;
+            // 1. DYNAMIC RENDER FOR RETURNING USERS (Data found in Firebase node)
+            if (data.virtual_accounts) {
+                const accountsList = Object.values(data.virtual_accounts);
+                
+                if (accountsList.length > 0) {
+                    // Display the first account as Primary
+                    document.getElementById("primary-account").innerHTML = createAccountCard(accountsList[0], true);
+                    
+                    // Render any remaining alternative bank nodes
+                    if (accountsList.length > 1) {
+                        let html = '';
+                        for (let i = 1; i < accountsList.length; i++) {
+                            html += createAccountCard(accountsList[i], false);
+                        }
+                        document.getElementById("other-accounts-list").innerHTML = html;
+                        document.getElementById("multiple-accounts").style.display = "block";
+                    } else {
+                        document.getElementById("multiple-accounts").style.display = "none";
+                    }
+
+                    document.getElementById("status-msg").style.display = "none";
+                    document.getElementById("account-ui").style.display = "block";
+                    if (animationInterval) clearInterval(animationInterval);
+                    return;
+                }
             }
 
-            // No account yet → Create via backend
+            // 2. GENERATION TRIGGER (Runs if no accounts exist or old flat scheme needs sync)
             if (!animationInterval) startLoadingAnimations();
 
             const rawName = data.name || "";
@@ -177,30 +195,33 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    stopAnimationAndShow(result.message || "Accounts generated successfully!");
+                    stopAnimationAndShow("Accounts successfully configured!");
 
-                    // Display Primary Account
-                    document.getElementById("primary-account").innerHTML = 
-                        createAccountCard(result.primaryAccount || result.account, true);
+                    // Rely on structural data returned directly from API endpoint loop execution
+                    const accountsToDisplay = result.allAccounts || [result.primaryAccount || result.account];
+                    
+                    document.getElementById("primary-account").innerHTML = createAccountCard(accountsToDisplay[0], true);
 
-                    // Display Other Accounts if any
-                    if (result.allAccounts && result.allAccounts.length > 1) {
+                    if (accountsToDisplay.length > 1) {
                         let html = '';
-                        for (let i = 1; i < result.allAccounts.length; i++) {
-                            html += createAccountCard(result.allAccounts[i]);
+                        for (let i = 1; i < accountsToDisplay.length; i++) {
+                            html += createAccountCard(accountsToDisplay[i], false);
                         }
                         document.getElementById("other-accounts-list").innerHTML = html;
                         document.getElementById("multiple-accounts").style.display = "block";
                     }
 
-                    document.getElementById("status-msg").style.display = "none";
-                    document.getElementById("account-ui").style.display = "block";
+                    setTimeout(() => {
+                        document.getElementById("status-msg").style.display = "none";
+                        document.getElementById("account-ui").style.display = "block";
+                    }, 1000);
+                    
                 } else {
-                    stopAnimationAndShow(result.error || "Failed to create accounts", true);
+                    stopAnimationAndShow(result.error || "Failed to sync accounts", true);
                 }
             } catch (err) {
-                console.error(err);
-                stopAnimationAndShow("Network error. Please refresh and try again.", true);
+                console.error("Frontend Fetch Error:", err);
+                stopAnimationAndShow("Network error syncing with billing gateway. Please refresh.", true);
             }
         });
     });
