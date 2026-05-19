@@ -3,7 +3,18 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
 
-const BILLSTACK_URL = 'https://api.billstack.co/v2/thirdparty/generateVirtualAccount';
+const BILLSTACK_SECRET_KEY = process.env.BILLSTACK_SECRET_KEY;
+
+const BILLSTACK_HEADERS = {
+    Authorization: `Bearer ${BILLSTACK_SECRET_KEY}`,
+    'Content-Type': 'application/json'
+};
+
+const GENERATE_ACCOUNT_URL =
+    'https://api.billstack.co/v2/thirdparty/generateVirtualAccount';
+
+const CREATE_CUSTOMER_URL =
+    'https://api.billstack.co/v2/customer/createCustomer';
 
 const SUPPORTED_BANKS = [
     'PALMPAY',
@@ -31,14 +42,90 @@ const generateReference = (uid, bank) => {
     return `VA_${uid}_${bank}_${Date.now()}`;
 };
 
-const formatAccountName = (firstName, lastName) => {
-    const cleanLast = lastName.trim();
-    const cleanFirst = firstName.trim().substring(0, 2);
+/*
+|--------------------------------------------------------------------------
+| Account Name
+| Full First Name + First 2 Letters of Last Name
+|--------------------------------------------------------------------------
+*/
 
-    return `${cleanLast} ${cleanFirst}`.trim();
+const formatAccountName = (firstName, lastName) => {
+
+    const cleanFirstName =
+        firstName.trim();
+
+    const cleanLastName =
+        lastName.trim()
+        .substring(0, 2);
+
+    return `${cleanFirstName} ${cleanLastName}`.trim();
 };
 
-const createVirtualAccount = async ({
+/*
+|--------------------------------------------------------------------------
+| Create Billstack Customer
+|--------------------------------------------------------------------------
+*/
+
+const createCustomer = async ({
+    email,
+    first_name,
+    last_name,
+    phone
+}) => {
+
+    try {
+
+        const payload = {
+            email: normalizeEmail(email),
+            firstName: first_name.trim(),
+            lastName: last_name.trim(),
+            phone: normalizePhone(phone)
+        };
+
+        console.log(
+            '📤 Creating customer:',
+            payload.email
+        );
+
+        const response = await axios.post(
+            CREATE_CUSTOMER_URL,
+            payload,
+            {
+                headers: BILLSTACK_HEADERS,
+                timeout: 25000
+            }
+        );
+
+        console.log(
+            '✅ Customer Response:',
+            JSON.stringify(response.data, null, 2)
+        );
+
+        return response.data;
+
+    } catch (error) {
+
+        const err =
+            error.response?.data ||
+            error.message;
+
+        console.log(
+            '⚠️ Customer Create Error:',
+            JSON.stringify(err, null, 2)
+        );
+
+        return null;
+    }
+};
+
+/*
+|--------------------------------------------------------------------------
+| Generate Virtual Account
+|--------------------------------------------------------------------------
+*/
+
+const generateVirtualAccount = async ({
     uid,
     email,
     first_name,
@@ -50,7 +137,7 @@ const createVirtualAccount = async ({
     const payload = {
         email: normalizeEmail(email),
         reference: generateReference(uid, bank),
-        firstName: first_name.trim().substring(0, 2),
+        firstName: first_name.trim(),
         lastName: last_name.trim(),
         phone: normalizePhone(phone),
         bank,
@@ -58,13 +145,10 @@ const createVirtualAccount = async ({
     };
 
     const response = await axios.post(
-        BILLSTACK_URL,
+        GENERATE_ACCOUNT_URL,
         payload,
         {
-            headers: {
-                Authorization: `Bearer ${process.env.BILLSTACK_SECRET_KEY}`,
-                'Content-Type': 'application/json'
-            },
+            headers: BILLSTACK_HEADERS,
             timeout: 25000
         }
     );
@@ -72,7 +156,18 @@ const createVirtualAccount = async ({
     return response.data;
 };
 
-const extractAccountData = (responseData, bank, first_name, last_name) => {
+/*
+|--------------------------------------------------------------------------
+| Extract Account Data
+|--------------------------------------------------------------------------
+*/
+
+const extractAccountData = (
+    responseData,
+    bank,
+    first_name,
+    last_name
+) => {
 
     const data = responseData.data || responseData;
 
@@ -85,6 +180,7 @@ const extractAccountData = (responseData, bank, first_name, last_name) => {
     }
 
     return {
+
         bank_name:
             data.bank_name ||
             data.bank?.name ||
@@ -93,9 +189,10 @@ const extractAccountData = (responseData, bank, first_name, last_name) => {
         account_number: accountNumber,
 
         account_name:
-            data.account_name ||
-            data.accountName ||
-            formatAccountName(first_name, last_name),
+            formatAccountName(
+                first_name,
+                last_name
+            ),
 
         bank_code: bank
     };
@@ -132,45 +229,75 @@ router.post('/fund', async (req, res) => {
             !last_name ||
             !phone
         ) {
+
             return res.status(400).json({
                 success: false,
                 error: 'Missing required fields'
             });
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Firebase User
+        |--------------------------------------------------------------------------
+        */
+
         const userRef = db.ref(`users/${uid}`);
 
-        const snapshot = await userRef.once('value');
+        const snapshot =
+            await userRef.once('value');
 
-        const userData = snapshot.val() || {};
+        const userData =
+            snapshot.val() || {};
 
         /*
         |--------------------------------------------------------------------------
-        | Return Existing Accounts
+        | Existing Accounts
         |--------------------------------------------------------------------------
         */
 
         if (
             userData.virtual_accounts &&
-            Object.keys(userData.virtual_accounts).length > 0
+            Object.keys(
+                userData.virtual_accounts
+            ).length > 0
         ) {
 
-            const existingAccounts = Object.values(
-                userData.virtual_accounts
+            console.log(
+                `ℹ️ Accounts already exist for UID: ${uid}`
             );
+
+            const existingAccounts =
+                Object.values(
+                    userData.virtual_accounts
+                );
 
             return res.json({
                 success: true,
                 message: 'Accounts already exist',
-                primaryAccount: existingAccounts[0],
-                allAccounts: existingAccounts
+                primaryAccount:
+                    existingAccounts[0],
+                allAccounts:
+                    existingAccounts
             });
         }
 
-        console.log(`\n🔄 Creating virtual accounts for UID: ${uid}`);
+        console.log(
+            `\n🔄 Starting account creation for UID: ${uid}`
+        );
 
-        const successfulAccounts = [];
-        const failedAccounts = [];
+        /*
+        |--------------------------------------------------------------------------
+        | Create Customer First
+        |--------------------------------------------------------------------------
+        */
+
+        await createCustomer({
+            email,
+            first_name,
+            last_name,
+            phone
+        });
 
         /*
         |--------------------------------------------------------------------------
@@ -178,65 +305,90 @@ router.post('/fund', async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
+        const successfulAccounts = [];
+
+        const failedAccounts = [];
+
         for (const bank of SUPPORTED_BANKS) {
 
             try {
 
-                console.log(`🏦 Processing ${bank}...`);
+                console.log(
+                    `🏦 Creating ${bank} account...`
+                );
 
-                const responseData = await createVirtualAccount({
-                    uid,
-                    email,
-                    first_name,
-                    last_name,
-                    phone,
-                    bank
-                });
+                const responseData =
+                    await generateVirtualAccount({
+                        uid,
+                        email,
+                        first_name,
+                        last_name,
+                        phone,
+                        bank
+                    });
 
                 console.log(
                     `📥 ${bank} Response:`,
-                    JSON.stringify(responseData, null, 2)
+                    JSON.stringify(
+                        responseData,
+                        null,
+                        2
+                    )
                 );
 
-                const account = extractAccountData(
-                    responseData,
-                    bank,
-                    first_name,
-                    last_name
-                );
+                const account =
+                    extractAccountData(
+                        responseData,
+                        bank,
+                        first_name,
+                        last_name
+                    );
 
                 if (account) {
 
-                    successfulAccounts.push(account);
+                    successfulAccounts.push(
+                        account
+                    );
 
-                    console.log(`✅ ${bank} account created`);
+                    console.log(
+                        `✅ ${bank} success`
+                    );
 
                 } else {
 
+                    const failMessage =
+                        responseData.message ||
+                        'Failed to generate account';
+
                     failedAccounts.push({
                         bank,
-                        error:
-                            responseData.message ||
-                            'Account creation failed'
+                        error: failMessage
                     });
 
-                    console.log(`⚠️ ${bank} failed`);
-
+                    console.log(
+                        `⚠️ ${bank} failed: ${failMessage}`
+                    );
                 }
 
             } catch (error) {
 
-                const errorMessage =
+                const err =
                     error.response?.data ||
-                    error.message ||
-                    'Unknown error';
+                    error.message;
 
                 failedAccounts.push({
                     bank,
-                    error: errorMessage
+                    error: err
                 });
 
-                console.error(`❌ ${bank} Error:`, errorMessage);
+                console.error(
+                    `❌ ${bank} Error:`,
+                    JSON.stringify(
+                        err,
+                        null,
+                        2
+                    )
+                );
             }
         }
 
@@ -246,71 +398,111 @@ router.post('/fund', async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (successfulAccounts.length === 0) {
+        if (
+            successfulAccounts.length === 0
+        ) {
+
+            console.error(
+                '❌ All banks failed'
+            );
 
             return res.status(500).json({
                 success: false,
-                error: 'Could not create virtual accounts',
+                error:
+                    'Could not create any virtual account',
                 details: failedAccounts
             });
         }
 
         /*
         |--------------------------------------------------------------------------
-        | Save Accounts
+        | Primary Account
         |--------------------------------------------------------------------------
         */
 
-        const primaryAccount = successfulAccounts[0];
+        const primaryAccount =
+            successfulAccounts[0];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Firebase Object
+        |--------------------------------------------------------------------------
+        */
 
         const virtualAccountsObject = {};
 
-        successfulAccounts.forEach((account, index) => {
-            virtualAccountsObject[`account_${index}`] = account;
-        });
+        successfulAccounts.forEach(
+            (account, index) => {
+
+                virtualAccountsObject[
+                    `account_${index}`
+                ] = account;
+            }
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Save To Firebase
+        |--------------------------------------------------------------------------
+        */
 
         await userRef.update({
 
-            email: normalizeEmail(email),
+            email:
+                normalizeEmail(email),
 
-            bank_name: primaryAccount.bank_name,
+            bank_name:
+                primaryAccount.bank_name,
 
-            account_number: primaryAccount.account_number,
+            account_number:
+                primaryAccount.account_number,
 
-            account_name: primaryAccount.account_name,
+            account_name:
+                primaryAccount.account_name,
 
-            bank_code: primaryAccount.bank_code,
+            bank_code:
+                primaryAccount.bank_code,
 
-            balance: userData.balance || 0,
+            balance:
+                userData.balance || 0,
 
-            virtual_accounts: virtualAccountsObject,
+            virtual_accounts:
+                virtualAccountsObject,
 
             updatedAt: Date.now()
         });
 
-        console.log('✅ Accounts saved successfully');
+        console.log(
+            '✅ Accounts saved to Firebase'
+        );
 
         /*
         |--------------------------------------------------------------------------
-        | Response
+        | Success Response
         |--------------------------------------------------------------------------
         */
 
         return res.json({
             success: true,
-            message: `${successfulAccounts.length} account(s) created successfully`,
+            message:
+                `${successfulAccounts.length} account(s) created successfully`,
             primaryAccount,
-            allAccounts: successfulAccounts,
+            allAccounts:
+                successfulAccounts,
             failedAccounts
         });
 
     } catch (error) {
 
-        console.error('❌ Critical Error:', error);
+        console.error(
+            '❌ Critical Error:',
+            error
+        );
 
         return res.status(500).json({
             success: false,
-            error: 'Internal server error'
+            error:
+                'Internal server error'
         });
     }
 });
