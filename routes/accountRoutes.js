@@ -10,90 +10,51 @@ const getBillstackHeaders = () => ({
     'Content-Type': 'application/json'
 });
 
-/**
- * Generate virtual account via Billstack.
- * Includes explicit customer identification to resolve "Email not found" errors.
- */
-const generateVirtualAccount = async ({ email, first_name, last_name, phone, requested_bank, uid }) => {
-    // Standardizing payload based on typical Billstack requirements
-    const payload = {
-        email: email,             // The user's email
-        customer_email: email,    // Duplicated to cover both identification patterns
-        name: `${first_name} ${last_name}`,
-        phone: phone,
-        bank: requested_bank.toLowerCase(),
-        reference: `VA_${uid}_${requested_bank}_${Date.now()}` // Using backticks for correct injection
-    };
-
-    console.log('📤 Sending Payload to Billstack:', JSON.stringify(payload, null, 2));
-
-    const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
-        headers: getBillstackHeaders(),
-        timeout: 30000
-    });
-
-    return response.data;
-};
-
-/*
-|--------------------------------------------------------------------------
-| POST /api/account/fund
-|--------------------------------------------------------------------------
-*/
 router.post('/fund', async (req, res) => {
     try {
         const { uid, email, first_name, last_name, phone, requested_bank } = req.body;
 
-        if (!uid || !email || !requested_bank) {
-            return res.status(400).json({ success: false, error: 'Missing critical user data' });
-        }
-
-        // 1. Generate Account
-        console.log(`\n🔄 Generating ${requested_bank} for ${email}`);
-        
-        let responseData;
-        try {
-            responseData = await generateVirtualAccount({ email, first_name, last_name, phone, requested_bank, uid });
-        } catch (error) {
-            const errBody = error.response?.data || error.message;
-            console.error('❌ Billstack API Error:', JSON.stringify(errBody, null, 2));
-            return res.status(500).json({ success: false, error: 'Billstack API failed', details: errBody });
-        }
-
-        console.log('📥 Raw Billstack Response:', JSON.stringify(responseData, null, 2));
-
-        // 2. Check for explicit API rejections (like "Email not found")
-        if (responseData?.status === false) {
-            return res.status(400).json({ 
-                success: false, 
-                error: responseData.message || 'API rejected the request' 
-            });
-        }
-
-        // 3. Robust Extraction: Look for account number in various possible response fields
-        const data = responseData.data || responseData;
-        const accountNumber = data.accountNumber || data.account_number || data.nuban || data.account_no;
-
-        if (!accountNumber) {
-            return res.status(500).json({ success: false, error: 'Provider returned no account number' });
-        }
-
-        // 4. Save to Firebase
-        const account = {
-            bank_name: data.bankName || data.bank_name || requested_bank,
-            account_number: accountNumber,
-            account_name: `${first_name} ${last_name}`,
-            created_at: Date.now()
+        // Use the exact field names Billstack expects
+        const payload = {
+            email: email, 
+            name: `${first_name} ${last_name}`,
+            phone: phone,
+            bank: requested_bank.toLowerCase(),
+            reference: `VA_${uid}_${requested_bank}_${Date.now()}`
         };
 
-        await db.ref(`users/${uid}/virtual_accounts`).push(account);
-        console.log("✅ Data successfully saved to Firebase!");
+        console.log('📤 Sending Payload:', JSON.stringify(payload));
 
-        return res.json({ success: true, account });
+        const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
+            headers: getBillstackHeaders()
+        });
+
+        const data = response.data.data || response.data;
+        
+        // Save to Firebase only if account exists
+        if (data.account_number || data.accountNumber) {
+            const account = {
+                bank_name: data.bankName || data.bank_name || requested_bank,
+                account_number: data.account_number || data.accountNumber,
+                account_name: `${first_name} ${last_name}`,
+                created_at: Date.now()
+            };
+
+            await db.ref(`users/${uid}/virtual_accounts`).push(account);
+            return res.json({ success: true, account });
+        } else {
+            return res.status(400).json({ success: false, message: "Provider accepted request but returned no account." });
+        }
 
     } catch (error) {
-        console.error('❌ Critical Server Error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error' });
+        // If it's a 400 "Email not Found", tell the user exactly what to do
+        if (error.response?.data?.message === "Email not Found") {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Customer record missing. Please add this user to your Billstack dashboard under 'Customers' first." 
+            });
+        }
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 
