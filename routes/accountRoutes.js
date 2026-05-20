@@ -10,51 +10,67 @@ const getBillstackHeaders = () => ({
     'Content-Type': 'application/json'
 });
 
+/**
+ * Generates an account with a sanitized alphanumeric reference
+ * to prevent provider-side rejection.
+ */
+const generateVirtualAccount = async ({ email, first_name, last_name, phone, requested_bank, uid }) => {
+    // Sanitize Reference: Keep only A-Z, 0-9. Prevents "invalid format" errors.
+    const cleanUid = uid.replace(/[^a-z0-9]/gi, '');
+    const cleanBank = requested_bank.replace(/[^a-z0-9]/gi, '');
+    const reference = `VA${cleanUid}${cleanBank}${Date.now()}`.substring(0, 30);
+
+    const payload = {
+        email: email,
+        name: `${first_name} ${last_name}`,
+        phone: phone,
+        bank: requested_bank.toLowerCase(),
+        reference: reference
+    };
+
+    console.log('📤 Sending Payload:', JSON.stringify(payload));
+
+    const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
+        headers: getBillstackHeaders(),
+        timeout: 30000
+    });
+
+    return response.data;
+};
+
 router.post('/fund', async (req, res) => {
     try {
         const { uid, email, first_name, last_name, phone, requested_bank } = req.body;
 
-        // Use the exact field names Billstack expects
-        const payload = {
-            email: email, 
-            name: `${first_name} ${last_name}`,
-            phone: phone,
-            bank: requested_bank.toLowerCase(),
-            reference: `VA_${uid}_${requested_bank}_${Date.now()}`
-        };
+        if (!uid || !email || !requested_bank) {
+            return res.status(400).json({ success: false, error: 'Missing data' });
+        }
 
-        console.log('📤 Sending Payload:', JSON.stringify(payload));
-
-        const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
-            headers: getBillstackHeaders()
-        });
-
-        const data = response.data.data || response.data;
+        const responseData = await generateVirtualAccount({ email, first_name, last_name, phone, requested_bank, uid });
         
-        // Save to Firebase only if account exists
-        if (data.account_number || data.accountNumber) {
-            const account = {
-                bank_name: data.bankName || data.bank_name || requested_bank,
-                account_number: data.account_number || data.accountNumber,
-                account_name: `${first_name} ${last_name}`,
-                created_at: Date.now()
-            };
+        // Comprehensive path check for account numbers returned by various providers
+        const result = responseData.data || responseData;
+        const accountNumber = result.account_number || result.accountNumber || result.nuban;
 
-            await db.ref(`users/${uid}/virtual_accounts`).push(account);
-            return res.json({ success: true, account });
-        } else {
+        if (!accountNumber) {
+            console.error('❌ Provider returned no account. Full Response:', JSON.stringify(responseData));
             return res.status(400).json({ success: false, message: "Provider accepted request but returned no account." });
         }
 
+        const account = {
+            bank_name: result.bankName || result.bank_name || requested_bank,
+            account_number: accountNumber,
+            account_name: `${first_name} ${last_name}`,
+            created_at: Date.now()
+        };
+
+        await db.ref(`users/${uid}/virtual_accounts`).push(account);
+        return res.json({ success: true, account });
+
     } catch (error) {
-        // If it's a 400 "Email not Found", tell the user exactly what to do
-        if (error.response?.data?.message === "Email not Found") {
-            return res.status(400).json({ 
-                success: false, 
-                message: "Customer record missing. Please add this user to your Billstack dashboard under 'Customers' first." 
-            });
-        }
-        return res.status(500).json({ success: false, message: error.message });
+        const errorMessage = error.response?.data?.message || error.message;
+        console.error('❌ Generation Error:', errorMessage);
+        return res.status(500).json({ success: false, message: errorMessage });
     }
 });
 
