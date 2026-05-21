@@ -1,3 +1,4 @@
 node_modules
 .env
 *.zip
+dnezerlinks-firebase-adminsdk.json
