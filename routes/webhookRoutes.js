@@ -3,48 +3,40 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../config/firebase');
 
+// Ensure express.raw() captures the buffer for accurate HMAC verification
 router.post('/billstack', express.raw({ type: 'application/json' }), async (req, res) => {
-    // 1. DEBUG: Log all headers to find the exact key name
-    console.log("--- WEBHOOK REQUEST RECEIVED ---");
-    console.log("ALL HEADERS:", JSON.stringify(req.headers, null, 2));
-
-    // 2. Automated Key Discovery
-    // We search the headers object for any key containing 'billstack' or 'signature'
-    const headerKeys = Object.keys(req.headers);
-    const signatureKey = headerKeys.find(key => 
-        key.toLowerCase().includes('billstack') && key.toLowerCase().includes('signature')
-    );
-    
-    const signature = signatureKey ? req.headers[signatureKey] : null;
+    // We identified the signature header is 'x-wiaxy-signature'
+    const signature = req.headers['x-wiaxy-signature'];
     const secret = process.env.BILLSTACK_SECRET_KEY;
 
-    // 3. Error handling
     if (!signature) {
-        console.error("DEBUG ERROR: No signature header found. Available headers:", headerKeys);
+        console.error("[Webhook] Error: 'x-wiaxy-signature' header missing.");
         return res.status(401).send('Missing signature');
     }
 
     if (!secret) {
-        console.error("DEBUG ERROR: BILLSTACK_SECRET_KEY is undefined in environment variables.");
+        console.error("[Webhook] Error: BILLSTACK_SECRET_KEY is not configured.");
         return res.status(500).send('Server configuration error');
     }
 
     try {
-        // 4. HMAC Verification using the raw body
+        // 1. HMAC Verification
         const hmac = crypto.createHmac('sha256', secret);
         hmac.update(req.body);
         const expectedSignature = hmac.digest('hex');
 
-        // 5. Constant-time comparison
+        // 2. Constant-time comparison to prevent timing attacks
         const sigBuffer = Buffer.from(signature, 'utf8');
         const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
 
+        // Check length first, then use timingSafeEqual
         if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
-            console.error("SECURITY ALERT: Signature mismatch!");
+            console.error("[Webhook] Security Alert: Signature mismatch!");
+            console.log("Expected:", expectedSignature, "Received:", signature);
             return res.status(401).send('Invalid signature');
         }
 
-        // 6. Process Payment
+        // 3. Process the Payload
         const eventData = JSON.parse(req.body.toString('utf8'));
         const { event, data } = eventData;
 
@@ -53,10 +45,15 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
             const email = customer.email.toLowerCase().trim();
             const credit = (amount / 100) * 0.98;
 
+            // Prevent duplicate processing
             const txRef = db.ref(`transactions/${reference}`);
             const snap = await txRef.once('value');
-            if (snap.exists()) return res.status(200).send("Already processed");
+            if (snap.exists()) {
+                console.log(`[Webhook] Transaction ${reference} already processed.`);
+                return res.status(200).send("Already processed");
+            }
 
+            // Update user balance
             const users = await db.ref('users').orderByChild('email').equalTo(email).once('value');
             const userData = users.val();
             
@@ -64,11 +61,14 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
                 const uid = Object.keys(userData)[0];
                 await db.ref(`users/${uid}/balance`).transaction(curr => (curr || 0) + credit);
                 await txRef.set({ status: 'completed', amount: credit, time: Date.now() });
-                console.log(`[Webhook] Success: Credited ${email}`);
+                console.log(`[Webhook] Success: Credited ${email} with ${credit}`);
                 return res.status(200).send("Success");
+            } else {
+                console.error(`[Webhook] User ${email} not found.`);
             }
         }
-        return res.status(200).send("Event ignored");
+        
+        return res.status(200).send("Event received");
 
     } catch (error) {
         console.error("[Webhook] Processing Error:", error.message);
