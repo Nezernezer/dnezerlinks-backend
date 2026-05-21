@@ -4,42 +4,47 @@ const router = express.Router();
 const db = require('../config/firebase');
 
 router.post('/billstack', express.raw({ type: 'application/json' }), async (req, res) => {
-    // 1. Log headers to find the correct signature key
-    console.log("Received Headers:", JSON.stringify(req.headers, null, 2));
+    // 1. DEBUG: Log all headers to find the exact key name
+    console.log("--- WEBHOOK REQUEST RECEIVED ---");
+    console.log("ALL HEADERS:", JSON.stringify(req.headers, null, 2));
 
-    // 2. Check for the most common Billstack header variants
-    const signature = req.headers['x-billstack-signature'] || 
-                      req.headers['x-billstack-webhook-signature'] || 
-                      req.headers['x-signature'];
-
+    // 2. Automated Key Discovery
+    // We search the headers object for any key containing 'billstack' or 'signature'
+    const headerKeys = Object.keys(req.headers);
+    const signatureKey = headerKeys.find(key => 
+        key.toLowerCase().includes('billstack') && key.toLowerCase().includes('signature')
+    );
+    
+    const signature = signatureKey ? req.headers[signatureKey] : null;
     const secret = process.env.BILLSTACK_SECRET_KEY;
 
+    // 3. Error handling
     if (!signature) {
-        console.error("[Webhook] Missing signature header. Checked: x-billstack-signature, x-billstack-webhook-signature, x-signature");
+        console.error("DEBUG ERROR: No signature header found. Available headers:", headerKeys);
         return res.status(401).send('Missing signature');
     }
 
     if (!secret) {
-        console.error("[Webhook] BILLSTACK_SECRET_KEY not set in environment");
-        return res.status(500).send('Configuration error');
+        console.error("DEBUG ERROR: BILLSTACK_SECRET_KEY is undefined in environment variables.");
+        return res.status(500).send('Server configuration error');
     }
 
     try {
-        // 3. HMAC Verification
+        // 4. HMAC Verification using the raw body
         const hmac = crypto.createHmac('sha256', secret);
         hmac.update(req.body);
         const expectedSignature = hmac.digest('hex');
 
-        // 4. Constant-time comparison
+        // 5. Constant-time comparison
         const sigBuffer = Buffer.from(signature, 'utf8');
         const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
 
         if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
-            console.error("[Webhook] Signature mismatch!");
+            console.error("SECURITY ALERT: Signature mismatch!");
             return res.status(401).send('Invalid signature');
         }
 
-        // 5. Success - Process Payment
+        // 6. Process Payment
         const eventData = JSON.parse(req.body.toString('utf8'));
         const { event, data } = eventData;
 
