@@ -3,30 +3,34 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../config/firebase');
 
-// Ensure this route uses express.raw() to get the buffer BEFORE any JSON parsing
 router.post('/billstack', express.raw({ type: 'application/json' }), async (req, res) => {
-    const signature = req.headers['x-billstack-signature'];
+    // 1. Log headers to find the correct signature key
+    console.log("Received Headers:", JSON.stringify(req.headers, null, 2));
+
+    // 2. Check for the most common Billstack header variants
+    const signature = req.headers['x-billstack-signature'] || 
+                      req.headers['x-billstack-webhook-signature'] || 
+                      req.headers['x-signature'];
+
     const secret = process.env.BILLSTACK_SECRET_KEY;
 
     if (!signature) {
-        console.error("[Webhook] Missing signature header");
+        console.error("[Webhook] Missing signature header. Checked: x-billstack-signature, x-billstack-webhook-signature, x-signature");
         return res.status(401).send('Missing signature');
     }
 
     if (!secret) {
         console.error("[Webhook] BILLSTACK_SECRET_KEY not set in environment");
-        return res.status(500).send('Internal Server Error');
+        return res.status(500).send('Configuration error');
     }
 
     try {
-        // 1. Generate the hash using the RAW buffer (req.body)
-        // Do NOT convert to string before hashing
+        // 3. HMAC Verification
         const hmac = crypto.createHmac('sha256', secret);
         hmac.update(req.body);
         const expectedSignature = hmac.digest('hex');
 
-        // 2. Compare safely
-        // Both sides must be compared as buffers to avoid encoding issues
+        // 4. Constant-time comparison
         const sigBuffer = Buffer.from(signature, 'utf8');
         const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
 
@@ -35,7 +39,7 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
             return res.status(401).send('Invalid signature');
         }
 
-        // 3. Process the data
+        // 5. Success - Process Payment
         const eventData = JSON.parse(req.body.toString('utf8'));
         const { event, data } = eventData;
 
