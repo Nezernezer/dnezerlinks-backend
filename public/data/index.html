@@ -6,61 +6,22 @@
     <title>Data Subscription - Dnezerlinks</title>
     <style>
         :root { --primary: #007bff; }
-        
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            width: 100%; 
-            min-height: 100vh; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-        }
-
-        body { 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center;    
-            justify-content: flex-start; 
-            padding-top: 20px;      
-        }
-
-        #mainContent { 
-            width: 100%; 
-            max-width: 450px; 
-            padding: 20px; 
-            box-sizing: border-box; 
-        }
-
-        .card { 
-            width: 100%; 
-            background: white; 
-            padding: 25px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-            box-sizing: border-box;
-        }
-
+        body, html { margin: 0; padding: 0; width: 100%; min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; }
+        body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 20px; }
+        #mainContent { width: 100%; max-width: 450px; padding: 20px; box-sizing: border-box; }
+        .card { width: 100%; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
         h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
-        
         #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
         .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
         .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-
         label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
         input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
-        
         button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-        
-        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
+        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
         .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
-
-        @media (max-width: 360px) {
-            .card { padding: 15px; }
-            body { padding-top: 10px; }
-        }
     </style>
 </head>
 <body>
@@ -72,9 +33,9 @@
         <div id="statusMsg"></div>
 
         <label>Phone Number</label>
-        <input type="tel" id="phone" placeholder="e.g. 08123456789" list="recentNumbers" oninput="autoLookupNetwork()">   
+        <input type="tel" id="phone" placeholder="e.g. 08123456789" list="recentNumbers" autocomplete="off" oninput="autoLookupNetwork()">
         <datalist id="recentNumbers"></datalist>
-        
+
         <label>Select Network</label>
         <select id="network" onchange="updateDataTypes()">
             <option value="">Choose Network</option>
@@ -85,14 +46,10 @@
         </select>
 
         <label>Data Type</label>
-        <select id="dataType" onchange="updateDataPlans()">
-            <option value="">Choose Data Type</option>
-        </select>
+        <select id="dataType" onchange="updateDataPlans()"><option value="">Choose Data Type</option></select>
 
         <label>Data Plan</label>
-        <select id="variation">
-            <option value="">Choose Plan</option>
-        </select>
+        <select id="variation"><option value="">Choose Plan</option></select>
 
         <button id="buyBtn" onclick="validateUserAndOpenModal()">Subscribe Now</button>
     </div>
@@ -102,8 +59,8 @@
     <div class="modal-content">
         <h3>Enter PIN</h3>
         <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
-        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
-        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="toggleBtn">Show PIN</button>
+        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="off">
+        <button onclick="togglePinVisibility()" id="toggleBtn" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Show PIN</button>
         <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
     </div>
@@ -115,22 +72,14 @@
 <script src="plans.js"></script>
 
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
-        authDomain: "dnezerlinks.firebaseapp.com",
-        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
-        projectId: "dnezerlinks",
-        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
-    };
-
+    const firebaseConfig = { apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc", authDomain: "dnezerlinks.firebaseapp.com", databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com", projectId: "dnezerlinks", appId: "1:1028450580168:web:d7a48462a128f02aa657fd" };
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
     const auth = firebase.auth();
     const networkMap = { "mtn": "1", "glo": "2", "9mobile": "3", "airtel": "4" };
 
     window.onload = () => {
-        fetch("https://dnezerlinks-backend.onrender.com/").catch(() => {});
-        
+        loadRecentPhones();
         const pending = sessionStorage.getItem('pending_data_order');
         if (pending) {
             const order = JSON.parse(pending);
@@ -140,76 +89,30 @@
             document.getElementById('dataType').value = order.dataType;
             updateDataPlans();
             document.getElementById('variation').value = order.variation;
-            
             sessionStorage.removeItem('pending_data_order');
             setTimeout(() => { document.getElementById('pinModal').style.display = 'flex'; }, 800);
-        } else {
-            loadRecentPhone();
         }
     };
+
+    function loadRecentPhones() {
+        const phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
+        document.getElementById('recentNumbers').innerHTML = phones.map(p => `<option value="${p}">`).join('');
+    }
+
+    function saveRecentPhone(phone) {
+        let phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
+        if (!phones.includes(phone)) {
+            phones = [phone, ...phones].slice(0, 5);
+            localStorage.setItem('recent_phones', JSON.stringify(phones));
+            loadRecentPhones();
+        }
+    }
 
     function showMessage(msg, isError = true) {
         const msgDiv = document.getElementById('statusMsg');
         msgDiv.textContent = msg;
         msgDiv.style.display = 'block';
         msgDiv.className = isError ? 'error-msg' : 'success-msg';
-    }
-
-    function loadRecentPhone() {
-        const savedPhone = localStorage.getItem('last_phone');
-        if (savedPhone) {
-            const list = document.getElementById('recentNumbers');
-            list.innerHTML = `<option value="${savedPhone}">Recently Used</option>`;
-            document.getElementById('phone').value = savedPhone;
-            autoLookupNetwork();
-        }
-    }
-
-    auth.onAuthStateChanged(user => {
-        if (!user) window.location.href = "../login.html";
-    });
-
-    async function validateUserAndOpenModal() {
-        const user = auth.currentUser;
-        const phone = document.getElementById('phone').value;
-        const network = document.getElementById('network').value;
-        const dataType = document.getElementById('dataType').value;
-        const variation = document.getElementById('variation').value;
-        const buyBtn = document.getElementById('buyBtn');
-
-        if (!network || !variation || phone.length < 11) {
-            return showMessage("Please fill all fields correctly.");
-        }
-
-        buyBtn.disabled = true;
-        buyBtn.innerText = "Checking status...";
-
-        try {
-            const snap = await database.ref('users/' + user.uid).once('value');
-            const data = snap.val() || {};
-
-            if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") {
-                window.location.href = "../kyc_status.html";
-                return;
-            }
-
-            if (!data.transaction_pin) {
-                const pendingOrder = { phone, network, dataType, variation };
-                sessionStorage.setItem('pending_data_order', JSON.stringify(pendingOrder));
-                window.location.href = "../pinsetup.html?return=data";
-                return;
-            }
-
-            document.getElementById('pinModal').style.display = 'flex';
-            document.getElementById('txnPin').value = '';
-            document.getElementById('pinError').textContent = '';
-            
-        } catch (e) {
-            showMessage("Error validating account.");
-        } finally {
-            buyBtn.disabled = false;
-            buyBtn.innerText = "Subscribe Now";
-        }
     }
 
     function autoLookupNetwork() {
@@ -237,9 +140,7 @@
         const dataTypeSelect = document.getElementById('dataType');
         dataTypeSelect.innerHTML = '<option value="">Choose Data Type</option>';
         if (network && groupedPlans[network]) {
-            Object.keys(groupedPlans[network]).forEach(group => {
-                dataTypeSelect.add(new Option(group, group));
-            });
+            Object.keys(groupedPlans[network]).forEach(group => { dataTypeSelect.add(new Option(group, group)); });
         }
         updateDataPlans();
     }
@@ -249,85 +150,105 @@
         const dataType = document.getElementById('dataType').value;
         const variationSelect = document.getElementById('variation');
         variationSelect.innerHTML = '<option value="">Choose Plan</option>';
-        if (network && dataType && groupedPlans[network][dataType]) {
+        if (network && dataType && groupedPlans[network] && groupedPlans[network][dataType]) {
             groupedPlans[network][dataType].forEach(plan => {
-                variationSelect.add(new Option(plan.name, JSON.stringify(plan)));
+                const cleanName = plan.name.split(' - ₦')[0];
+                const displayName = `${cleanName} - ₦${plan.price}`;
+                variationSelect.add(new Option(displayName, JSON.stringify(plan)));
             });
         }
     }
 
-    function closePinModal() { document.getElementById('pinModal').style.display = 'none'; }
+    async function validateUserAndOpenModal() {
+        const btn = document.getElementById('buyBtn');
+        const user = auth.currentUser;
+        const phone = document.getElementById('phone').value;
+        const network = document.getElementById('network').value;
+        const variation = document.getElementById('variation').value;
+
+        if (!network || !variation || phone.length < 11) return showMessage("Please fill all fields.");
+
+        btn.disabled = true;
+        btn.textContent = "Checking...";
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val() || {};
+            if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") return window.location.href = "../kyc_status.html";
+            if (!data.transaction_pin) {
+                sessionStorage.setItem('pending_data_order', JSON.stringify({ phone, network, dataType: document.getElementById('dataType').value, variation }));
+                return window.location.href = "../pinsetup.html?return=data";
+            }
+            document.getElementById('pinModal').style.display = 'flex';
+        } catch (e) { showMessage("Error validating."); }
+        finally { btn.disabled = false; btn.textContent = "Subscribe Now"; }
+    }
 
     function togglePinVisibility() {
         const pinInput = document.getElementById('txnPin');
-        const toggleBtn = document.getElementById('toggleBtn');
+        const btn = document.getElementById('toggleBtn');
         pinInput.type = (pinInput.type === "password") ? "text" : "password";
-        toggleBtn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
+        btn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
     }
 
     async function verifyAndPay() {
-        const enteredPin = document.getElementById('txnPin').value;
-        const user = auth.currentUser;
         const btn = document.getElementById('confirmBtn');
-        const pinErr = document.getElementById('pinError');
-
-        if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
-
+        const pin = document.getElementById('txnPin').value;
+        const user = auth.currentUser;
+        const pinError = document.getElementById('pinError');
+        
         btn.disabled = true;
-        btn.innerText = "Processing...";
+        btn.textContent = "Processing...";
+        pinError.textContent = "";
 
-        try {
-            const snap = await database.ref('users/' + user.uid).once('value');
-            const data = snap.val();
-            if (String(enteredPin) === String(data.transaction_pin)) {
-                executePurchase(data.balance, user.uid, JSON.parse(document.getElementById('variation').value));
-            } else {
-                pinErr.textContent = "Incorrect PIN!";
-                btn.disabled = false;
-                btn.innerText = "Confirm Payment";
-            }
-        } catch(e) {
-            pinErr.textContent = "Error";
+        const snap = await database.ref('users/' + user.uid).once('value');
+        if (pin === String(snap.val().transaction_pin)) {
+            executePurchase(snap.val().balance, user.uid, JSON.parse(document.getElementById('variation').value));
+        } else {
+            pinError.textContent = "Incorrect PIN!";
             btn.disabled = false;
-            btn.innerText = "Confirm Payment";
+            btn.textContent = "Confirm Payment";
         }
     }
 
     async function executePurchase(balance, uid, plan) {
-        const network = document.getElementById("network").value;
+        const btn = document.getElementById('confirmBtn');
         const phone = document.getElementById("phone").value;
-        const pin = document.getElementById("txnPin").value.trim();
-        
         if (balance < plan.price) {
+            showMessage("Insufficient Balance");
             closePinModal();
-            return showMessage("Insufficient Balance");
+            return;
         }
-
         try {
-            const response = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    pin, uid, phone, dataPlan: plan.id, networkID: networkMap[network], amount: plan.price
-                })
+            const res = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pin: document.getElementById("txnPin").value, uid, phone, dataPlan: plan.id, networkID: networkMap[document.getElementById("network").value], amount: plan.price })
             });
-            const res = await response.json();
-            if (res.success) {
-                localStorage.setItem('last_phone', phone);
+            const data = await res.json();
+            if (data.success) {
+                saveRecentPhone(phone);
                 closePinModal();
-                showMessage("Transaction Successful!", false);
-                setTimeout(() => { window.location.href = "../home.html"; }, 2000);
+                showMessage("Success!", false);
+                document.getElementById('phone').value = '';
+                setTimeout(() => window.location.href = "../home.html", 2000);
             } else {
-                closePinModal();
-                showMessage(res.error || "Transaction Failed");
-                document.getElementById('confirmBtn').disabled = false;
-                document.getElementById('confirmBtn').innerText = "Confirm Payment";
+                throw new Error(data.error || "Failed");
             }
         } catch (e) {
+            showMessage(e.message || "Error processing transaction.");
             closePinModal();
-            showMessage("Network Error.");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Confirm Payment";
         }
     }
+
+    function closePinModal() {
+        document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('txnPin').value = '';
+        document.getElementById('pinError').textContent = '';
+    }
+
+    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
 </script>
 </body>
 </html>

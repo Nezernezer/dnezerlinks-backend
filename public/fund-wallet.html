@@ -3,228 +3,381 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fund Wallet - Dnezerlinks</title>
+    <title>Fund Wallet & Swipe Boxes - Dnezerlinks</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 550px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        /* Shared Reset Layout */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f7f6; 
+            padding: 20px; 
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            gap: 40px;
+        }
+        
+        /* COMPONENT 1: CONSTANT FUND WALLET */
+        .container { 
+            width: 100%;
+            max-width: 550px; 
+            background: white; 
+            padding: 25px; 
+            border-radius: 15px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        }
+        
         h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
-        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-
-        .bank-card {
-            border: 2px solid #007bff;
-            padding: 15px;
-            border-radius: 10px;
-            background: #eef6ff;
-            margin-bottom: 15px;
-        }
-        .label { font-size: 0.85rem; color: #666; margin-bottom: 2px; display: block; }
-        .value { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; display: block; }
-        .acc-num-row { display: flex; align-items: center; justify-content: space-between; }
-        #acc-number { font-size: 1.35rem; color: #222; font-weight: bold; }
-
-        .copy-btn {
-            background: #007bff; color: white; border: none; padding: 6px 12px;
-            border-radius: 5px; cursor: pointer; font-size: 0.9rem;
-        }
-        .copy-btn:hover { background: #0056b3; }
+        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 5px; }
 
         #status-msg {
             text-align: center;
             font-weight: bold;
-            padding: 20px;
-            font-size: 1.1rem;
-            min-height: 100px;
+            font-size: 0.95rem;
+            margin-top: 10px;
+            display: none;
         }
-        .error { color: #e74c3c !important; }
-        .success { color: #27ae60 !important; }
 
-        .multiple-accounts { margin-top: 20px; }
-        .multiple-accounts h3 { color: #007bff; text-align: center; margin: 15px 0 10px; }
+        /* COMPONENT 2: SWIPEABLE COLOR BOXES */
+        .swipe-container {
+            display: flex;
+            gap: 20px;
+            width: 90%;
+            max-width: 500px;
+            padding: 20px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .swipe-container::-webkit-scrollbar { display: none; }
+        .swipe-container { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .card {
+            flex: 0 0 100%;
+            height: 160px;
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            color: white;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            scroll-snap-align: start;
+            transition: transform 0.3s ease;
+        }
+
+        .card:active { transform: scale(0.98); }
+        .card-title { font-size: 1.8rem; font-weight: 700; letter-spacing: 1px; text-transform: capitalize; }
+        .card-body { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+
+        .account-info-box {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 70%;
+            text-align: left;
+            display: none;
+        }
+
+        .acc-number-text { font-size: 1.4rem; font-weight: bold; letter-spacing: 1px; }
+        .acc-name-text {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            opacity: 0.9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .action-btn {
+            background-color: #ffffff;
+            color: #333;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transition: background 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .action-btn:hover { background-color: #f1f5f9; }
+        .action-btn:disabled { background-color: #cccccc; color: #666; cursor: not-allowed; box-shadow: none; }
+
+        .bg-palm { background: linear-gradient(135deg, #2e7d32, #4caf50); }
+        .bg-psb { background: linear-gradient(135deg, #1565c0, #2196f3); }
+        .bg-safe { background: linear-gradient(135deg, #ff8f00, #ffc107); }
+        .bg-bankly { background: linear-gradient(135deg, #009688, #4db6ac); }
+        .bg-providus { background: linear-gradient(135deg, #6a1b9a, #9c27b0); }
+        .bg-wema { background: linear-gradient(135deg, #c62828, #f44336); }
+
+        .hint { text-align: center; color: #888; font-size: 0.9rem; margin-top: -20px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
-    <h2>Fund Wallet</h2>
-
-    <div class="balance-box">
-        <span style="font-size: 0.9rem;">Wallet Balance</span><br>
-        <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
-    </div>
-
-    <div id="status-msg">Checking account status...</div>
-
-    <div id="account-ui" style="display: none;">
-        <div id="primary-account"></div>
-
-        <div id="multiple-accounts" class="multiple-accounts" style="display: none;">
-            <h3>Other Virtual Accounts</h3>
-            <div id="other-accounts-list"></div>
+    <div class="container">
+        <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
+        <h2>Fund Wallet</h2>
+        <div class="balance-box">
+            <span style="font-size: 0.9rem;">Wallet Balance</span><br>
+            <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
         </div>
-
-        <p style="font-size:0.8rem; color:red; text-align:center; margin-top:15px;">
-            Note: A 2% fee applies to all automated deposits.
-        </p>
+        <div id="status-msg"></div>
     </div>
-</div>
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
-        authDomain: "dnezerlinks.firebaseapp.com",
-        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
-        projectId: "dnezerlinks",
-        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    let animationInterval = null;
-
-    function startLoadingAnimations() {
-        const statusMsg = document.getElementById("status-msg");
-        const messages = [
-            "Checking your account status...",
-            "Connecting to Billstack...",
-            "Generating virtual accounts...",
-            "Please wait while we process..."
-        ];
-        let i = 0;
-        if (animationInterval) clearInterval(animationInterval);
-        animationInterval = setInterval(() => {
-            statusMsg.innerText = messages[i % messages.length];
-            i++;
-        }, 3200);
-    }
-
-    function stopAnimationAndShow(message, isError = false) {
-        if (animationInterval) clearInterval(animationInterval);
-        const status = document.getElementById("status-msg");
-        status.innerText = message;
-        status.className = isError ? "error" : "success";
-    }
-
-    function createAccountCard(account, isPrimary = false) {
-        return `
-            <div class="bank-card">
-                <span class="label">${isPrimary ? 'PRIMARY ACCOUNT' : 'ALTERNATIVE ACCOUNT'}</span>
-                <span class="value">${account.bank_name}</span>
-                <span class="label">ACCOUNT NUMBER</span>
-                <div class="acc-num-row">
-                    <span style="font-size:1.35rem; font-weight:bold;">${account.account_number}</span>
-                    <button class="copy-btn" onclick="copyAccount('${account.account_number}')">Copy</button>
+    <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <div class="swipe-container">
+            
+            <!-- Box 1: Palmpay -->
+            <div class="card bg-palm" id="card-palmpay">
+                <div class="card-title">Palmpay</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-palmpay">
+                        <span class="acc-number-text" id="num-palmpay"></span>
+                        <span class="acc-name-text" id="name-palmpay"></span>
+                    </div>
+                    <button class="action-btn" id="btn-palmpay" onclick="triggerAccountGeneration('palmpay')">Get Account Number</button>
                 </div>
-                <span class="label" style="margin-top:8px;">ACCOUNT NAME</span>
-                <span class="value">${account.account_name}</span>
             </div>
-        `;
-    }
 
-    function copyAccount(number) {
-        navigator.clipboard.writeText(number).then(() => {
-            alert("Account number copied!");
-        });
-    }
+            <!-- Box 2: 9psb -->
+            <div class="card bg-psb" id="card-9psb">
+                <div class="card-title">9psb</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-9psb">
+                        <span class="acc-number-text" id="num-9psb"></span>
+                        <span class="acc-name-text" id="name-9psb"></span>
+                    </div>
+                    <button class="action-btn" id="btn-9psb" onclick="triggerAccountGeneration('9psb')">Get Account Number</button>
+                </div>
+            </div>
 
-    firebase.auth().onAuthStateChanged(async (user) => {
-        if (!user) return window.location.href = 'login.html';
+            <!-- Box 3: Safehaven -->
+            <div class="card bg-safe" id="card-safehaven">
+                <div class="card-title">Safehaven</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-safehaven">
+                        <span class="acc-number-text" id="num-safehaven"></span>
+                        <span class="acc-name-text" id="name-safehaven"></span>
+                    </div>
+                    <button class="action-btn" id="btn-safehaven" onclick="triggerAccountGeneration('safehaven')">Get Account Number</button>
+                </div>
+            </div>
 
-        const userRef = db.ref(`users/${user.uid}`);
+            <!-- Box 4: Bankly -->
+            <div class="card bg-bankly" id="card-bankly">
+                <div class="card-title">Bankly</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-bankly">
+                        <span class="acc-number-text" id="num-bankly"></span>
+                        <span class="acc-name-text" id="name-bankly"></span>
+                    </div>
+                    <button class="action-btn" id="btn-bankly" onclick="triggerAccountGeneration('bankly')">Get Account Number</button>
+                </div>
+            </div>
 
-        userRef.on('value', async (snap) => {
-            const data = snap.val() || {};
+            <!-- Box 5: Providus -->
+            <div class="card bg-providus" id="card-providus">
+                <div class="card-title">Providus</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-providus">
+                        <span class="acc-number-text" id="num-providus"></span>
+                        <span class="acc-name-text" id="name-providus"></span>
+                    </div>
+                    <button class="action-btn" id="btn-providus" onclick="triggerAccountGeneration('providus')">Get Account Number</button>
+                </div>
+            </div>
 
-            // Render current balance fluidly
-            document.getElementById("wallet-balance").innerText =
-                "₦" + parseFloat(data.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+            <!-- Box 6: Wema -->
+            <div class="card bg-wema" id="card-wema">
+                <div class="card-title">Wema</div>
+                <div class="card-body">
+                    <div class="account-info-box" id="info-wema">
+                        <span class="acc-number-text" id="num-wema"></span>
+                        <span class="acc-name-text" id="name-wema"></span>
+                    </div>
+                    <button class="action-btn" id="btn-wema" onclick="triggerAccountGeneration('wema')">Get Account Number</button>
+                </div>
+            </div>
 
-            // 1. DYNAMIC RENDER FOR RETURNING USERS (Data found in Firebase node)
-            if (data.virtual_accounts) {
-                const accountsList = Object.values(data.virtual_accounts);
-                
-                if (accountsList.length > 0) {
-                    // Display the first account as Primary
-                    document.getElementById("primary-account").innerHTML = createAccountCard(accountsList[0], true);
-                    
-                    // Render any remaining alternative bank nodes
-                    if (accountsList.length > 1) {
-                        let html = '';
-                        for (let i = 1; i < accountsList.length; i++) {
-                            html += createAccountCard(accountsList[i], false);
-                        }
-                        document.getElementById("other-accounts-list").innerHTML = html;
-                        document.getElementById("multiple-accounts").style.display = "block";
-                    } else {
-                        document.getElementById("multiple-accounts").style.display = "none";
-                    }
+        </div>
+        <div class="hint">← Swipe or drag to navigate →</div>
+    </div>
 
-                    document.getElementById("status-msg").style.display = "none";
-                    document.getElementById("account-ui").style.display = "block";
-                    if (animationInterval) clearInterval(animationInterval);
-                    return;
-                }
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks",
+            appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const BANK_KEYS = ["palmpay", "9psb", "safehaven", "bankly", "providus", "wema"];
+        let cachedUserData = {};
+        let processingBanks = new Set(); // Tracks buttons currently awaiting server responses
+
+        function setStatus(text, color = "#333") {
+            const msgEl = document.getElementById("status-msg");
+            if (!text) {
+                msgEl.style.display = "none";
+                return;
+            }
+            msgEl.innerText = text;
+            msgEl.style.color = color;
+            msgEl.style.display = "block";
+        }
+
+        function updateStaticCards(virtualAccounts) {
+            let valuesList = [];
+            if (virtualAccounts && typeof virtualAccounts === 'object') {
+                valuesList = Object.values(virtualAccounts);
             }
 
-            // 2. GENERATION TRIGGER (Runs if no accounts exist or old flat scheme needs sync)
-            if (!animationInterval) startLoadingAnimations();
+            BANK_KEYS.forEach(key => {
+                const infoBox = document.getElementById(`info-${key}`);
+                const btn = document.getElementById(`btn-${key}`);
+                const numEl = document.getElementById(`num-${key}`);
+                const nameEl = document.getElementById(`name-${key}`);
 
-            const rawName = data.name || "";
-            const nameParts = rawName.trim().split(/\s+/);
-            const fName = nameParts[0] || "User";
-            const lName = nameParts[1] || user.uid.substring(0, 4);
+                if (!infoBox || !btn) return;
+
+                // Skip updating if this specific card button is currently processing an API fetch
+                if (processingBanks.has(key)) return;
+
+                let matched = valuesList.find(acc => 
+                    acc && acc.bank_name && acc.bank_name.toLowerCase().includes(key)
+                );
+
+                if (!matched && cachedUserData.account_number && cachedUserData.bank_name) {
+                    if (cachedUserData.bank_name.toLowerCase().includes(key)) {
+                        matched = {
+                            account_number: cachedUserData.account_number,
+                            account_name: cachedUserData.account_name || cachedUserData.name,
+                            bank_name: cachedUserData.bank_name
+                        };
+                    }
+                }
+
+                if (matched) {
+                    numEl.innerText = matched.account_number;
+                    nameEl.innerText = matched.account_name || "Customer Account";
+                    infoBox.style.display = "flex";
+                    btn.innerText = "Copy";
+                    btn.disabled = false;
+                    btn.onclick = () => copyCardNum(matched.account_number);
+                } else {
+                    numEl.innerText = "";
+                    nameEl.innerText = "";
+                    infoBox.style.display = "none";
+                    btn.innerText = "Get Account Number";
+                    btn.disabled = false;
+                    btn.onclick = () => triggerAccountGeneration(key);
+                }
+            });
+        }
+
+        async function triggerAccountGeneration(bankKey) {
+            const targetBtn = document.getElementById(`btn-${bankKey}`);
+            
+            // Add to processing set so live synchronization doesn't fight the UI state
+            processingBanks.add(bankKey);
+            if (targetBtn) {
+                targetBtn.disabled = true;
+                targetBtn.innerText = "Processing...";
+            }
+
+            setStatus(`Connecting to reserve your dynamic ${bankKey} account...`, "#E67E22");
+
+            const currentUser = firebase.auth().currentUser;
+            if (!currentUser) {
+                processingBanks.delete(bankKey);
+                return;
+            }
+
+            const nameArray = (cachedUserData.name || "Customer User").trim().split(/\s+/);
+            const firstName = nameArray[0] || "Customer";
+            const lastName = nameArray.length > 1 ? nameArray[nameArray.length - 1] : "Client";
 
             try {
                 const response = await fetch('https://dnezerlinks-backend.onrender.com/api/account/fund', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        uid: user.uid,
-                        email: user.email,
-                        first_name: fName,
-                        last_name: lName,
-                        phone: data.phone || "08000000000"
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        first_name: firstName,
+                        last_name: lastName,
+                        phone: cachedUserData.phone || "08000000000",
+                        requested_bank: bankKey 
                     })
                 });
 
                 const result = await response.json();
 
+                // Delete tracker item so the dynamic visual data layout resets cleanly
+                processingBanks.delete(bankKey);
+
                 if (result.success) {
-                    stopAnimationAndShow("Accounts successfully configured!");
-
-                    // Rely on structural data returned directly from API endpoint loop execution
-                    const accountsToDisplay = result.allAccounts || [result.primaryAccount || result.account];
-                    
-                    document.getElementById("primary-account").innerHTML = createAccountCard(accountsToDisplay[0], true);
-
-                    if (accountsToDisplay.length > 1) {
-                        let html = '';
-                        for (let i = 1; i < accountsToDisplay.length; i++) {
-                            html += createAccountCard(accountsToDisplay[i], false);
-                        }
-                        document.getElementById("other-accounts-list").innerHTML = html;
-                        document.getElementById("multiple-accounts").style.display = "block";
-                    }
-
-                    setTimeout(() => {
-                        document.getElementById("status-msg").style.display = "none";
-                        document.getElementById("account-ui").style.display = "block";
-                    }, 1000);
-                    
+                    setStatus("Account allocated successfully!", "#27AE60");
+                    setTimeout(() => setStatus(""), 3000);
+                    // Force clean evaluation check instantly to snap UI to its new visual components
+                    updateStaticCards(cachedUserData.virtual_accounts);
                 } else {
-                    stopAnimationAndShow(result.error || "Failed to sync accounts", true);
+                    setStatus(result.error || "Generation error. Please retry.", "red");
+                    if (targetBtn) {
+                        targetBtn.disabled = false;
+                        targetBtn.innerText = "Get Account Number";
+                    }
                 }
             } catch (err) {
-                console.error("Frontend Fetch Error:", err);
-                stopAnimationAndShow("Network error syncing with billing gateway. Please refresh.", true);
+                processingBanks.delete(bankKey);
+                setStatus("Network failure. Check your connection properties.", "red");
+                if (targetBtn) {
+                    targetBtn.disabled = false;
+                    targetBtn.innerText = "Get Account Number";
+                }
             }
+        }
+
+        function copyCardNum(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Account Number Copied!");
+            });
+        }
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return window.location.href = 'login.html';
+
+            const userRef = db.ref(`users/${user.uid}`);
+            userRef.on('value', (snap) => {
+                cachedUserData = snap.val() || {};
+
+                document.getElementById("wallet-balance").innerText =
+                    "₦" + parseFloat(cachedUserData.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+                updateStaticCards(cachedUserData.virtual_accounts);
+            });
         });
-    });
-</script>
+    </script>
 </body>
 </html>

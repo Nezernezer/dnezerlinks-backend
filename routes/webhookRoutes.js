@@ -4,46 +4,59 @@ const db = require('../config/firebase');
 
 router.post('/billstack', async (req, res) => {
     try {
-        const { event, data } = req.body;
-        console.log(`[Webhook] Event Received: ${event}`);
+        const payload = req.body;
+        console.log(`[Webhook] Received event: ${payload.event}`);
 
-        if (event === 'charge.success') {
-            const email = data.customer.email.toLowerCase().trim();
-            const rawAmount = data.amount / 100; // Convert kobo to Naira
-            const creditAmount = rawAmount * 0.98; // Deduct 2% fee
-
-            console.log(`[Webhook] Processing ${email} - Amount: ₦${rawAmount}`);
-
-            // Search for user by email (case-insensitive)
-            const userQuery = await db.ref('users')
-                .orderByChild('email')
-                .equalTo(email)
-                .once('value');
-
-            const userData = userQuery.val();
-
-            if (userData) {
-                const uid = Object.keys(userData)[0];
-                
-                // Use a transaction to update the balance safely
-                await db.ref(`users/${uid}/balance`).transaction((currentBalance) => {
-                    return (currentBalance || 0) + creditAmount;
-                });
-
-                console.log(`[Webhook] Successfully credited UID: ${uid} with ₦${creditAmount}`);
-            } else {
-                console.warn(`[Webhook] Failed: No user found with email ${email}`);
-            }
+        // SCENARIO 1: Standard Card Charge
+        if (payload.event === 'charge.success') {
+            await processCredit(payload.data.customer.email, (payload.data.amount / 100) * 0.98, payload.data.id, res);
+        } 
+        // SCENARIO 2: Reserved Account/Bank Transfer (Wiaxy Payload)
+        else if (payload.event === 'PAYMENT_NOTIFICATION') {
+            await processCreditByRef(payload.data.merchant_reference, parseFloat(payload.data.amount) * 0.98, payload.data.reference, res);
+        } else {
+            res.status(200).send("Event ignored");
         }
-        
-        // Always send 200 OK to Billstack to stop retries
-        res.sendStatus(200);
-
     } catch (error) {
-        console.error("[Webhook Error]:", error.message);
-        // We still send 200 if we caught the error to prevent Billstack from spamming retries
-        res.status(200).send("Error handled");
+        console.error("Webhook Error:", error.message);
+        res.status(200).send("Handled"); // Always 200 to stop retries
     }
 });
+
+// Helper for Email-based credits
+async function processCredit(email, amount, txId, res) {
+    const txRef = db.ref(`processed_transactions/${txId}`);
+    if ((await txRef.once('value')).exists()) return res.status(200).send("Duplicate");
+
+    const userQuery = await db.ref('users').orderByChild('email').equalTo(email.toLowerCase().trim()).once('value');
+    const userData = userQuery.val();
+    
+    if (userData) {
+        const uid = Object.keys(userData)[0];
+        await db.ref(`users/${uid}/balance`).transaction(bal => (bal || 0) + amount);
+        await txRef.set({ uid, amount, timestamp: Date.now() });
+        res.status(200).send("Success");
+    } else {
+        res.status(404).send("User not found");
+    }
+}
+
+// Helper for Merchant Ref-based credits
+async function processCreditByRef(merchantRef, amount, txId, res) {
+    const txRef = db.ref(`processed_transactions/${txId}`);
+    if ((await txRef.once('value')).exists()) return res.status(200).send("Duplicate");
+
+    const userQuery = await db.ref('users').orderByChild('merchant_reference').equalTo(merchantRef).once('value');
+    const userData = userQuery.val();
+    
+    if (userData) {
+        const uid = Object.keys(userData)[0];
+        await db.ref(`users/${uid}/balance`).transaction(bal => (bal || 0) + amount);
+        await txRef.set({ uid, amount, timestamp: Date.now() });
+        res.status(200).send("Success");
+    } else {
+        res.status(404).send("User not found");
+    }
+}
 
 module.exports = router;
