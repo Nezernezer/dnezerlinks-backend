@@ -1,4 +1,3 @@
-// routes/webhookRoutes.js
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
@@ -8,71 +7,39 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
     const signature = req.headers['x-wiaxy-signature'];
     const secret = process.env.BILLSTACK_SECRET_KEY;
 
-    if (!signature) {
-        console.error("❌ Missing signature header");
-        return res.status(401).send('Missing signature');
+    if (!signature || !secret) {
+        console.error("❌ Missing signature or secret key");
+        return res.status(401).send('Unauthorized');
     }
 
-    // Log raw body and signature for debugging
-    const rawBody = req.body;
-    const rawBodyString = rawBody.toString('utf8');
-    console.log("📦 Raw body received:", rawBodyString);
-    console.log("🔑 Received signature:", signature);
-    console.log("🔐 Secret (first 4 chars):", secret ? secret.substring(0,4)+'****' : 'MISSING');
+    // 1. Generate HMAC-SHA256 hash using the raw Buffer
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(req.body);
+    const expectedSignature = hmac.digest('hex');
 
-    // Try multiple HMAC combinations
-    const combos = [
-        { algo: 'sha256', encoding: 'hex', label: 'SHA256-hex' },
-        { algo: 'sha256', encoding: 'base64', label: 'SHA256-base64' },
-        { algo: 'sha1', encoding: 'hex', label: 'SHA1-hex' },
-        { algo: 'sha1', encoding: 'base64', label: 'SHA1-base64' }
-    ];
+    // 2. Timing-safe comparison (prevents timing attacks)
+    const sigBuffer = Buffer.from(signature, 'hex');
+    const expBuffer = Buffer.from(expectedSignature, 'hex');
 
-    let verified = false;
-    for (const combo of combos) {
-        const hmac = crypto.createHmac(combo.algo, secret);
-        hmac.update(rawBody);
-        const computed = hmac.digest(combo.encoding);
-        console.log(`⚙️ ${combo.label}:`, computed);
-        if (computed.toLowerCase() === signature.toLowerCase()) {
-            verified = true;
-            console.log(`✅ Signature matched with ${combo.label}`);
-            break;
-        }
-    }
-
-    if (!verified) {
+    if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) {
         console.error("❌ Signature mismatch!");
+        // Log these to your Render dashboard to see exactly what is being sent vs computed
+        console.log("Received:", signature);
+        console.log("Expected:", expectedSignature);
         return res.status(401).send('Invalid signature');
     }
 
-    // Process event
+    // 3. Process the event
     try {
-        const eventData = JSON.parse(rawBodyString);
-        const { event, data } = eventData;
-
-        if (event === 'PAYMENT_NOTIFICATION') {
-            const { amount, merchant_reference } = data;
-            const uid = merchant_reference;
-            if (!uid) {
-                console.error("Missing merchant_reference (UID)");
-                return res.status(400).send("Missing UID");
-            }
-
-            // Atomically credit balance
-            const userBalanceRef = db.ref(`users/${uid}/balance`);
-            await userBalanceRef.transaction(currentBalance => {
-                return (currentBalance || 0) + amount;
-            });
-
-            console.log(`✅ Credited ${amount} to user ${uid}`);
+        const eventData = JSON.parse(req.body.toString('utf8'));
+        if (eventData.event === 'PAYMENT_NOTIFICATION') {
+            const { amount, merchant_reference } = eventData.data;
+            await db.ref(`users/${merchant_reference}/balance`).transaction(bal => (bal || 0) + amount);
             return res.status(200).send("Processed");
         }
-
-        return res.status(200).send("Event acknowledged");
+        res.status(200).send("OK");
     } catch (e) {
-        console.error("Error processing event:", e);
-        return res.status(400).send("Error processing event");
+        res.status(400).send("Parsing error");
     }
 });
 
