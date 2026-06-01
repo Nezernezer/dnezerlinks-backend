@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline | Dnezerlinks</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f4f7f6; color: #333; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Matching the Homepage Header */
+        header { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; padding: 20px; text-align: center; font-size: 1.8rem; font-weight: bold; }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px; }
+
+        .icon-box { font-size: 80px; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
+
+        h1 { font-size: 2rem; color: #1565C0; margin-bottom: 10px; }
+        p { font-size: 1.1rem; color: #555; margin-bottom: 30px; }
+
+        .btn-retry {
+            background: #FFB300;
+            color: #fff;
+            border: none;
+            padding: 16px 50px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(255, 179, 0, 0.4);
+        }
+        .btn-retry:hover { transform: scale(1.05); filter: brightness(1.1); }
+    </style>
+</head>
+<body>
+
+    <header>DNEZERLINKS</header>
+
+    <div class="main-content">
+        <div class="icon-box">📶</div>
+        <h1>Connection Lost</h1>
+        <p>It looks like you're offline. Please check your internet connection and try again.</p>
+        <button class="btn-retry" onclick="window.location.reload()">TRY AGAIN</button>
+    </div>
+
+    <script>
+        // Auto-refresh when internet is back
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+    </script>
+</body>
+</html>

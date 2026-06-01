@@ -9,12 +9,12 @@
         .hero { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; text-align: center; padding: 60px 20px; }
         .hero h1 { font-size: 3.5rem; margin: 0; font-weight: bold; }
         .hero p { font-size: 1.15rem; opacity: 0.9; margin: 15px 0 25px; line-height: 1.4; }
-        
+
         /* Typing Message Style */
         .status-msg {
             height: 20px;
             font-size: 0.95rem;
-            color: #FFB300; /* Matching button color for visibility */
+            color: #FFB300; 
             margin-bottom: 20px;
             font-weight: 600;
         }
@@ -22,14 +22,14 @@
         @keyframes blink { 50% { opacity: 0; } }
 
         /* Animated Get Started Button */
-        .btn-get-started { 
-            background: #FFB300; 
-            color: #fff; 
-            text-decoration: none; 
-            padding: 16px 55px; 
-            border-radius: 40px; 
-            font-weight: bold; 
-            font-size: 1.4rem; 
+        .btn-get-started {
+            background: #FFB300;
+            color: #fff;
+            text-decoration: none;
+            padding: 16px 55px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 1.4rem;
             display: inline-block;
             transition: 0.3s;
             box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.7);
@@ -54,9 +54,9 @@
     <section class="hero">
         <h1>Dnezerlinks</h1>
         <p>Premium Data, Airtime & Utility Services at<br>your fingertips.</p>
-        
+
         <div class="status-msg" id="typeMsg"></div>
-        
+
         <a href="login.html" class="btn-get-started">Get Started</a>
     </section>
 
@@ -85,7 +85,7 @@
                 el.innerHTML = text.substring(0, i + 1);
                 i++;
                 if (i === text.length) {
-                    setTimeout(() => isDeleting = true, 3000); // Pause at end
+                    setTimeout(() => isDeleting = true, 3000); 
                 }
             } else if (isDeleting && i > 0) {
                 el.innerHTML = text.substring(0, i - 1);
@@ -97,7 +97,16 @@
             setTimeout(type, isDeleting ? 40 : speed);
         }
 
-        window.onload = type;
+        window.onload = () => {
+            type();
+            
+            // Service Worker Registration
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(() => console.log('Dnezerlinks: Network guard active.'))
+                    .catch(err => console.log('Service Worker failed:', err));
+            }
+        };
     </script>
 </body>
 </html>
