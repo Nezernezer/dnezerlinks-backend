@@ -1,8 +1,22 @@
-// index.js
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const db = require('./config/firebase');  // This ensures initialization happens
+const path = require('path'); // Added to locate the secret file safely
+
+// Read the Secret File natively from Render's root folder
+const serviceAccountPath = path.join(__dirname, 'firebase-credentials.json');
+
+try {
+    if (!admin.apps.length) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccountPath),
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com" // Matches your database
+        });
+        console.log("✅ Firebase Admin Initialized perfectly via Secret File!");
+    }
+} catch (error) {
+    console.error("❌ Firebase Admin initialization failed:", error.message);
+}
 
 const app = express();
 
