@@ -24,6 +24,19 @@
         .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; border: 1px solid #ccc; border-radius: 8px; padding: 10px; box-sizing: border-box; }
         .toggle-pin { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.7rem; font-weight: bold; padding: 5px; margin: 0; width: auto; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+        /* Loader inside modal */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -54,7 +67,6 @@
         </div>
 
         <label for="iuc">IUC / SmartCard Number</label>
-        <!-- name and autocomplete added for browser history suggestions -->
         <input type="text" id="iuc" name="iuc_history" autocomplete="on" placeholder="Enter Decoder Number" oninput="autoLookupCustomer()" inputmode="numeric">
         <div id="customerInfo" style="margin-top: 5px; font-size: 0.85rem; font-weight: bold; min-height: 1.2rem;"></div>
 
@@ -68,10 +80,11 @@
         <div id="pinError" style="color: var(--error); font-size: 0.85rem; margin-bottom: 5px; min-height: 1rem;"></div>
 
         <div class="pin-container">
-            <!-- one-time-code blocks password saving popups -->
             <input type="password" id="txnPin" name="txn_pin_field" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="one-time-code">
             <button type="button" class="toggle-pin" onclick="togglePinVisibility()">SHOW</button>
         </div>
+
+        <div id="processingSpinner" class="spinner"></div>
 
         <button id="confirmBtn" onclick="verifyAndPay()">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
@@ -99,7 +112,6 @@
     let lookupTimeout;
     let isIucVerified = false;
 
-    // Early wake up for Render Backend
     window.addEventListener('DOMContentLoaded', () => {
         fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/validate", { method: "HEAD" }).catch(() => {});
     });
@@ -158,8 +170,9 @@
         const iuc = document.getElementById("iuc").value.trim();
         const provider = document.getElementById("provider").value;
         const infoDiv = document.getElementById("customerInfo");
+        
         if (iuc.length < 8) { infoDiv.innerText = ""; isIucVerified = false; return; }
-        if (!provider) { infoDiv.innerText = "Select provider first"; return; }
+        if (!provider) { infoDiv.innerText = "Select provider first"; infoDiv.style.color = "red"; return; }
 
         if (lookupTimeout) clearTimeout(lookupTimeout);
         infoDiv.style.color = "orange";
@@ -173,16 +186,22 @@
                     body: JSON.stringify({ iuc, providerID: provider })
                 });
                 const data = await res.json();
-                if (data.success) {
+                
+                // Fixed logic condition checking
+                if (data.success && data.customerName) {
                     infoDiv.style.color = "green";
                     infoDiv.innerText = "✅ " + data.customerName;
                     isIucVerified = true;
                 } else {
                     infoDiv.style.color = "red";
-                    infoDiv.innerText = "❌ Invalid Number";
+                    infoDiv.innerText = "❌ Invalid Decoder Number";
                     isIucVerified = false;
                 }
-            } catch (e) { infoDiv.innerText = "Network error"; isIucVerified = false; }
+            } catch (e) { 
+                infoDiv.style.color = "red";
+                infoDiv.innerText = "Network verification error"; 
+                isIucVerified = false; 
+            }
         }, 1200);
     }
 
@@ -204,28 +223,43 @@
         finally { buyBtn.disabled = false; }
     }
 
-    function closePinModal() { document.getElementById('pinModal').style.display = 'none'; }
+    function closePinModal() { 
+        document.getElementById('pinModal').style.display = 'none'; 
+        document.getElementById('confirmBtn').style.display = 'inline-block';
+        document.getElementById('processingSpinner').style.display = 'none';
+    }
 
     async function verifyAndPay() {
         const enteredPin = document.getElementById('txnPin').value;
         const pinErr = document.getElementById('pinError');
         const confirmBtn = document.getElementById('confirmBtn');
+        const spinner = document.getElementById('processingSpinner');
 
         if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
 
         confirmBtn.disabled = true;
-        confirmBtn.innerText = "Verifying...";
+        confirmBtn.style.display = 'none';
+        spinner.style.display = 'block';
+        pinErr.textContent = "";
 
-        const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
-        const userData = snap.val();
-        const storedPin = userData.transaction_pin || userData.pin;
+        try {
+            const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
+            const userData = snap.val();
+            const storedPin = userData.transaction_pin || userData.pin;
 
-        if (String(enteredPin) === String(storedPin)) {
-            executePurchase(userData.balance, auth.currentUser.uid, enteredPin);
-        } else {
-            pinErr.textContent = "Incorrect Transaction PIN!";
+            if (String(enteredPin) === String(storedPin)) {
+                executePurchase(userData.balance, auth.currentUser.uid, enteredPin);
+            } else {
+                pinErr.textContent = "Incorrect Transaction PIN!";
+                confirmBtn.disabled = false;
+                confirmBtn.style.display = 'inline-block';
+                spinner.style.display = 'none';
+            }
+        } catch (e) {
+            pinErr.textContent = "Error running authorization.";
             confirmBtn.disabled = false;
-            confirmBtn.innerText = "Confirm Payment";
+            confirmBtn.style.display = 'inline-block';
+            spinner.style.display = 'none';
         }
     }
 
@@ -235,14 +269,12 @@
         const amount = parseFloat(selected.dataset.price);
         const confirmBtn = document.getElementById('confirmBtn');
         const buyBtn = document.getElementById('buyBtn');
+        const spinner = document.getElementById('processingSpinner');
 
         if (balance < amount) {
             closePinModal();
             return showMessage("Insufficient Balance, please fund your wallet.");
         }
-
-        confirmBtn.disabled = true;
-        confirmBtn.innerText = "Processing...";
 
         try {
             const res = await fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/pay", {
@@ -264,14 +296,16 @@
                 closePinModal();
                 showMessage(data.error || "Transaction Failed");
                 confirmBtn.disabled = false;
-                confirmBtn.innerText = "Confirm Payment";
+                confirmBtn.style.display = 'inline-block';
+                spinner.style.display = 'none';
                 buyBtn.disabled = false;
             }
         } catch (e) {
             closePinModal();
             showMessage("Server error. Please try again.");
             confirmBtn.disabled = false;
-            confirmBtn.innerText = "Confirm Payment";
+            confirmBtn.style.display = 'inline-block';
+            spinner.style.display = 'none';
             buyBtn.disabled = false;
         }
     }
