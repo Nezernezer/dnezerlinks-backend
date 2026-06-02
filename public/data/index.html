@@ -22,6 +22,19 @@
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
         .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+        /* Loader inside modal */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -61,6 +74,9 @@
         <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
         <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="off">
         <button onclick="togglePinVisibility()" id="toggleBtn" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Show PIN</button>
+        
+        <div id="processingSpinner" class="spinner"></div>
+
         <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
     </div>
@@ -195,24 +211,38 @@
         const pin = document.getElementById('txnPin').value;
         const user = auth.currentUser;
         const pinError = document.getElementById('pinError');
-        
+        const spinner = document.getElementById('processingSpinner');
+
+        if (pin.length < 4) { pinError.textContent = "Enter 4 digits"; return; }
+
         btn.disabled = true;
-        btn.textContent = "Processing...";
+        btn.style.display = 'none';
+        spinner.style.display = 'block';
         pinError.textContent = "";
 
-        const snap = await database.ref('users/' + user.uid).once('value');
-        if (pin === String(snap.val().transaction_pin)) {
-            executePurchase(snap.val().balance, user.uid, JSON.parse(document.getElementById('variation').value));
-        } else {
-            pinError.textContent = "Incorrect PIN!";
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            if (pin === String(snap.val().transaction_pin || snap.val().pin)) {
+                executePurchase(snap.val().balance, user.uid, JSON.parse(document.getElementById('variation').value));
+            } else {
+                pinError.textContent = "Incorrect PIN!";
+                btn.disabled = false;
+                btn.style.display = 'inline-block';
+                spinner.style.display = 'none';
+            }
+        } catch (e) {
+            pinError.textContent = "Validation error.";
             btn.disabled = false;
-            btn.textContent = "Confirm Payment";
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
         }
     }
 
     async function executePurchase(balance, uid, plan) {
         const btn = document.getElementById('confirmBtn');
         const phone = document.getElementById("phone").value;
+        const spinner = document.getElementById('processingSpinner');
+
         if (balance < plan.price) {
             showMessage("Insufficient Balance");
             closePinModal();
@@ -220,7 +250,8 @@
         }
         try {
             const res = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
-                method: "POST", headers: { "Content-Type": "application/json" },
+                method: "POST", 
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ pin: document.getElementById("txnPin").value, uid, phone, dataPlan: plan.id, networkID: networkMap[document.getElementById("network").value], amount: plan.price })
             });
             const data = await res.json();
@@ -238,7 +269,8 @@
             closePinModal();
         } finally {
             btn.disabled = false;
-            btn.textContent = "Confirm Payment";
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
         }
     }
 
@@ -246,6 +278,8 @@
         document.getElementById('pinModal').style.display = 'none';
         document.getElementById('txnPin').value = '';
         document.getElementById('pinError').textContent = '';
+        document.getElementById('confirmBtn').style.display = 'inline-block';
+        document.getElementById('processingSpinner').style.display = 'none';
     }
 
     auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });

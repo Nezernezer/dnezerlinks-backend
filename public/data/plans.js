@@ -38,7 +38,7 @@ const rawPlans = {
             { id: "265", name: "12.5GB (30 Days) - ₦5357.00", price: 5357 },
             { id: "443", name: "3.5GB (7 Days) - ₦1461.00", price: 1461 },
             { id: "444", name: "7GB (30 Days) - ₦3409.00", price: 3409 },
-            { id: "445", name: "20GB (7 Days) - ₦4870.00", price: 1461 },
+            { id: "445", name: "20GB (7 Days) - ₦4870.00", price: 4870 },
             { id: "462", name: "2.5GB (1 Day) - ₦730.00", price: 730 }
         ],
         "BigBundles": [
@@ -151,7 +151,7 @@ const rawPlans = {
             { id: "260", name: "35GB (30 Days) - ₦9820.00", price: 9820 }
         ],
         "SME": [
-            { id: "110", name: "Airtel SME (0 Days) - ₦10.00", price: 10 },
+           // { id: "110", name: "Airtel SME (0 Days) - ₦10.00", price: 10 },
             { id: "111", name: "150MB (1 Day) - ₦55.00", price: 55 },
             { id: "112", name: "300MB (2 Days) - ₦115.00", price: 115 },
             { id: "114", name: "2GB (2 Days) - ₦640.00", price: 640 },

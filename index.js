@@ -29,14 +29,15 @@ app.use('/api/webhook', require('./routes/webhookRoutes'));
 // JSON parser
 app.use(express.json());
 
-// Security gatekeeper (unchanged – uses admin.database() which is now single instance)
+// Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {
+    // GET requests, home route, data/cable validations, webhooks, and virtual account generation (/fund) bypass this check
     if (
         req.method === 'GET' ||
         req.path === '/' ||
-        req.path.includes('/data/buy') ||
         req.path.includes('/validate') ||
-        req.path.includes('/webhook')
+        req.path.includes('/webhook') ||
+        req.path.includes('/fund') 
     ) return next();
 
     const { uid, pin } = req.body;
@@ -45,9 +46,11 @@ const securityGatekeeper = async (req, res, next) => {
     }
 
     try {
+        // Querying transaction_pin from the user node
         const pinSnapshot = await admin.database().ref(`users/${uid}/transaction_pin`).once('value');
         const altPinSnapshot = await admin.database().ref(`users/${uid}/pin`).once('value');
         const storedPin = pinSnapshot.val() || altPinSnapshot.val();
+        
         if (!storedPin || String(storedPin).trim() !== String(pin || '').trim()) {
             return res.status(400).json({ success: false, error: 'Invalid PIN' });
         }
