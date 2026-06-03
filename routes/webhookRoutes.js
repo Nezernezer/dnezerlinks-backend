@@ -16,6 +16,7 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
     }
 
     try {
+        // 1. Generate and Verify HMAC Signature Strictly
         const hmac = crypto.createHmac('sha256', secret);
         hmac.update(req.body);
         const expectedSignature = hmac.digest('hex');
@@ -23,71 +24,79 @@ router.post('/billstack', express.raw({ type: 'application/json' }), async (req,
         const incomingSigClean = signature.trim().toLowerCase();
         const expectedSigClean = expectedSignature.trim().toLowerCase();
 
+        // STRICT SECURITY ACTIVE: If you are running live payments, do not let unverified payloads pass
         if (incomingSigClean !== expectedSigClean) {
-            console.warn("⚠️ Signature mismatch detected but proceeding for verification handling.");
+            console.error("❌ STAGE BLOCK: Webhook rejected due to signature mismatch.");
+            console.log("Headers Received:", incomingSigClean);
+            console.log("Backend Computed:", expectedSigClean);
+            return res.status(401).send('Invalid signature'); 
         }
 
         const eventData = JSON.parse(req.body.toString('utf8'));
-        console.log("✅ Webhook payload accepted:", eventData.event);
+        console.log("✅ Webhook signature verified. Event payload:", eventData.event);
 
         if (eventData.event === 'PAYMENT_NOTIFICATION') {
-            const { amount, merchant_reference } = eventData.data;
+            const { amount, merchant_reference, account_number } = eventData.data;
             let targetUid = null;
 
-            console.log(`🔍 Received reference from Billstack: ${merchant_reference}`);
+            console.log(`🔍 Mapping Reference: ${merchant_reference} | Acc No: ${account_number}`);
 
-            // 1. Check if it uses your custom "VA_UID_TIMESTAMP" format
+            // Method A: Check if reference uses your native format ("VA_UID_TIMESTAMP")
             if (merchant_reference && merchant_reference.startsWith('VA_')) {
                 const parts = merchant_reference.split('_');
                 targetUid = parts[1]; 
-            } else {
-                // 2. Fallback: Search your Firebase database users for this reference string
-                console.log(`🕵️ Reference is generic (${merchant_reference}). Searching users database...`);
+            }
+
+            // Method B: If Billstack tracking returns a transaction ID like "REF-...", scan index trees
+            if (!targetUid) {
+                console.log(`🕵️ Reference format alternative detected (${merchant_reference}). Searching user profiles...`);
                 const usersSnapshot = await db.ref('users').once('value');
                 const usersData = usersSnapshot.val() || {};
 
                 for (const uid in usersData) {
                     const user = usersData[uid];
                     
-                    // Look through user's generated virtual accounts history nodes
+                    // Check under the assigned account numbers mapping index
+                    if (user.assigned_accounts && account_number && user.assigned_accounts[account_number]) {
+                        targetUid = uid;
+                        break;
+                    }
+
+                    // Check deep inside virtual accounts historic objects array
                     if (user.virtual_accounts) {
-                        const hasMatchingAccount = Object.values(user.virtual_accounts).some(acc => 
-                            acc.account_number === merchant_reference || 
-                            acc.reference === merchant_reference
+                        const matchFound = Object.values(user.virtual_accounts).some(acc => 
+                            acc.account_number === account_number || 
+                            acc.reference === merchant_reference ||
+                            acc.account_number === merchant_reference
                         );
-                        if (hasMatchingAccount) {
+                        if (matchFound) {
                             targetUid = uid;
                             break;
                         }
                     }
-                    
-                    // Direct tracking verification backup match
-                    if (user.last_reference === merchant_reference) {
-                        targetUid = uid;
-                        break;
-                    }
                 }
             }
 
-            // If a valid UID node still cannot be deduced, fallback to check if user is logged under an active payment session node
+            // Safety Catch: If the user cannot be tracked down anywhere in your system
             if (!targetUid) {
-                console.error(`❌ Could not resolve a matching user for reference: ${merchant_reference}`);
-                return res.status(400).send("User reference mapping failed");
+                console.error(`❌ Data Mapping Failure: No account matches reference ${merchant_reference}`);
+                return res.status(404).send("User not found for this account reference.");
             }
 
-            console.log(`💰 Funding wallet for resolved UID: ${targetUid} with Amount: ₦${amount}`);
+            console.log(`💰 Funding verified account UID: ${targetUid} with Amount: ₦${amount}`);
 
+            // Atomically increment the wallet balance
             await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
                 return (parseFloat(currentBalance) || 0) + parseFloat(amount);
             });
 
-            return res.status(200).send("Processed");
+            return res.status(200).send("Processed Successfully");
         }
 
         return res.status(200).send("Event acknowledged");
 
     } catch (e) {
-        console.error("🔥 Webhook processing error:", e.message);
+        console.error("🔥 Webhook structural crash error:", e.message);
         return res.status(400).send("Parsing error");
     }
 });
