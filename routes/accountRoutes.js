@@ -26,9 +26,9 @@ router.post('/fund', async (req, res) => {
         if (!finalLastName || finalLastName === "") {
             if (finalFirstName.toLowerCase() === "dnezerlinks") {
                 finalFirstName = "Dnezerlinks";
-                finalLastName = "Services"; // Structural backup name instead of blank or Client
+                finalLastName = ""; // Structural backup name instead of blank or Client
             } else {
-                finalLastName = "User"; // Generic non-client compliance placeholder
+                finalLastName = ""; // Generic non-client compliance placeholder
             }
         }
 
