@@ -12,19 +12,37 @@ const getBillstackHeaders = () => ({
 
 router.post('/fund', async (req, res) => {
     try {
-        const { uid, email, first_name, last_name, phone, requested_bank } = req.body;
+        let { uid, email, first_name, last_name, phone, requested_bank } = req.body;
 
-        // Construct payload: handle first_name fallback and force last_name to be blank if missing
+        // 1. Force clear any lingering "Client" strings sent from frontend storage
+        if (first_name && first_name.toLowerCase().includes('client')) first_name = "";
+        if (last_name && last_name.toLowerCase().includes('client')) last_name = "";
+
+        // 2. Format names correctly. Providers require BOTH fields to be filled for regulatory checks.
+        let finalFirstName = first_name ? first_name.trim() : "Dnezerlinks";
+        let finalLastName = last_name ? last_name.trim() : "";
+
+        // If the frontend passed no last name, split the business name into two so it doesn't fail bank validation
+        if (!finalLastName || finalLastName === "") {
+            if (finalFirstName.toLowerCase() === "dnezerlinks") {
+                finalFirstName = "Dnezerlinks";
+                finalLastName = "Services"; // Structural backup name instead of blank or Client
+            } else {
+                finalLastName = "User"; // Generic non-client compliance placeholder
+            }
+        }
+
+        // Construct payload exactly as required by Billstack documentation
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: first_name ? first_name.trim() : "Dnezerlinks",
-            lastName: last_name ? last_name.trim() : "", // Blank if not provided
+            firstName: finalFirstName,
+            lastName: finalLastName,
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
 
-        console.log('📤 Sending Payload to Billstack:', JSON.stringify(payload, null, 2));
+        console.log('📤 Sanitized Payload Sending to Billstack:', JSON.stringify(payload, null, 2));
 
         const response = await axios.post(GENERATE_ACCOUNT_URL, payload, {
             headers: getBillstackHeaders()
@@ -33,6 +51,7 @@ router.post('/fund', async (req, res) => {
         const responseData = response.data;
 
         if (responseData.status === true && responseData.data && responseData.data.account) {
+            // Billstack returns an array, extract the first index item
             const accountInfo = responseData.data.account[0];
 
             const accountToSave = {
@@ -42,7 +61,7 @@ router.post('/fund', async (req, res) => {
                 created_at: accountInfo.created_at
             };
 
-            // Save to Firebase
+            // Save structured data to Firebase realtime database node
             await db.ref(`users/${uid}/virtual_accounts`).push(accountToSave);
 
             return res.json({ success: true, account: accountToSave });
