@@ -11,7 +11,7 @@ router.post('/generate', async (req, res) => {
     const parsedAmt = parseFloat(amount);
     const parsedQty = parseInt(qty);
 
-    // FIX: Calculate total cost directly on the server to avoid missing parameter crashes
+    // Calculate total cost directly on the server to avoid missing parameter crashes
     const totalCost = parsedAmt * parsedQty;
 
     // Validate payload structure carefully
@@ -38,15 +38,32 @@ router.post('/generate', async (req, res) => {
     try {
         let orderStatus = false;
         let vtuResponseData = null;
+        let dbRejectionReason = "Insufficient Balance";
 
-        // Balance reduction logic based strictly on the server-calculated totalCost
+        // Balance reduction logic with defensive parsing and explicit error unmasking
         const transactionResult = await userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < totalCost) return; // Disregard commit if balance is too low
-            return currentBal - totalCost;
+            if (currentBal === null) {
+                dbRejectionReason = "Database path mismatch or configuration error (Server read balance as NULL)";
+                return; // Aborts transaction
+            }
+            
+            const numericBalance = Number(currentBal);
+            const numericCost = Number(totalCost);
+
+            if (isNaN(numericBalance) || numericBalance < numericCost) {
+                dbRejectionReason = `Genuinely Insufficient Balance (Your wallet balance is ₦${numericBalance})`;
+                return; // Aborts transaction
+            }
+            
+            return numericBalance - numericCost;
         });
 
+        // If transaction fails to commit, return the precise caught reason
         if (!transactionResult.committed) {
-            return res.status(400).json({ success: false, error: `Insufficient Balance! You need ₦${totalCost.toLocaleString()}` });
+            return res.status(400).json({ 
+                success: false, 
+                error: `${dbRejectionReason}! You need ₦${totalCost.toLocaleString()}` 
+            });
         }
 
         // Contact VTU NAIJA API using dynamic form properties
@@ -65,8 +82,8 @@ router.post('/generate', async (req, res) => {
 
             // Handle multiple response variance strings from VTU Naija's processing engine
             if (pinRequest.data && (
-                pinRequest.data.status === 'success' || 
-                pinRequest.data.Status === 'successful' || 
+                pinRequest.data.status === 'success' ||
+                pinRequest.data.Status === 'successful' ||
                 pinRequest.data.status === 'successful'
             )) {
                 orderStatus = true;
@@ -80,7 +97,8 @@ router.post('/generate', async (req, res) => {
 
             // Auto-refund user using the exact processing totalCost if provider endpoint fails
             await userRef.child('balance').transaction((currentBal) => {
-                return (currentBal || 0) + totalCost;
+                const currentNumericBal = currentBal === null ? 0 : Number(currentBal);
+                return currentNumericBal + totalCost;
             });
 
             return res.status(502).json({
