@@ -10,6 +10,14 @@
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; }
         body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
+        
+        /* Persistent Contextual Notification Banners */
+        .form-msg-banner { display: none; padding: 15px; margin: 15px; margin-top: 15px; border-radius: 10px; font-weight: bold; font-size: 14px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .banner-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .banner-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        
+        .modal-msg-banner { display: none; padding: 10px; margin-bottom: 15px; border-radius: 8px; font-size: 13px; font-weight: bold; text-align: center; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+
         .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .back-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; margin-right: 15px; }
         .card { background:#fff; border-radius:15px; padding:20px; margin:15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
@@ -21,47 +29,206 @@
         .buy-btn:active { transform: scale(0.98); background: #1565c0; }
         .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 100; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+
+        /* Dialog & Modal Window Engines */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: flex-end; z-index: 1000; }
+        .modal-sheet { background: #fff; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 25px 20px; box-sizing: border-box; animation: slideUp 0.3s ease-out; }
+        .dialog-box { background: #fff; border-radius: 15px; width: 85%; max-width: 400px; padding: 20px; box-sizing: border-box; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); animation: fadeIn 0.2s ease-out; }
+        .dialog-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-flex { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+
+        /* Anti-Credential Utility for Dial Pad Field Elements */
+        .secure-dial-input {
+            text-align: center; 
+            letter-spacing: 6px; 
+            font-size: 20px; 
+            font-weight: bold;
+            -webkit-text-security: disc !important; /* Visual masking without invoking password state */
+        }
+
+        /* --- STRICT 10-COLUMN ULTRA COMPACT GRID PRINT CONFIGURATION --- */
+        #printArea { display: none; background: white; padding: 0; margin: 0; }
+        
+        .tickets-grid { 
+            display: grid; 
+            grid-template-columns: repeat(10, 1fr); 
+            gap: 2px; 
+            max-width: 100%; 
+            padding: 2px; 
+            box-sizing: border-box; 
+        }
+        
+        .pin-ticket { 
+            border: 1px dashed #333; 
+            padding: 4px 1px; 
+            background: #fff; 
+            border-radius: 3px; 
+            text-align: center; 
+            box-sizing: border-box; 
+            page-break-inside: avoid; 
+            height: 48mm; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+        
+        .ticket-header { 
+            font-weight: bold; 
+            font-size: 6px; 
+            color: #444; 
+            text-transform: uppercase; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .ticket-brand { 
+            font-size: 9px; 
+            font-weight: 800; 
+            color: #0d47a1; 
+            margin: 1px 0; 
+            white-space: nowrap;
+        }
+        
+        .pin-box { 
+            background: #f5f5f5; 
+            border: 1px solid #ddd; 
+            padding: 3px 0; 
+            margin: 2px 0; 
+            border-radius: 2px; 
+        }
+        
+        .pin-label { 
+            font-size: 5.5px; 
+            color: #666; 
+            font-weight: bold; 
+            text-transform: uppercase;
+        }
+        
+        .pin-code { 
+            font-size: 9.5px; 
+            font-weight: 900; 
+            color: #000; 
+            letter-spacing: -0.2px;
+            word-wrap: break-word;
+            line-height: 1.1;
+            display: block;
+        }
+        
+        .ticket-footer { 
+            font-size: 5.5px; 
+            color: #333; 
+            line-height: 1.1; 
+            border-top: 1px dotted #ccc; 
+            padding-top: 2px; 
+            word-break: break-all;
+        }
+
+        .print-actions { display: flex; gap: 10px; max-width: 500px; margin: 20px auto; padding: 0 15px; }
+        .btn-print { background: #2e7d32; color: #fff; }
+        .btn-close { background: #c62828; color: #fff; }
+
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        @media print {
+            @page { size: A4; margin: 4mm; } 
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+            .print-actions { display: none !important; }
+        }
     </style>
 </head>
 <body>
 
-<div class="header-card">
-    <button class="back-btn" onclick="location.href='../home.html'">←</button>
-    <h3 style="margin:0;">Generate Recharge PIN</h3>
+<div id="mainFormContainer">
+    <div class="header-card">
+        <button class="back-btn" onclick="location.href='../home.html'">←</button>
+        <h3 style="margin:0;">Generate Recharge PIN</h3>
+    </div>
+
+    <div id="topFormBanner" class="form-msg-banner"></div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Network</label>
+            <select id="network">
+                <option value="MTN">MTN</option>
+                <option value="GLO">GLO</option>
+                <option value="AIRTEL">AIRTEL</option>
+                <option value="9MOBILE">9MOBILE</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Denomination (₦)</label>
+            <select id="amount" onchange="updateTotal()">
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="qty" value="40" min="1" max="100" oninput="updateTotal()">
+        </div>
+
+        <div class="form-group">
+            <label>Custom Brand Name (Prints on Voucher)</label>
+            <input type="text" id="brandName" placeholder="e.g. Dnezerlinks Enterprise" maxlength="25">
+        </div>
+
+        <div class="summary" id="totalDisplay">Total Payable: ₦4,000.00</div>
+
+        <button class="buy-btn" id="procBtn" onclick="initiateTransactionFlow()">GENERATE PIN</button>
+    </div>
 </div>
 
-<div class="card">
-    <div class="form-group">
-        <label>Network</label>
-        <select id="network">
-            <option value="MTN">MTN</option>
-            <option value="GLO">GLO</option>
-            <option value="AIRTEL">AIRTEL</option>
-            <option value="9MOBILE">9MOBILE</option>
-        </select>
+<!-- Native KYC Dialog Popup Wrapper -->
+<div class="modal-overlay" id="kycDialogOverlay" style="align-items: center;">
+    <div class="dialog-box">
+        <h3 style="margin: 0 0 10px 0; color: #c62828;">KYC Verification Warning</h3>
+        <p style="color: #555; font-size: 14px; line-height: 1.5;">Your KYC verification portfolio is currently incomplete. Would you like to complete verification security parameters now?</p>
+        <div class="dialog-buttons">
+            <button class="btn-flex" style="background: #e0e0e0; color: #333;" onclick="bypassKycToPinModal()">Do Later</button>
+            <button class="btn-flex" style="background: var(--primary); color: #fff;" onclick="location.href='../kyc_status.html'">Verify Now</button>
+        </div>
     </div>
-
-    <div class="form-group">
-        <label>Denomination (₦)</label>
-        <select id="amount" onchange="updateTotal()">
-            <option value="100">100</option>
-            <option value="200">200</option>
-            <option value="500">500</option>
-            <option value="1000">1000</option>
-        </select>
-    </div>
-
-    <div class="form-group">
-        <label>Quantity</label>
-        <input type="number" id="qty" value="1" min="1" max="10" oninput="updateTotal()">
-    </div>
-
-    <div class="summary" id="totalDisplay">Total Payable: ₦100.00</div>
-
-    <button class="buy-btn" id="procBtn">GENERATE PIN</button>
 </div>
 
-<div class="bottom-nav">
+<!-- Security Authorization Pin Bottom Sheet Modal -->
+<div class="modal-overlay" id="pinModalOverlay">
+    <div class="modal-sheet">
+        <div id="modalBanner" class="modal-msg-banner"></div>
+
+        <h3 style="margin: 0 0 15px 0; color: var(--primary);">Enter Security PIN</h3>
+        <div class="form-group">
+            <label>4-Digit Transaction PIN</label>
+            <!-- Optimized for phone pad deployment without browser auto-save hooks -->
+            <input type="tel" id="transactionPin" class="secure-dial-input" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-flex" style="background:#e0e0e0;" onclick="closePinModal()">Cancel</button>
+            <button class="btn-flex" style="background:var(--primary); color:#fff;" id="confirmAuthBtn" onclick="sendGenerationRequest()">Confirm & Pay</button>
+        </div>
+    </div>
+</div>
+
+<!-- Output Grid A4 Panel View -->
+<div id="printArea">
+    <h2 style="text-align: center; margin: 10px 0 5px 0; color: #222; font-size: 15px;">E-Voucher Printing System</h2>
+    <div id="ticketsWrapper"></div>
+    <div class="print-actions">
+        <button class="buy-btn btn-print" onclick="window.print()">🖨️ PRINT SHEET / SAVE PDF</button>
+        <button class="buy-btn btn-close" onclick="closePrintView()">CLOSE SHEET</button>
+    </div>
+</div>
+
+<div class="bottom-nav" id="bottomNav">
     <a class="nav-item" href="../home.html">🏠<br>HOME</a>
     <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>
     <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>
@@ -77,7 +244,30 @@
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    const database = firebase.database();
+
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch('https://Dnezerlinks-backend.onrender.com/api/ping').catch(() => {});
+        updateTotal();
+    });
+
+    function showFormMessage(text, isSuccess = false) {
+        const banner = document.getElementById('topFormBanner');
+        banner.className = `form-msg-banner ${isSuccess ? 'banner-success' : 'banner-error'}`;
+        banner.innerText = text;
+        banner.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showModalMessage(text) {
+        const banner = document.getElementById('modalBanner');
+        banner.innerText = text;
+        banner.style.display = 'block';
+    }
+
+    function clearBanners() {
+        document.getElementById('topFormBanner').style.display = 'none';
+        document.getElementById('modalBanner').style.display = 'none';
+    }
 
     function updateTotal() {
         const amt = parseFloat(document.getElementById('amount').value);
@@ -85,57 +275,176 @@
         document.getElementById('totalDisplay').innerText = "Total Payable: ₦" + (amt * qty).toLocaleString();
     }
 
-    document.getElementById('procBtn').onclick = async () => {
+    // Dynamic KYC verification fetch and processing pipeline
+    async function initiateTransactionFlow() {
+        clearBanners();
         const user = auth.currentUser;
-        if (!user) return alert("Please login first");
+        if (!user) return showFormMessage("❌ Authorization Required: Please login first.");
 
-        const btn = document.getElementById('procBtn');
+        const qty = parseInt(document.getElementById('qty').value);
+        if (isNaN(qty) || qty < 1) return showFormMessage("❌ Data Entry Error: Select a valid card quantity.");
+
+        const procBtn = document.getElementById('procBtn');
+        procBtn.disabled = true;
+        procBtn.innerText = "Checking KYC Profiles...";
+
+        try {
+            // Read snapshot node data from real-time instance tree path
+            const snapshot = await firebase.database().ref(`users/${user.uid}/kyc_status`).once('value');
+            const currentKycStatus = snapshot.val();
+
+            procBtn.disabled = false;
+            procBtn.innerText = "GENERATE PIN";
+
+            if (currentKycStatus === "VERIFIED") {
+                // Instantly bypass dialog warning frames for confirmed vendors
+                openPinModal();
+            } else {
+                // Serve modal alert sheet context to other profile types
+                document.getElementById('kycDialogOverlay').style.display = 'flex';
+            }
+        } catch (dbErr) {
+            console.error("KYC verification tree fetch error:", dbErr);
+            procBtn.disabled = false;
+            procBtn.innerText = "GENERATE PIN";
+            // Structural fallback safety
+            document.getElementById('kycDialogOverlay').style.display = 'flex';
+        }
+    }
+
+    function bypassKycToPinModal() {
+        document.getElementById('kycDialogOverlay').style.display = 'none';
+        openPinModal();
+    }
+
+    function openPinModal() {
+        document.getElementById('pinModalOverlay').style.display = 'flex';
+        document.getElementById('transactionPin').focus();
+    }
+
+    function closePinModal() {
+        document.getElementById('pinModalOverlay').style.display = 'none';
+        document.getElementById('transactionPin').value = "";
+        document.getElementById('modalBanner').style.display = 'none';
+        resetAuthBtn();
+    }
+
+    function resetAuthBtn() {
+        const btn = document.getElementById('confirmAuthBtn');
+        btn.disabled = false;
+        btn.innerText = "Confirm & Pay";
+    }
+
+    async function sendGenerationRequest() {
+        document.getElementById('modalBanner').style.display = 'none';
+        const user = auth.currentUser;
+        const btn = document.getElementById('confirmAuthBtn');
         const amt = parseFloat(document.getElementById('amount').value);
         const qty = parseInt(document.getElementById('qty').value);
         const net = document.getElementById('network').value;
-        const totalCost = amt * qty;
+        const transactionPin = document.getElementById('transactionPin').value;
+        const typedBrandName = document.getElementById('brandName').value.trim();
 
-        if (isNaN(qty) || qty < 1) return alert("Select at least 1 PIN");
-
-        if (!confirm(`Confirm Purchase:\n\nService: ${net} PIN\nQty: ${qty}\nTotal: ₦${totalCost.toLocaleString()}\n\nProceed?`)) return;
+        if (!transactionPin || transactionPin.length < 4) {
+            return showModalMessage("❌ Security Alert: Input a valid 4-digit PIN.");
+        }
 
         btn.disabled = true;
-        btn.innerText = "Processing...";
+        btn.innerText = "Authorizing...";
 
-        const userRef = database.ref('users/' + user.uid);
+        const calculatedTotalPayable = amt * qty;
 
-        userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < totalCost) {
-                return; // Abort if insufficient funds
-            }
-            return currentBal - totalCost;
-        }, (error, committed) => {
-            if (error) {
-                alert("Transaction Error: " + error.message);
-                resetBtn();
-            } else if (!committed) {
-                alert(`❌ Insufficient Balance! You need ₦${totalCost}`);
-                resetBtn();
+        try {
+            const response = await fetch('https://Dnezerlinks-backend.onrender.com/api/rechargepin/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    uid: user.uid,
+                    pin: transactionPin,
+                    network: net,
+                    amount: amt,
+                    qty: qty,
+                    totalPayable: calculatedTotalPayable,
+                    brandName: typedBrandName || "Dnezerlinks"
+                })
+            });
+
+            const result = await response.json();
+            console.log("Canvas Processing Payload Log:", result);
+
+            if (!response.ok || !result.success) {
+                const parsedError = result.error || result.message || "Unresolved API core failure.";
+                
+                if (parsedError.toLowerCase().includes("pin") || response.status === 401 || response.status === 403) {
+                    showModalMessage(`❌ Authorization Rejected: ${parsedError}`);
+                } else {
+                    closePinModal();
+                    showFormMessage(`❌ Transaction Failed (Status ${response.status}): ${parsedError}`);
+                }
+                resetAuthBtn();
             } else {
-                // Saving to transaction history
-                database.ref('transactions/' + user.uid).push({
-                    type: 'Recharge PIN',
-                    service: net + " (₦" + amt + " x " + qty + ")",
-                    amount: totalCost,
-                    date: new Date().toLocaleString(),
-                    status: "Successful"
-                }).then(() => {
-                    alert("✅ PINs Generated! Check your history to view the numbers.");
-                    location.href = '../home.html';
-                });
+                closePinModal();
+                showFormMessage("✅ Vouchers compiled successfully! Loading canvas view...", true);
+                setTimeout(() => {
+                    clearBanners();
+                    displayPinsForPrinting(result);
+                }, 1500);
             }
-        });
-    };
+        } catch (err) {
+            closePinModal();
+            showFormMessage("❌ Socket Endpoint Error: Unable to complete checkout loop. " + err.message);
+            resetAuthBtn();
+        }
+    }
 
-    function resetBtn() {
-        const btn = document.getElementById('procBtn');
-        btn.disabled = false;
-        btn.innerText = "GENERATE PIN";
+    function displayPinsForPrinting(data) {
+        const mainContainer = document.getElementById('mainFormContainer');
+        const bottomNav = document.getElementById('bottomNav');
+        const printArea = document.getElementById('printArea');
+        const wrapper = document.getElementById('ticketsWrapper');
+
+        wrapper.innerHTML = ""; 
+        
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'tickets-grid';
+        
+        const typedBrandName = document.getElementById('brandName').value.trim();
+        const fallbackBrandHeader = typedBrandName ? typedBrandName : "DNEZERLINKS";
+        const activeUssd = '*311*PIN#';
+
+        data.pins.forEach((item) => {
+            const ticket = document.createElement('div');
+            ticket.className = 'pin-ticket';
+            ticket.innerHTML = `
+                <div class="ticket-header">${fallbackBrandHeader}</div>
+                <div class="ticket-brand">${data.network.toUpperCase()} ₦${data.amount}</div>
+                
+                <div class="pin-box">
+                    <div class="pin-label">PIN</div>
+                    <div class="pin-code">${item.pin}</div>
+                </div>
+                
+                <div class="ticket-footer">
+                    S/N: ${item.serial || 'N/A'}<br>
+                    Load: ${activeUssd}
+                </div>
+            `;
+            gridContainer.appendChild(ticket);
+        });
+
+        wrapper.appendChild(gridContainer);
+
+        mainContainer.style.display = 'none';
+        bottomNav.style.display = 'none';
+        printArea.style.display = 'block';
+    }
+
+    function closePrintView() {
+        document.getElementById('mainFormContainer').style.display = 'block';
+        document.getElementById('bottomNav').style.display = 'flex';
+        document.getElementById('printArea').style.display = 'none';
+        document.getElementById('brandName').value = "";
+        clearBanners();
     }
 </script>
 </body>
