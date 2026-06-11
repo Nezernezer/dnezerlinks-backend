@@ -38,35 +38,45 @@ router.post('/generate', async (req, res) => {
     try {
         let orderStatus = false;
         let vtuResponseData = null;
-        let dbRejectionReason = "Insufficient Balance";
 
-        // Balance reduction logic with defensive parsing and explicit error unmasking
+        // 1. Warm up the local server cache with a quick direct snapshot lookup
+        const balSnap = await userRef.child('balance').once('value');
+        const liveServerBalance = balSnap.val();
+
+        if (liveServerBalance === null) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Database configuration error: Balance node does not exist for this account." 
+            });
+        }
+
+        // 2. Safe balance reduction transaction loop
         const transactionResult = await userRef.child('balance').transaction((currentBal) => {
+            // Firebase Trap Fix: If the local cache runs speculatively with null,
+            // feed it the pre-fetched balance to force a synchronous cloud handshake.
             if (currentBal === null) {
-                dbRejectionReason = "Database path mismatch or configuration error (Server read balance as NULL)";
-                return; // Aborts transaction
+                return Number(liveServerBalance) - totalCost;
             }
             
             const numericBalance = Number(currentBal);
             const numericCost = Number(totalCost);
 
             if (isNaN(numericBalance) || numericBalance < numericCost) {
-                dbRejectionReason = `Genuinely Insufficient Balance (Your wallet balance is ₦${numericBalance})`;
-                return; // Aborts transaction
+                return; // Aborts transaction loop if balance is genuinely insufficient
             }
             
             return numericBalance - numericCost;
         });
 
-        // If transaction fails to commit, return the precise caught reason
+        // If transaction fails to commit, it means their balance is genuinely insufficient
         if (!transactionResult.committed) {
             return res.status(400).json({ 
                 success: false, 
-                error: `${dbRejectionReason}! You need ₦${totalCost.toLocaleString()}` 
+                error: `Genuinely Insufficient Balance! Your wallet balance is less than the required ₦${totalCost.toLocaleString()}` 
             });
         }
 
-        // Contact VTU NAIJA API using dynamic form properties
+        // 3. Contact VTU NAIJA API using dynamic form properties
         try {
             const pinRequest = await axios.post('https://vtunaija.com.ng/api/rechargepin/', {
                 network: apiNetworkId,
@@ -107,8 +117,9 @@ router.post('/generate', async (req, res) => {
             });
         }
 
+        // 4. If transaction on provider was successful, structure assets and respond
         if (orderStatus) {
-            // Extrapolate and parse array lists safely
+            // Extrapolate and parse comma-separated string arrays safely
             let pinStringArray = [];
             let serialStringArray = [];
 
@@ -124,7 +135,7 @@ router.post('/generate', async (req, res) => {
                 serial: serialStringArray[index] ? serialStringArray[index].trim() : 'N/A'
             })).filter(p => p.pin !== "");
 
-            // Save transaction entry history
+            // Save log data into user's transaction ledger history
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 type: 'Recharge PIN',
