@@ -8,19 +8,156 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        :root { --primary: #0d47a1; --accent: #ffab00; }
-        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
-        .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; }
-        .back-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; margin-right: 15px; }
-        .card { background:#fff; border-radius:15px; padding:20px; margin:15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
-        input, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; font-family: inherit; outline: none; }
-        .char-count { font-size: 11px; color: #888; text-align: right; margin-top: 5px; }
-        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
-        .buy-btn:active { transform: scale(0.98); background: #1565c0; }
-        .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; }
-        .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+        :root { 
+            --primary: #0d47a1; 
+            --accent: #ffab00; 
+        }
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #f1f3f4; 
+            margin: 0; 
+            padding-bottom: 80px; 
+        }
+        .header-card { 
+            background: var(--primary); 
+            color: #fff; 
+            padding: 20px; 
+            border-radius: 0 0 20px 20px; 
+            display: flex; 
+            align-items: center; 
+        }
+        .back-btn { 
+            background: none; 
+            border: none; 
+            color: white; 
+            font-size: 20px; 
+            cursor: pointer; 
+            margin-right: 15px; 
+        }
+        .card { 
+            background: #fff; 
+            border-radius: 15px; 
+            padding: 20px; 
+            margin: 15px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); 
+        }
+        .form-group { 
+            margin-bottom: 15px; 
+        }
+        label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-size: 13px; 
+            color: #666; 
+            font-weight: bold; 
+        }
+        input, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 10px; 
+            font-size: 16px; 
+            box-sizing: border-box; 
+            font-family: inherit; 
+            outline: none; 
+        }
+        .char-count { 
+            font-size: 11px; 
+            color: #888; 
+            text-align: right; 
+            margin-top: 5px; 
+        }
+        .buy-btn { 
+            width: 100%; 
+            background: var(--primary); 
+            color: #fff; 
+            padding: 15px; 
+            border: none; 
+            border-radius: 10px; 
+            font-weight: bold; 
+            font-size: 16px; 
+            cursor: pointer; 
+            transition: 0.3s; 
+        }
+        .buy-btn:active { 
+            transform: scale(0.98); 
+            background: #1565c0; 
+        }
+        .buy-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .bottom-nav { 
+            position: fixed; 
+            bottom: 0; 
+            width: 100%; 
+            background: #fff; 
+            display: flex; 
+            justify-content: space-around; 
+            border-top: 1px solid #ddd; 
+            padding: 12px 0; 
+        }
+        .nav-item { 
+            text-align: center; 
+            font-size: 10px; 
+            color: #777; 
+            cursor: pointer; 
+            text-decoration: none; 
+        }
+
+        /* Security PIN Modal */
+        #pinModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+        }
+        .pin-input {
+            font-size: 2rem;
+            text-align: center;
+            letter-spacing: 10px;
+            width: 100%;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        .cancel-btn {
+            background: #f44336;
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -38,21 +175,40 @@
 
     <div class="form-group">
         <label>Recipients (Comma separated)</label>
-        <textarea id="recipients" rows="3" placeholder="08012345678, 07087654321"></textarea>
+        <textarea id="recipients" rows="3" placeholder="08012345678, 07087654321" oninput="updateCount()"></textarea>
     </div>
 
     <div class="form-group">
         <label>Message Content</label>
         <textarea id="message" rows="5" placeholder="Type your message here..." oninput="updateCount()"></textarea>
-        <div class="char-count"><span id="chars">0</span> characters | <span id="pages">0</span> SMS unit(s)</div>
-    </div>                                                                    
-    <button class="buy-btn" id="procBtn">SEND MESSAGE</button>                
+        <div class="char-count">
+            <span id="chars">0</span> characters |
+            <span id="pages">0</span> page(s) (<span id="encoding-type">GSM</span>) |
+            Est. Cost: <span id="cost">₦0.00</span>
+        </div>
+    </div>
+    <button class="buy-btn" id="procBtn" onclick="openPinModal()">SEND MESSAGE</button>
+</div>
+
+<!-- Security Gatekeeper Verification Modal -->
+<div id="pinModal">
+    <div class="modal-content">
+        <h3>Enter Transaction PIN</h3>
+        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
+        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
+        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-bottom: 10px;" id="toggleBtn">Show PIN</button>
+
+        <div id="processingSpinner" class="spinner"></div>
+
+        <button id="confirmBtn" onclick="executeSmsTransaction()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Confirm & Pay</button>
+        <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+    </div>
 </div>
 
 <div class="bottom-nav">
     <a class="nav-item" href="../home.html">🏠<br>HOME</a>
-    <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>                  
-    <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>               
+    <a class="nav-item" href="../profile.html">👤<br>PROFILE</a>
+    <a class="nav-item" href="../account.html">⚙️<br>ACCOUNT</a>
 </div>
 
 <script>
@@ -67,68 +223,147 @@
     const auth = firebase.auth();
     const database = firebase.database();
 
-    const PRICE_PER_UNIT = 4.50; 
+    const API_BASE_URL ="https://dnezerlinks-backend.onrender.com";
 
-    function updateCount() {
-        const msg = document.getElementById('message').value;
-        const charCount = msg.length;
-        const units = charCount === 0 ? 0 : Math.ceil(charCount / 160);
-        document.getElementById('chars').innerText = charCount;
-        document.getElementById('pages').innerText = units;
-        return units;
+    // Direct routing checkpoint status monitoring on page load
+    auth.onAuthStateChanged(user => {
+        if (!user) window.location.href = "../login.html";
+    });
+
+    function isUnicode(text) {
+        const gsm7bitRegExp = /^[\x20-\x7E\xA1\xA3\xA4\xA5\xA7\xBF\xC4\xC5\xC6\xC7\xC9\xD1\xD2\xD3\xD4\xD5\xD6\xD8\xDC\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF2\xF3\xF4\xF5\xF6\xF8\xF9\xFA\xFB\xFC\xFE\xDF\r\n]*$/;
+        return !gsm7bitRegExp.test(text);
     }
 
-    document.getElementById('procBtn').onclick = async () => {
+    function getRateAndPages() {
+        const msg = document.getElementById('message').value;
+        const charCount = msg.length;
+
+        const unicodeDetected = isUnicode(msg);
+        const charsPerPage = unicodeDetected ? 70 : 160;
+        const pages = charCount === 0 ? 0 : Math.ceil(charCount / charsPerPage);
+
+        const lagosHour = parseInt(
+            new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Africa/Lagos',
+                hour: 'numeric',
+                hour12: false
+            }).format(new Date()), 10
+        );
+
+        const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
+
+        const rawRecipients = document.getElementById('recipients').value;
+        const totalRecipients = rawRecipients.split(',').filter(n => n.trim().length >= 10).length;
+        const totalCost = pages * ratePerPage * (totalRecipients || 1);
+
+        return { charCount, pages, ratePerPage, totalCost, unicodeDetected };
+    }
+
+    function updateCount() {
+        const metrics = getRateAndPages();
+        document.getElementById('chars').innerText = metrics.charCount;
+        document.getElementById('pages').innerText = metrics.pages;
+        document.getElementById('encoding-type').innerText = metrics.unicodeDetected ? "Unicode/Emoji" : "GSM";
+        document.getElementById('cost').innerText = "₦" + metrics.totalCost.toFixed(2);
+        return metrics;
+    }
+
+    // Modal Control Functions
+    function openPinModal() {
+        const metrics = getRateAndPages();
+        const rawRecipients = document.getElementById('recipients').value;
+
+        if (metrics.charCount === 0 || !rawRecipients.trim()) {
+            return alert("Please enter recipients and message content.");
+        }
+
+        document.getElementById('pinError').textContent = '';
+        document.getElementById('txnPin').value = '';
+        document.getElementById('pinModal').style.display = 'flex';
+    }
+
+    function closePinModal() {
+        document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('confirmBtn').style.display = 'inline-block';
+        document.getElementById('processingSpinner').style.display = 'none';
+    }
+
+    function togglePinVisibility() {
+        const pinInput = document.getElementById('txnPin');
+        const toggleBtn = document.getElementById('toggleBtn');
+        pinInput.type = (pinInput.type === "password") ? "text" : "password";
+        toggleBtn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
+    }
+
+    // Secure Pipeline Execution Flow 
+    async function executeSmsTransaction() {
         const user = auth.currentUser;
-        if (!user) return alert("Please login first");
+        if (!user) return alert("Please log in first.");
 
-        const units = updateCount();
-        const recList = document.getElementById('recipients').value.split(',').filter(n => n.trim().length >= 10);
-        const totalUnits = units * recList.length;
-        const totalCost = totalUnits * PRICE_PER_UNIT;
+        const enteredPin = document.getElementById('txnPin').value.trim();
+        if (enteredPin.length < 4) {
+            document.getElementById('pinError').textContent = "Enter 4 digits";
+            return;
+        }
 
-        if (totalUnits === 0) return alert("Please enter recipients and message");
-        if (!confirm(`Total Units: ${totalUnits}\nTotal Cost: ₦${totalCost.toFixed(2)}\n\nProceed to send?`)) return;
+        const metrics = updateCount();
+        const rawRecipients = document.getElementById('recipients').value;
+        const senderId = document.getElementById('senderId').value;
 
-        const btn = document.getElementById('procBtn');
-        btn.disabled = true;
-        btn.innerText = "Processing...";
+        const confirmBtn = document.getElementById('confirmBtn');
+        const spinner = document.getElementById('processingSpinner');
+        const pinError = document.getElementById('pinError');
 
-        const userRef = database.ref('users/' + user.uid);
+        // Transition UI to processing state
+        confirmBtn.style.display = 'none';
+        spinner.style.display = 'block';
+        pinError.textContent = "";
 
-        // Atomic transaction to deduct from Realtime Database balance
-        userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < totalCost) {
-                return; // Abort if balance is too low
+        try {
+            // Pointing directly to full-stack API router tree extension channel
+            const response = await fetch(`${API_BASE_URL}/api/bulksms/send-sms`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    userId: user.uid,
+                    uid: user.uid,        // Delivered specifically to fulfill securityGatekeeper constraints
+                    pin: enteredPin,     // Picked up by gatekeeper to perform security authentication 
+                    recipient: rawRecipients,
+                    message: document.getElementById('message').value,
+                    senderName: senderId
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                pinError.textContent = result.error || "Transaction failed.";
+                confirmBtn.style.display = 'inline-block';
+                spinner.style.display = 'none';
+                return;
             }
-            return currentBal - totalCost;
-        }, (error, committed) => {
-            if (error) {
-                alert("Error: " + error.message);
-                resetBtn();
-            } else if (!committed) {
-                alert(`Insufficient Balance! You need ₦${totalCost.toFixed(2)}`);
-                resetBtn();
-            } else {
-                // Log to the centralized transaction node
-                database.ref('transactions/' + user.uid).push({
-                    type: 'Bulk SMS',
-                    service: "SMS (" + totalUnits + " units)",
-                    amount: totalCost,
-                    date: new Date().toLocaleString(),
-                    status: "Sent"
-                }).then(() => {
-                    alert("Bulk SMS Sent Successfully!");
-                    location.href = '../home.html';
-                });
-            }
-        });
-    };
 
-    function resetBtn() {
-        const btn = document.getElementById('procBtn');
-        btn.disabled = false;
-        btn.innerText = "SEND MESSAGE";
+            // Document audit ledger verification into Realtime Database node
+            await database.ref('transactions/' + user.uid).push({
+                type: 'Bulk SMS',
+                service: `SMS (${metrics.pages} pages)`,
+                amount: result.cost || metrics.totalCost,
+                date: new Date().toLocaleString(),
+                status: "Sent"
+            });
+
+            alert("Bulk SMS Sent Successfully!");
+            location.href = '../home.html';
+
+        } catch (err) {
+            console.error("Network Exception Intercepted:", err);
+            pinError.textContent = "Network Error. Please try again.";
+            confirmBtn.style.display = 'inline-block';
+            spinner.style.display = 'none';
+        }
     }
 </script>
 </body>
