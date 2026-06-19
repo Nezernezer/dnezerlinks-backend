@@ -136,7 +136,7 @@ router.post('/generate', async (req, res) => {
             })).filter(p => p.pin !== "");
 
 
-            Save log data into user's transaction ledger history
+            //Save log data into user's transaction ledger history
            const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
               type: 'Recharge PIN',
