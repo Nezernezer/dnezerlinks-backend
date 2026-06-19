@@ -226,10 +226,6 @@ module.exports = router;
 
 
 
-const express = require('express');
-const router = express.Router();
-const admin = require('firebase-admin');
-const axios = require('axios');
 
 // Handles: POST /api/rechargepin/generate
 router.post('/generate', async (req, res) => {
