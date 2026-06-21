@@ -14,19 +14,24 @@
         .header { background: var(--primary); color: white; padding: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         .content { padding: 10px; }
         .log-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-top: 5px solid #ccc; }
-
         .badge { font-size: 10px; padding: 3px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; }
         .delivered { background: #e8f5e9; color: var(--success); }
         .failed { background: #ffebee; color: var(--danger); }
         .pending { background: #fff3e0; color: var(--warn); }
-
         .user-info { font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: flex-start; }
         .email-text { font-size: 11px; color: #666; display: block; margin-top: 2px; }
         .target-box { background: #f8f9fa; padding: 8px; border-radius: 6px; margin: 10px 0; border: 1px dashed #ddd; font-size: 13px; }
+        
+        /* Specialized boxes */
+        .tv-box { background: #f3e5f5; padding: 8px; border-radius: 6px; margin: 8px 0; border: 1px solid #e1bee7; font-size: 12px; color: #4a148c; }
+        .pin-matrix-box { background: #fffde7; padding: 12px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; border: 1px solid #fff59d; color: #5d4037; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+        .matrix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
+        .matrix-card { background: white; padding: 8px; border-radius: 6px; border: 1px solid #eee; text-align: center; box-shadow: inset 0 1px 3px rgba(0,0,0,0.02); }
+        
+        .balance-audit-box { display: flex; justify-content: space-between; background: #f1f3f4; padding: 6px 10px; border-radius: 6px; font-size: 12px; color: #444; font-weight: 500; margin-bottom: 8px; border-left: 3px solid #666; }
         .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: #555; margin-top: 5px; }
         .uid-tag { font-family: monospace; font-size: 9px; color: #999; margin-top: 10px; display: block; border-top: 1px solid #eee; padding-top: 5px; word-break: break-all; }
         #searchBar { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 15px; box-sizing: border-box; }
-
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
         .modal-content { background: white; margin: 15% auto; padding: 20px; border-radius: 10px; width: 85%; max-width: 400px; font-size: 13px; line-height: 1.6; }
         .close-btn { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 5px; float: right; margin-top: 10px; }
@@ -61,13 +66,15 @@
     <div class="content">
         <div id="status" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px;">Loading forensic data...</div>
         <div id="summaryBox" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px; display:none;"></div>
+        
+        <!-- Total Spent on PIN Networks Matrix Box -->
+        <div id="pinMatrixBox" class="pin-matrix-box" style="display:none;"></div>
+
         <div id="livePanel" style="margin-top:8px; background:#ffffff; padding:8px; border-radius:8px; font-size:12px; border-left:4px solid #0d47a1; display:none;">
             <b>📡 Live Monitor</b><br>
-            <span id="liveCount">Transactions: 0</span> |
-            <span id="liveRevenue">Revenue: ₦0</span> |
-            <span id="liveStatus">Idle</span>
+            <span id="liveCount">Transactions: 0</span> | <span id="liveRevenue">Revenue: ₦0</span> | <span id="liveStatus">Idle</span>
         </div>
-        <input type="text" id="searchBar" placeholder="Search Email, Phone, or Name..." onkeyup="filterLogs()" style="display:none;">
+        <input type="text" id="searchBar" placeholder="Search Email, Phone, Name, Network, or Decoder Info..." onkeyup="filterLogs()" style="display:none;">
         <div id="logs"></div>
     </div>
 
@@ -89,6 +96,7 @@
         let liveStats = { count: 0, revenue: 0 };
         let analytics = { total: 0, success: 0, failed: 0, pending: 0, revenue: 0 };
         let userCache = {};
+        let pinNetworkSales = {}; 
 
         auth.onAuthStateChanged(user => {
             if (user && user.uid === MASTER_ADMIN_UID) {
@@ -112,14 +120,14 @@
 
         async function getUserInfo(uid) {
             if (userCache[uid]) return userCache[uid];
-
             try {
                 const snap = await db.ref(`users/${uid}`).once('value');
                 if (snap.exists()) {
                     const u = snap.val();
                     const info = {
                         name: u.fullName || u.name || u.displayName || u.username || `User-${uid.slice(0,6)}`,
-                        email: u.email || u.userEmail || u.mail || "No Email"
+                        email: u.email || u.userEmail || u.mail || "No Email",
+                        balance: u.balance !== undefined ? Number(u.balance) : null
                     };
                     userCache[uid] = info;
                     return info;
@@ -127,7 +135,7 @@
             } catch (e) {
                 console.warn("Failed to load user", uid, e);
             }
-            const fallback = { name: `User-${uid.slice(0,6)}`, email: "No Email" };
+            const fallback = { name: `User-${uid.slice(0,6)}`, email: "No Email", balance: null };
             userCache[uid] = fallback;
             return fallback;
         }
@@ -153,6 +161,7 @@
                 liveStats = { count: 0, revenue: 0 };
                 numberCount = {};
                 userCount = {};
+                pinNetworkSales = {}; 
 
                 const uniqueUids = new Set();
 
@@ -168,23 +177,21 @@
                     });
                 });
 
-                statusDiv.textContent = "Loading user names & emails...";
-
+                statusDiv.textContent = "Loading user profiles & balances...";
                 const uidArray = Array.from(uniqueUids);
                 await Promise.all(
                     uidArray.map(async uid => {
                         await getUserInfo(uid);
                     })
                 );
-
                 currentLogs.sort((a, b) => {
-                    const ta = b.processedAt || b.timestamp || 0;
-                    const tb = a.processedAt || a.timestamp || 0;
-                    return ta - tb || (b.amount || 0) - (a.amount || 0);
+                    const ta = b.processedAt || b.timestamp || b.time || b.date || 0;
+                    const tb = a.processedAt || a.timestamp || a.time || a.date || 0;
+                    return new Date(ta) - new Date(tb) || (b.amount || 0) - (a.amount || 0);
                 });
 
                 if (currentLogs.length > 5000) currentLogs = currentLogs.slice(0, 5000);
-
+                
                 renderLogs();
                 generateSummary(currentLogs);
                 updateLivePanel();
@@ -199,12 +206,36 @@
             }
         }
 
+        function findFieldDeep(obj, targets) {
+            let found = [];
+            if (!obj || typeof obj !== 'object') return found;
+            for (let key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    let lowerKey = key.toLowerCase();
+                    if (targets.some(t => lowerKey.includes(t))) {
+                        if (obj[key] && typeof obj[key] !== 'object') {
+                            found.push({ key: key, value: String(obj[key]) });
+                        }
+                    }
+                    if (typeof obj[key] === 'object') {
+                        found = found.concat(findFieldDeep(obj[key], targets));
+                    }
+                }
+            }
+            return found;
+        }
+
         function renderLogs() {
             const div = document.getElementById('logs');
             div.innerHTML = "";
 
             currentLogs.forEach(act => {
-                const rawStatus = (act.status || 'failed').toUpperCase();
+                const rawStatus = (act.status || 'FAILED').toUpperCase().trim();
+                const type = (act.type || 'DEBIT').toUpperCase().trim();
+                const service = (act.service || '').toUpperCase().trim();
+
+                const isSuccessful = ['SUCCESS', 'SUCCESSFUL', 'PROCESSED', 'DELIVERED', 'COMPLETED'].includes(rawStatus);
+                const isPending = ['PENDING', 'PROCESSING'].includes(rawStatus);
 
                 numberCount[act.phone || 'unknown'] = (numberCount[act.phone || 'unknown'] || 0) + 1;
                 userCount[act.uid] = (userCount[act.uid] || 0) + 1;
@@ -214,38 +245,78 @@
                 if (userCount[act.uid] > 20) flags.push("🚨 High User Activity");
                 if ((act.amount || 0) > 5000) flags.push("💰 High Amount");
 
-                let isSuccessful = ["SUCCESS","DELIVERED","PROCESSED","COMPLETED"].includes((act.status || "").toUpperCase());
-                if (!isSuccessful && (act.type || "").toUpperCase() === "DEBIT") {
-                    flags.push("❌ Debited but Not Delivered");
-                }
-
                 let statusClass = 'failed';
                 let borderColor = 'var(--danger)';
 
-                if (['SUCCESS', 'DELIVERED', 'PROCESSED', 'COMPLETED'].includes(rawStatus)) {
+                if (isSuccessful) {
                     statusClass = 'delivered';
                     borderColor = 'var(--success)';
-                } else if (['PENDING', 'PROCESSING'].includes(rawStatus)) {
+                } else if (isPending) {
                     statusClass = 'pending';
                     borderColor = 'var(--warn)';
+                } else {
+                    flags.push("❌ Debited but Not Delivered");
                 }
 
                 const userInfo = userCache[act.uid] || {};
-                const name = userInfo.name 
-                          || act.fullName || act.fullname || act.name || act.userName || act.displayName || act.username 
-                          || `User-${act.uid.substring(0,6)}`;
 
-                const email = userInfo.email 
-                           || act.email || act.userEmail || act.mail 
-                           || "No Email";
+                let targetBalance = null;
+                if (act.balance !== undefined && act.balance !== null) targetBalance = Number(act.balance);
+                else if (userInfo.balance !== undefined && userInfo.balance !== null) targetBalance = Number(userInfo.balance);
 
-                const target = act.phone || act.recipient || 'N/A';
+                let formattedBefore = 'N/A';
+                let formattedAfter = 'N/A';
+
+                if (targetBalance !== null) {
+                    const amount = Number(act.amount || 0);
+                    let balBefore = targetBalance;
+                    let balAfter = targetBalance;
+
+                    if (isSuccessful) {
+                        if (type === 'CREDIT' || type === 'REFUND' || type === 'TOPUP') {
+                            balBefore = targetBalance - amount;
+                        } else {
+                            balBefore = targetBalance + amount;
+                        }
+                    }
+                    formattedBefore = `₦${balBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    formattedAfter = `₦${balAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                }
+
+                // --- AGGREGATE PIN NETWORKS IF TRANSACTION CONTAINS PIN DATA OR MATCHES PIN TYPES ---
+                const pinMatches = findFieldDeep(act, ['pin', 'token', 'pin_code', 'recharge_pin', 'pincode']);
+                const isPinTx = type.includes('PIN') || service.includes('PIN') || type.includes('VOUCHER') || pinMatches.length > 0;
+                
+                if (isPinTx && isSuccessful) {
+                    let netName = (act.network || 'UNKNOWN').toUpperCase().trim();
+                    pinNetworkSales[netName] = (pinNetworkSales[netName] || 0) + Number(act.amount || 0);
+                }
+
+                // --- CABLE TV DEEP SCANNING & DISPLAY ---
+                const tvMatches = findFieldDeep(act, ['cable', 'tv', 'decoder', 'smartcard', 'iuc', 'customer_name', 'package', 'subscription']);
+                let tvHtml = '';
+                let tvSearchString = '';
+                if (tvMatches.length > 0 || type.includes('CABLE') || type.includes('TV')) {
+                    tvHtml += `<div class="tv-box">📺 <b>Cable TV Data:</b><br>`;
+                    if(tvMatches.length > 0) {
+                        tvMatches.forEach(match => {
+                            tvSearchString += ` ${match.value}`;
+                            tvHtml += `<small style="display:block;">• <b>${match.key}:</b> ${match.value}</small>`;
+                        });
+                    } else {
+                        tvHtml += `<small style="display:block;">• <b>Type:</b> ${act.type}</small>`;
+                    }
+                    tvHtml += `</div>`;
+                }
+
+                const name = userInfo.name || act.fullName || act.fullname || act.name || act.userName || act.displayName || act.username || `User-${act.uid.substring(0,6)}`;
+                const email = userInfo.email || act.email || act.userEmail || act.mail || "No Email";
+                const target = act.phone || act.recipient || act.iuc || act.smartcard || 'N/A';
                 const dateStr = parseTimestamp(act.processedAt || act.completedAt || act.timestamp || act.time || act.date);
-
                 let flagHtml = flags.length ? `<div style="margin-top:8px; color:#d32f2f; font-size:11px;">${flags.join(" • ")}</div>` : '';
 
                 div.innerHTML += `
-                    <div class="log-card" style="border-top-color: ${borderColor}" data-search="${email} ${target} ${name} ${act.uid} ${act.network||''} ${act.type||''}">
+                    <div class="log-card" style="border-top: 5px solid ${borderColor}" data-search="${email} ${target} ${name} ${act.uid} ${act.network||''} ${type} ${service} ${tvSearchString}">
                         <div class="user-info">
                             <div>
                                 <span>${name}</span>
@@ -253,24 +324,54 @@
                             </div>
                             <div style="font-size:1.1rem; font-weight:800; color:${borderColor}">₦${act.amount || 0}</div>
                         </div>
-
                         <div class="target-box">
                             <b>Target:</b> ${target} <br>
-                            <b>Service:</b> ${act.service || 'Transaction'}
+                            <b>Service:</b> ${act.service || act.type || 'Transaction'}
+                        </div>
+
+                        ${tvHtml}
+
+                        <div class="balance-audit-box">
+                            <span>Before: <b>${formattedBefore}</b></span>
+                            <span>→</span>
+                            <span>After: <b>${formattedAfter}</b></span>
                         </div>
 
                         <div class="meta-grid">
-                            <span>Type: <b>${act.type || 'DEBIT'}</b></span>
+                            <span>Type: <b>${type}</b></span>
                             <span>Status: <span class="badge ${statusClass}">${rawStatus}</span></span>
                             <span>Network: ${act.network || 'N/A'}</span>
                             <span>Date: ${dateStr}</span>
                         </div>
-
                         ${flagHtml}
-
                         <span class="uid-tag">UID: ${act.uid}</span>
                     </div>`;
             });
+
+            renderPinMatrix();
+        }
+
+        function renderPinMatrix() {
+            const matrixBox = document.getElementById('pinMatrixBox');
+            const networks = Object.keys(pinNetworkSales);
+            
+            if (networks.length === 0) {
+                matrixBox.style.display = 'none';
+                return;
+            }
+
+            let html = `<b>🔑 Total Spent on PIN Networks:</b><br><div class="matrix-grid">`;
+            networks.forEach(net => {
+                html += `
+                    <div class="matrix-card">
+                        <div style="font-size: 11px; font-weight: bold; color: #755139;">${net}</div>
+                        <div style="font-size: 13px; font-weight: 800; margin-top: 2px; color: var(--primary);">₦${pinNetworkSales[net].toLocaleString()}</div>
+                    </div>`;
+            });
+            html += `</div>`;
+            
+            matrixBox.innerHTML = html;
+            matrixBox.style.display = 'block';
         }
 
         function generateSummary(logs) {
@@ -278,15 +379,13 @@
             const today = new Date().toDateString();
 
             logs.forEach(log => {
-                const status = (log.status || "").toUpperCase();
+                const status = (log.status || "").toUpperCase().trim();
                 const amount = Number(log.amount || 0);
-                const logDate = new Date(log.processedAt || log.timestamp || log.time || 0).toDateString();
+                const logDate = new Date(log.processedAt || log.timestamp || log.time || log.date || 0).toDateString();
 
                 if (logDate !== today) return;
-
                 analytics.total++;
-
-                if (["SUCCESS","DELIVERED","PROCESSED","COMPLETED"].includes(status)) {
+                if (["SUCCESS", "SUCCESSFUL", "DELIVERED", "PROCESSED", "COMPLETED"].includes(status)) {
                     analytics.success++;
                     analytics.revenue += amount;
                 } else if (["PENDING","PROCESSING"].includes(status)) {
@@ -295,9 +394,7 @@
                     analytics.failed++;
                 }
             });
-
             let successRate = analytics.total ? ((analytics.success / analytics.total) * 100).toFixed(1) : 0;
-
             document.getElementById("summaryBox").innerHTML = `
                 <b>📊 Today Summary</b><br>
                 📦 Total: ${analytics.total}<br>
@@ -328,10 +425,11 @@
             if (currentLogs.length === 0) return alert("No data to export");
             let csv = "Date,Name,Email,Target,Amount,Type,Status,Network,Service,UID\n";
             currentLogs.forEach(log => {
-                const date = parseTimestamp(log.processedAt || log.timestamp || log.time);
+                const date = parseTimestamp(log.processedAt || log.timestamp || log.time || log.date);
                 const userInfo = userCache[log.uid] || {};
                 const name = userInfo.name || log.fullName || log.name || '';
                 const email = userInfo.email || log.email || log.userEmail || '';
+
                 csv += `"${date.replace(/"/g,'""')}","${name.replace(/"/g,'""')}","${email.replace(/"/g,'""')}","${(log.phone || log.recipient || '').replace(/"/g,'""')}","${log.amount || 0}","${log.type || 'DEBIT'}","${log.status || ''}","${log.network || ''}","${log.service || ''}","${log.uid}"\n`;
             });
             const blob = new Blob([csv], { type: 'text/csv' });

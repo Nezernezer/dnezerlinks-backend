@@ -73,7 +73,6 @@
     });
 
     function initSync() {
-        // MATCHED TO HOME.HTML PATH: system_settings
         db.ref('system_settings/global_update').once('value').then(s => {
             document.getElementById('marqueeText').value = s.val() || "";
         }).catch(error => {
@@ -84,11 +83,16 @@
     function updateMarquee() {
         const text = document.getElementById('marqueeText').value;
         const btn = document.getElementById('marqueeBtn');
+        if(!text.trim()) return alert("Please enter text for marquee.");
         btn.disabled = true;
-        
-        // MATCHED TO HOME.HTML PATH: system_settings
-        db.ref('system_settings').update({ global_update: text })
-        .then(() => alert("✅ Marquee updated successfully!"))
+
+        // Overwrites global marquee tracking and clears out fallback message keys
+        db.ref('system_settings').update({ 
+            global_update: text,
+            global_broadcast_message: text,
+            broadcast_timestamp: Date.now()
+        })
+        .then(() => alert("✅ Marquee updated successfully across all configurations!"))
         .catch(error => alert("❌ FAILED: " + error.message))
         .finally(() => btn.disabled = false);
     }
@@ -97,27 +101,18 @@
         const msg = document.getElementById('globalMsg').value;
         const btn = document.getElementById('globalBtn');
         if(!msg) return alert("Please enter a message.");
-        if(!confirm("Send to EVERYONE?")) return;
+        if(!confirm("Send to all users regardless of registration time?")) return;
 
         btn.disabled = true;
-        btn.innerText = "SENDING TO ALL...";
+        btn.innerText = "SENDING BROADCAST...";
 
         try {
-            const usersSnap = await db.ref('users').once('value');
-            const updates = {};
-
-            usersSnap.forEach(u => {
-                const uid = u.key;
-                const notifKey = db.ref('notifications').child(uid).push().key;
-                updates["/notifications/" + uid + "/" + notifKey] = {
-                    message: msg,
-                    timestamp: Date.now(),
-                    read: false
-                };
+            await db.ref('system_settings').update({
+                global_broadcast_message: msg,
+                broadcast_timestamp: Date.now()
             });
 
-            await db.ref().update(updates);
-            alert("✅ Global message delivered!");
+            alert("✅ Global message delivered to all users!");
             document.getElementById('globalMsg').value = "";
         } catch (error) {
             alert("❌ FAILED: " + error.message);
