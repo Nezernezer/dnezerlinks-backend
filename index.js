@@ -37,6 +37,8 @@ const securityGatekeeper = async (req, res, next) => {
         req.path === '/' ||
         req.path.includes('/validate') ||
         req.path.includes('/webhook') ||
+	req.path.includes('/validate-meter') ||
+req.path.includes('/users') || 
         req.path.includes('/fund') 
     ) return next();
 
