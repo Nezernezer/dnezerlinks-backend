@@ -17,7 +17,7 @@ router.post('/billstack', express.json(), async (req, res) => {
     }
 
     try {
-        // 1. Compute the MD5 equivalent of your secret key as stated in image 1000632523.jpg
+        // 1. Compute the MD5 equivalent of your secret key
         const expectedSignature = crypto.createHash('md5').update(secret).digest('hex');
 
         const incomingSigClean = signature.trim().toLowerCase();
@@ -33,9 +33,18 @@ router.post('/billstack', express.json(), async (req, res) => {
         console.log("✅ Webhook verified successfully. Event type:", eventData.event);
 
         if (eventData.event === 'PAYMENT_NOTIFICATION') {
-            const { amount, merchant_reference } = eventData.data;
+            // Extract transaction_ref alongside amount and merchant_reference
+            const { amount, merchant_reference, transaction_ref, wiaxy_ref } = eventData.data;
 
-            // Extract the nested account_number as structured in image 1000632522.jpg
+            // Extract unique transaction identifier across Billstack/Wiaxy platforms
+            const uniqueTxIdentifier = transaction_ref || wiaxy_ref;
+
+            if (!uniqueTxIdentifier) {
+                console.error("❌ Webhook missing unique transaction_ref / wiaxy_ref keys.");
+                return res.status(400).send("Missing transaction identity reference.");
+            }
+
+            // Extract the nested account_number
             const account_number = eventData.data.account ? eventData.data.account.account_number : null;
 
             let targetUid = null;
@@ -84,10 +93,9 @@ router.post('/billstack', express.json(), async (req, res) => {
             }
 
             // =================================================================
-            // 🔒 IDEMPOTENCY CHECK (Prevents Double Balance Updates)
+            // 🔒 FIXED IDEMPOTENCY CHECK (Locks on Unique Transaction Reference)
             // =================================================================
-            // Track processed transaction references to block duplicates completely
-            const processedRef = db.ref(`processed_webhooks/${merchant_reference}`);
+            const processedRef = db.ref(`processed_webhooks/${uniqueTxIdentifier}`);
             let isDuplicate = false;
 
             await processedRef.transaction((currentValue) => {
@@ -100,7 +108,7 @@ router.post('/billstack', express.json(), async (req, res) => {
             });
 
             if (isDuplicate) {
-                console.log(`⚠️ Duplicate Webhook Ignored: Reference ${merchant_reference} already processed.`);
+                console.log(`⚠️ Duplicate Webhook Ignored: TxRef ${uniqueTxIdentifier} already processed.`);
                 return res.status(200).send("Already Processed");
             }
 
@@ -118,6 +126,7 @@ router.post('/billstack', express.json(), async (req, res) => {
                 id: txRef.key,
                 amount: parseFloat(amount),
                 reference: merchant_reference,
+                transaction_reference: uniqueTxIdentifier,
                 account_number: account_number,
                 type: 'credit',
                 status: 'success',
@@ -125,9 +134,9 @@ router.post('/billstack', express.json(), async (req, res) => {
             });
 
             // =================================================================
-            // 🚀 CORRECTED PATH: System Settings Notification Delivery Tree
+            // 🚀 TARGET PATH: notifications -> uid -> transaction_ref
             // =================================================================
-            await db.ref(`system_settings/notifications/${targetUid}`).push({
+            await db.ref(`notifications/${targetUid}/${uniqueTxIdentifier}`).set({
                 message: `Your account has been successfully credited with ₦${parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
                 read: false,
                 timestamp: timestamp
