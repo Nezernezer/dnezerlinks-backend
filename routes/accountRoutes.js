@@ -22,19 +22,19 @@ router.post('/fund', async (req, res) => {
         let finalFirstName = first_name ? first_name.trim() : "";
         let finalLastName = last_name ? last_name.trim() : "";
 
-        // Combine the user's registered name cleanly
-        const userFullName = finalLastName ? `${finalFirstName} ${finalLastName}` : finalFirstName;
+        // Get the first two letters of the last name if it exists
+        let shortLastName = finalLastName.length >= 2 ? finalLastName.substring(0, 2) : finalLastName;
 
-        // Structure exactly into: User name-Dnezerlinks(BILLSTACK)
-        const customFirstName = `${userFullName}-Dnezerlinks`;
-        const customLastName = `(BILLSTACK)`;
+        // Combine first name and 2-letter last name slice with a space
+        const userNamePart = shortLastName ? `${finalFirstName} ${shortLastName}` : finalFirstName;
 
         // Construct payload exactly as required by Billstack documentation
+        // This pairs the strings up to form: User Name -Dnezerlinks(BILLSTACK)
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: customFirstName,
-            lastName: customLastName,
+            firstName: userNamePart,
+            lastName: `-Dnezerlinks(BILLSTACK)`, 
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
