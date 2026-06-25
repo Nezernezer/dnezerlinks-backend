@@ -12,8 +12,16 @@
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
         .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
         .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
-        .notif-btn { position: absolute; top: 15px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
+        
+        /* Repositioned Notification Button down slightly to clear room for API Container */
+        .notif-btn { position: absolute; top: 38px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
         .notif-badge { position: absolute; top: -5px; right: -5px; background: red; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; font-weight: bold; display: none; }
+        
+        /* New Style Rules for Top Left Corner API Display Dashboard */
+        .vtu-api-container { position: absolute; top: 12px; left: 15px; text-align: left; font-family: 'Segoe UI', sans-serif; display: none; }
+        .vtu-api-label { font-size: 9px; color: rgba(255, 255, 255, 0.7); display: block; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
+        .vtu-api-value { font-size: 12px; color: var(--accent); font-weight: bold; }
+
         .news-ticker { background: #e3f2fd; padding: 10px 0; border-bottom: 1px solid #bbdefb; overflow: hidden; white-space: nowrap; cursor: pointer; }
         .ticker-text { display: inline-block; padding-left: 100%; font-size: 13px; font-weight: 700; color: var(--primary); animation: ticker 25s linear infinite; }
         @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
@@ -38,21 +46,26 @@
 <body>
 
 <div class="header">
+    <div id="vtuApiContainer" class="vtu-api-container">
+        <span class="vtu-api-label">VTU Naija Balance</span>
+        <span id="vtuApiBalance" class="vtu-api-value">Loading...</span>
+    </div>
+    
     <button class="notif-btn" onclick="openNotif()">🔔<span id="notifBadge" class="notif-badge">0</span></button>
     <div id="adminContainer"></div>
-    <div id="userName" style="font-size: 14px;">Loading user...</div>
+    <div id="userName" style="font-size: 14px;">Updating your dashboard...</div>
     <div class="balance-amount">₦<span id="balDisplay">0.00</span></div>
     <div style="font-size: 11px; opacity: 0.8;">WALLET BALANCE</div>
 </div>
 
 <div class="news-ticker" id="tickerBar" style="display:none;">
-    <div class="ticker-text" id="globalUpdate">Connecting to server...</div>
+    <div class="ticker-text" id="globalUpdate">Latest information shows here...</div>
 </div>
 
 <div class="services-grid">
     <div class="service-item" onclick="location.href='airtime/'">📱<span>Airtime</span></div>
     <div class="service-item" onclick="location.href='data/'">📶<span>Data</span></div>
-    <div class="service-item" onclick="location.href='cable/'"> 📺<span>Cable TV</span></div>
+    <div class="service-item" onclick="location.href='cable/'">📺<span>Cable TV</span></div>
     <div class="service-item" onclick="location.href='exampin/'">🎓<span>Exam Pin</span></div>
     <div class="service-item" onclick="location.href='bulksms/'">✉️<span>Bulk SMS</span></div>
     <div class="service-item" onclick="location.href='recharge-pin/'">🎫<span>Recharge PIN</span></div>
@@ -93,6 +106,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let currentUser = null;
+    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
 
     firebase.auth().onAuthStateChanged(user => {
         if (user) {
@@ -100,8 +114,13 @@
             db.ref('users/' + user.uid).on('value', snap => {
                 const d = snap.val() || {};
                 document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById('userName').innerText = "Hello, " + (d.name || "User");
-                if (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2") {
+                document.getElementById('userName').innerText = "Welcome, " + (d.name || "User");
+                
+                if (user.uid === MASTER_ADMIN_UID) {
+                    // Show container and execute backend fetch if master logged in
+                    document.getElementById('vtuApiContainer').style.display = 'block';
+                    fetchVtuNaijaBalance();
+
                     db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
                         const count = s.numChildren();
                         const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
@@ -120,6 +139,32 @@
         } else { window.location.href = 'login.html'; }
     });
 
+    async function fetchVtuNaijaBalance() {
+        const balanceElement = document.getElementById('vtuApiBalance');
+        try {
+            if (!firebase.auth().currentUser) return;
+            const idToken = await firebase.auth().currentUser.getIdToken(true);
+            const backendDomain = "https://dnezerlinks-backend.onrender.com";
+
+            const response = await fetch(`${backendDomain}/api/admin/user`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + idToken
+                }
+            });
+
+            if (!response.ok) throw new Error("HTTP Status: " + response.status);
+            const data = await response.json();
+            const balance = data.balance || (data.user && data.user.balance) || "0.00";
+            balanceElement.innerText = "₦" + Number(balance).toLocaleString(undefined, {minimumFractionDigits: 2});
+        } catch (error) {
+            console.error(error);
+            balanceElement.innerText = "Error";
+            balanceElement.style.color = "#ff5252";
+        }
+    }
+
     function loadMarquee() {
         const ticker = document.getElementById("globalUpdate");
         db.ref("system_settings/global_update").on("value", snap => {
@@ -128,7 +173,7 @@
             setTimeout(() => { ticker.style.animation = "ticker 25s linear infinite"; }, 50);
         });
     }
-
+    
     function openNotif() {
         const modal = document.getElementById('notifModal');
         const container = document.getElementById('notifContainer');
@@ -150,6 +195,83 @@
     }
     function closeNotif() { document.getElementById('notifModal').style.display = "none"; }
     window.onclick = function(event) { if (event.target == document.getElementById('notifModal')) closeNotif(); }
+</script>
+
+<style>
+    .toggle-bal-btn {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        vertical-align: middle;
+        margin-left: 10px;
+        outline: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+    .toggle-bal-btn:active { background: rgba(255, 255, 255, 0.3); }
+</style>
+
+<script>
+    (function() {
+        const cachedName = localStorage.getItem('dnezer_cached_name');
+        const cachedBal = localStorage.getItem('dnezer_cached_bal');
+        const isHidden = localStorage.getItem('dnezer_bal_hidden') === 'true';
+
+        const nameEl = document.getElementById('userName');
+        const balEl = document.getElementById('balDisplay');
+
+        if (cachedName) nameEl.innerText = cachedName;
+        if (cachedBal) {
+            balEl.setAttribute('data-real-bal', cachedBal);
+            balEl.innerText = isHidden ? '••••••' : cachedBal;
+        }
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'toggle-bal-btn';
+        toggleBtn.id = 'toggleBalBtn';
+        toggleBtn.innerHTML = isHidden ? 'Show' : 'Hide';
+        balEl.parentNode.appendChild(toggleBtn);
+
+        toggleBtn.addEventListener('click', () => {
+            const currentHidden = localStorage.getItem('dnezer_bal_hidden') === 'true';
+            const realBal = balEl.getAttribute('data-real-bal') || balEl.innerText;
+
+            if (currentHidden) {
+                balEl.innerText = realBal;
+                toggleBtn.innerHTML = 'Hide';
+                localStorage.setItem('dnezer_bal_hidden', 'false');
+            } else {
+                balEl.setAttribute('data-real-bal', realBal);
+                balEl.innerText = '••••••';
+                toggleBtn.innerHTML = 'Show';
+                localStorage.setItem('dnezer_bal_hidden', 'true');
+            }
+        });
+
+        setInterval(() => {
+            const currentUIName = nameEl.innerText;
+            const currentUIBal = balEl.innerText;
+
+            if (currentUIName && !currentUIName.includes('Updating your dashboard...')) {
+                localStorage.setItem('dnezer_cached_name', currentUIName);
+            }
+
+            if (currentUIBal && currentUIBal !== '0.00' && currentUIBal !== '••••••') {
+                localStorage.setItem('dnezer_cached_bal', currentUIBal);
+                balEl.setAttribute('data-real-bal', currentUIBal);
+
+                if (localStorage.getItem('dnezer_bal_hidden') === 'true') {
+                    balEl.innerText = '••••••';
+                }
+            }
+        }, 100);
+    })();
 </script>
 </body>
 </html>

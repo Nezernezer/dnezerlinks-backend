@@ -13,13 +13,40 @@
             font-family: 'Segoe UI', sans-serif;
             background: #f0f2f5;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
             margin: 0;
-            padding: 15px;
+            padding: 0;
             box-sizing: border-box;
         }
+        
+        /* Persistent Top Brand Header Banner */
+        .top-banner {
+            width: 100%;
+            background: var(--main);
+            color: white;
+            padding: 18px 15px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        .auth-wrapper-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 20px 15px;
+            box-sizing: border-box;
+        }
+
         .card {
             background: #fff;
             padding: 25px;
@@ -27,12 +54,13 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             width: 100%;
             max-width: 380px;
+            box-sizing: border-box;
         }
-        h2 { color: var(--main); text-align: center; margin-bottom: 5px; }
+        h2 { color: var(--main); text-align: center; margin-top: 0; margin-bottom: 5px; }
         h3 { color: #555; text-align: center; margin: 0 0 5px 0; font-size: 18px; }
-        
+
         .status-msg {
-            height: 35px; /* Slightly taller for longer mobile text */
+            height: 45px; /* Expanded slightly for dynamic structural mobile padding balance */
             text-align: center;
             font-size: 12px;
             color: #666;
@@ -41,6 +69,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 0 5px;
+            transition: color 0.3s ease;
+        }
+        .status-msg.error-active {
+            color: #c62828 !important;
+            font-weight: 700;
         }
         .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
         @keyframes blink { 50% { opacity: 0; } }
@@ -66,7 +100,7 @@
         .password-container input { border: none; flex: 1; padding: 12px 15px; margin: 0; font-size: 15px; }
         .show-label { display: flex; align-items: center; font-size: 13px; color: #666; cursor: pointer; font-weight: 600; }
         .show-label input { width: 16px; height: 16px; margin-right: 5px; }
-        
+
         button {
             width: 100%; padding: 12px; background: var(--main); color: #fff;
             border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px;
@@ -81,47 +115,51 @@
 </head>
 <body>
 
-<div class="card" id="loginBox">
-    <h2>Dnezerlinks</h2>
-    <div class="status-msg" id="loginStatus"></div>
-    <input type="email" id="lEmail" placeholder="Email">
-    <div class="password-wrapper">
-        <div class="password-container">
-            <input type="password" id="lPass" placeholder="Password">
-            <label class="show-label"><input type="checkbox" onchange="togglePassword('lPass', this)"> Show</label>
-        </div>
-    </div>
-    <div class="loading" id="lLoad"><div class="bar"></div></div>
-    <button id="lBtn" onclick="handleLogin()">Login</button>
-    <div class="link" onclick="toggle('regBox')">Create Account</div>
-    <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888;">Forgot Password?</div>
-</div>
+<div class="top-banner">Dnezerlinks</div>
 
-<div class="card hidden" id="regBox">
-    <h2>Dnezerlinks</h2>
-    <h3>Join Us</h3>
-    <div class="status-msg" id="regStatus"></div>
-    <input type="text" id="rName" placeholder="Full Name">
-    <input type="tel" id="rPhone" placeholder="Phone Number">
-    <input type="text" id="rAddress" placeholder="Home Address">
-    <input type="email" id="rEmail" placeholder="Email">
-    <div class="password-wrapper">
-        <div class="password-container">
-            <input type="password" id="rPass" placeholder="Password (min 6 chars)">
-            <label class="show-label"><input type="checkbox" onchange="togglePassword('rPass', this)"> Show</label>
+<div class="auth-wrapper-container">
+    <div class="card" id="loginBox">
+        <h2>Dnezerlinks</h2>
+        <div class="status-msg" id="loginStatus"></div>
+        <input type="email" id="lEmail" placeholder="Email">
+        <div class="password-wrapper">
+            <div class="password-container">
+                <input type="password" id="lPass" placeholder="Password">
+                <label class="show-label"><input type="checkbox" onchange="togglePassword('lPass', this)"> Show</label>
+            </div>
         </div>
+        <div class="loading" id="lLoad"><div class="bar"></div></div>
+        <button id="lBtn" onclick="handleLogin()">Login</button>
+        <div class="link" onclick="toggle('regBox')">Create Account</div>
+        <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888;">Forgot Password?</div>
     </div>
-    <div class="loading" id="rLoad"><div class="bar"></div></div>
-    <button id="rBtn" onclick="handleRegister()">Sign Up</button>
-    <div class="link" onclick="toggle('loginBox')">Back to Login</div>
-</div>
 
-<div class="card hidden" id="forgotBox">
-    <h2>Reset</h2>
-    <input type="email" id="fEmail" placeholder="Your Email">
-    <div class="loading" id="fLoad"><div class="bar"></div></div>
-    <button onclick="handleReset()">Send Reset Link</button>
-    <div class="link" onclick="toggle('loginBox')">Back</div>
+    <div class="card hidden" id="regBox">
+        <h2>Dnezerlinks</h2>
+        <h3>Join Us</h3>
+        <div class="status-msg" id="regStatus"></div>
+        <input type="text" id="rName" placeholder="Full Name">
+        <input type="tel" id="rPhone" placeholder="Phone Number">
+        <input type="text" id="rAddress" placeholder="Home Address">
+        <input type="email" id="rEmail" placeholder="Email">
+        <div class="password-wrapper">
+            <div class="password-container">
+                <input type="password" id="rPass" placeholder="Password (min 6 chars)">
+                <label class="show-label"><input type="checkbox" onchange="togglePassword('rPass', this)"> Show</label>
+            </div>
+        </div>
+        <div class="loading" id="rLoad"><div class="bar"></div></div>
+        <button id="rBtn" onclick="handleRegister()">Sign Up</button>
+        <div class="link" onclick="toggle('loginBox')">Back to Login</div>
+    </div>
+
+    <div class="card hidden" id="forgotBox">
+        <h2>Reset</h2>
+        <input type="email" id="fEmail" placeholder="Your Email">
+        <div class="loading" id="fLoad"><div class="bar"></div></div>
+        <button onclick="handleReset()">Send Reset Link</button>
+        <div class="link" onclick="toggle('loginBox')">Back</div>
+    </div>
 </div>
 
 <script>
@@ -141,6 +179,8 @@
     let charIdx = 0;
     let isDeleting = false;
     let activeStatusId = "loginStatus";
+    let errorHoldTimeout = null;
+    let fallbackStoredText = "";
 
     function runTyping() {
         const statusEl = document.getElementById(activeStatusId);
@@ -149,7 +189,7 @@
         if (!isDeleting) {
             displayedText = currentText.substring(0, charIdx++);
             if (charIdx > currentText.length) {
-                setTimeout(runTyping, 2500); 
+                setTimeout(runTyping, 2500);
                 isDeleting = true;
                 return;
             }
@@ -161,7 +201,35 @@
         setTimeout(runTyping, isDeleting ? 30 : 50);
     }
 
-    function setStatus(msg) {
+    function setStatus(msg, isCustomError = false) {
+        if (errorHoldTimeout) {
+            if (!isCustomError) {
+                fallbackStoredText = msg;
+                return;
+            }
+            clearTimeout(errorHoldTimeout);
+            errorHoldTimeout = null;
+        }
+
+        const statusEl = document.getElementById(activeStatusId);
+        if (isCustomError && statusEl) {
+            statusEl.classList.add('error-active');
+            fallbackStoredText = (activeStatusId === "loginStatus") ? "Please login with your details below" : "Welcome, please touch any field below for me to guide you.";
+            
+            currentText = msg;
+            charIdx = 0;
+            isDeleting = false;
+
+            errorHoldTimeout = setTimeout(() => {
+                if (statusEl) statusEl.classList.remove('error-active');
+                errorHoldTimeout = null;
+                currentText = fallbackStoredText;
+                charIdx = 0;
+                isDeleting = false;
+            }, 10000);
+            return;
+        }
+
         if(currentText === msg) return;
         currentText = msg;
         charIdx = 0;
@@ -180,7 +248,7 @@
     document.getElementById('rAddress').addEventListener('focus', () => setStatus("Please enter your house address in full."));
     document.getElementById('rEmail').addEventListener('focus', () => setStatus("Please enter an active email as it will be used to retrieve password if forgotten. Eg johndoe@dnezer.com "));
     document.getElementById('rPass').addEventListener('focus', () => setStatus("Please create a strong password eg Abcq19@ "));
-    
+
     // Reset to welcome when blur on register fields
     ['rName', 'rPhone', 'rAddress', 'rEmail', 'rPass'].forEach(id => {
         document.getElementById(id).addEventListener('blur', () => setStatus("Welcome, please touch any field below for me to guide you."));
@@ -189,15 +257,22 @@
     runTyping();
 
     function toggle(id) {
+        if (errorHoldTimeout) {
+            clearTimeout(errorHoldTimeout);
+            errorHoldTimeout = null;
+        }
+        document.querySelectorAll('.status-msg').forEach(el => el.classList.remove('error-active'));
         document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
-        
+
         if(id === 'loginBox') {
             activeStatusId = "loginStatus";
-            setStatus("Please login with your details below.");
+            currentText = "Please login with your details below.";
+            charIdx = 0; isDeleting = false;
         } else if(id === 'regBox') {
             activeStatusId = "regStatus";
-            setStatus("Welcome, please touch any field below for me to guide you.");
+            currentText = "Welcome, please touch any field below for me to guide you.";
+            charIdx = 0; isDeleting = false;
         }
     }
 
@@ -206,11 +281,14 @@
         input.type = checkbox.checked ? "text" : "password";
     }
 
-    // Handle Auth logic (Keeping your original handles)
+    // Handle Auth logic
     async function handleLogin() {
         const email = document.getElementById('lEmail').value.trim();
         const pass = document.getElementById('lPass').value;
-        if(!email || !pass) return alert("Fill fields");
+        if(!email || !pass) {
+            setStatus("Error: All calculation input fields must be completely filled!", true);
+            return;
+        }
         document.getElementById('lLoad').style.display = 'block';
         document.getElementById('lBtn').disabled = true;
         try {
@@ -218,7 +296,7 @@
             localStorage.setItem('userEmail', email);
             window.location.href = "home.html";
         } catch (err) {
-            alert(err.message);
+            setStatus("Login Failed: " + err.message, true);
             document.getElementById('lLoad').style.display = 'none';
             document.getElementById('lBtn').disabled = false;
         }
@@ -231,8 +309,10 @@
         const email = document.getElementById('rEmail').value.trim();
         const pass = document.getElementById('rPass').value;
 
-        if(!name || !phone || !address || !email || pass.length < 6)
-            return alert("Valid data required");
+        if(!name || !phone || !address || !email || pass.length < 6) {
+            setStatus("Registration Error: Please ensure all details are fully completed and password is min 6 characters.", true);
+            return;
+        }
 
         document.getElementById('rLoad').style.display = 'block';
         document.getElementById('rBtn').disabled = true;
@@ -245,7 +325,7 @@
             });
             window.location.href = "home.html";
         } catch (e) {
-            alert(e.message);
+            setStatus("Registration Failed: " + e.message, true);
             document.getElementById('rLoad').style.display = 'none';
             document.getElementById('rBtn').disabled = false;
         }
