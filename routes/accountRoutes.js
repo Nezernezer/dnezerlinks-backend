@@ -18,26 +18,23 @@ router.post('/fund', async (req, res) => {
         if (first_name && first_name.toLowerCase().includes('client')) first_name = "";
         if (last_name && last_name.toLowerCase().includes('client')) last_name = "";
 
-        // 2. Format names correctly. Providers require BOTH fields to be filled for regulatory checks.
-        let finalFirstName = first_name ? first_name.trim() : "Dnezerlinks";
+        // 2. Format names correctly. Uses registered names exactly.
+        let finalFirstName = first_name ? first_name.trim() : "";
         let finalLastName = last_name ? last_name.trim() : "";
 
-        // If the frontend passed no last name, split the business name into two so it doesn't fail bank validation
-        if (!finalLastName || finalLastName === "") {
-            if (finalFirstName.toLowerCase() === "dnezerlinks") {
-                finalFirstName = "Dnezerlinks";
-                finalLastName = ""; // Structural backup name instead of blank or Client
-            } else {
-                finalLastName = ""; // Generic non-client compliance placeholder
-            }
-        }
+        // Combine the user's registered name cleanly
+        const userFullName = finalLastName ? `${finalFirstName} ${finalLastName}` : finalFirstName;
+
+        // Structure exactly into: User name-Dnezerlinks(BILLSTACK)
+        const customFirstName = `${userFullName}-Dnezerlinks`;
+        const customLastName = `(BILLSTACK)`;
 
         // Construct payload exactly as required by Billstack documentation
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: finalFirstName,
-            lastName: finalLastName,
+            firstName: customFirstName,
+            lastName: customLastName,
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
@@ -77,12 +74,12 @@ router.post('/fund', async (req, res) => {
         if (error.response) {
             console.error('❌ Billstack API Error Response:', JSON.stringify(error.response.data, null, 2));
             console.error('❌ Status Code:', error.response.status);
-            return res.status(error.response.status).json({ 
-                success: false, 
-                message: error.response.data.message || "API rejection error." 
+            return res.status(error.response.status).json({
+                success: false,
+                message: error.response.data.message || "API rejection error."
             });
         }
-        
+
         console.error('❌ Network/Internal Error:', error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
