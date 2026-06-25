@@ -112,19 +112,25 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return res.status(200).send("Already Processed");
             }
 
-            console.log(`💰 Funding verified account UID: ${targetUid} with Amount: ₦${amount}`);
+            // =================================================================
+            // 📊 FEE CALCULATION (1.5% Fee Deduction Setup)
+            // =================================================================
+            const rawAmount = parseFloat(amount);
+            const feeCharged = rawAmount * 0.015; 
+            const netAmountToCredit = rawAmount - feeCharged;
 
-            // Update balance atomically once
+            // Update balance atomically once using the net calculated amount
             await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
-                return (parseFloat(currentBalance) || 0) + parseFloat(amount);
+                return (parseFloat(currentBalance) || 0) + netAmountToCredit;
             });
 
             const txRef = db.ref(`transactions/${targetUid}`).push();
             const timestamp = Date.now();
 
+            // Stores only the net credit layout cleanly for history pages
             await txRef.set({
                 id: txRef.key,
-                amount: parseFloat(amount),
+                amount: netAmountToCredit,
                 reference: merchant_reference,
                 transaction_reference: uniqueTxIdentifier,
                 account_number: account_number,
@@ -133,11 +139,9 @@ router.post('/billstack', express.json(), async (req, res) => {
                 timestamp: timestamp
             });
 
-            // =================================================================
-            // 🚀 TARGET PATH: notifications -> uid -> transaction_ref
-            // =================================================================
+            // TARGET PATH: notifications -> uid -> transaction_ref
             await db.ref(`notifications/${targetUid}/${uniqueTxIdentifier}`).set({
-                message: `Your account has been successfully credited with ₦${parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
+                message: `Your account has been successfully credited with ₦${netAmountToCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
                 read: false,
                 timestamp: timestamp
             });
