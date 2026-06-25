@@ -83,14 +83,34 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return res.status(404).send("User reference mapping failed");
             }
 
+            // =================================================================
+            // 🔒 IDEMPOTENCY CHECK (Prevents Double Balance Updates)
+            // =================================================================
+            // Track processed transaction references to block duplicates completely
+            const processedRef = db.ref(`processed_webhooks/${merchant_reference}`);
+            let isDuplicate = false;
+
+            await processedRef.transaction((currentValue) => {
+                if (currentValue === null) {
+                    return { processed: true, timestamp: Date.now() };
+                } else {
+                    isDuplicate = true;
+                    return; // Aborts transaction modification if reference exists
+                }
+            });
+
+            if (isDuplicate) {
+                console.log(`⚠️ Duplicate Webhook Ignored: Reference ${merchant_reference} already processed.`);
+                return res.status(200).send("Already Processed");
+            }
+
             console.log(`💰 Funding verified account UID: ${targetUid} with Amount: ₦${amount}`);
 
-            // Update balance atomically
+            // Update balance atomically once
             await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
                 return (parseFloat(currentBalance) || 0) + parseFloat(amount);
             });
 
-            // === 🚀 ADDED DETAILS BELOW (Keeping exact original flow) ===
             const txRef = db.ref(`transactions/${targetUid}`).push();
             const timestamp = Date.now();
 
@@ -104,12 +124,14 @@ router.post('/billstack', express.json(), async (req, res) => {
                 timestamp: timestamp
             });
 
-            await db.ref(`notifications/${targetUid}`).push({
+            // =================================================================
+            // 🚀 CORRECTED PATH: System Settings Notification Delivery Tree
+            // =================================================================
+            await db.ref(`system_settings/notifications/${targetUid}`).push({
                 message: `Your account has been successfully credited with ₦${parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
                 read: false,
                 timestamp: timestamp
             });
-            // === 🚀 END OF ADDED DETAILS ===
 
             return res.status(200).send("Processed");
         }
