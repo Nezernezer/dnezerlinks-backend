@@ -90,7 +90,7 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return (parseFloat(currentBalance) || 0) + parseFloat(amount);
             });
 
-            // === 🚀 ADDITION 1: Save transaction logs matching your tree structure ===
+            // === 🚀 ADDED DETAILS BELOW (Keeping exact original flow) ===
             const txRef = db.ref(`transactions/${targetUid}`).push();
             const timestamp = Date.now();
 
@@ -104,13 +104,12 @@ router.post('/billstack', express.json(), async (req, res) => {
                 timestamp: timestamp
             });
 
-            // === 🚀 ADDITION 2: Send homepage real-time notification node ===
-            await db.ref(`users/${targetUid}/notifications`).push({
-                title: "Wallet Funded",
-                message: `Your account has been successfully credited with ₦${amount}.`,
+            await db.ref(`notifications/${targetUid}`).push({
+                message: `Your account has been successfully credited with ₦${parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
                 read: false,
                 timestamp: timestamp
             });
+            // === 🚀 END OF ADDED DETAILS ===
 
             return res.status(200).send("Processed");
         }
