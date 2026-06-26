@@ -1,4 +1,3 @@
-~/dnezerlinks/routes $ cat accountRoutes.js
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -29,13 +28,13 @@ router.post('/fund', async (req, res) => {
         // Combine first name and 2-letter last name slice with a space
         const userNamePart = shortLastName ? `${finalFirstName} ${shortLastName}` : finalFirstName;
 
-        // Construct payload exactly as required by Billstack documentation
-        // This pairs the strings up to form: User Name -Dnezerlinks(BILLSTACK)
+        // Construct payload structurally flipped to accommodate Billstack's API arrangement behavior.
+        // This makes sure the final output builds: User Name -Dnezerlinks(BILLSTACK)
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: userNamePart,
-            lastName: `-Dnezerlinks(BILLSTACK)`,
+            firstName: `-Dnezerlinks(BILLSTACK)`, // Flipped to the end of Billstack's merge
+            lastName: userNamePart,               // Flipped to the start of Billstack's merge
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
@@ -87,4 +86,3 @@ router.post('/fund', async (req, res) => {
 });
 
 module.exports = router;
-~/dnezerlinks/routes $
