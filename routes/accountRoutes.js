@@ -25,16 +25,13 @@ router.post('/fund', async (req, res) => {
         // Get the first two letters of the last name if it exists
         let shortLastName = finalLastName.length >= 2 ? finalLastName.substring(0, 2) : finalLastName;
 
-        // Force layout order: Firstname followed by the 2-letter last name slice (e.g., "Ukoje Fa")
-        const userNamePart = shortLastName ? `${finalFirstName} ${shortLastName}` : finalFirstName;
-
-        // Construct payload engineered for Billstack's internal string concatenation behavior.
-        // This forces the final bank name to display exactly as: Ukoje Fa-Dnezerlinks(BILLSTACK)
+        // Construct clean payload matching your specified order
+        // Let Billstack map these fields naturally to their internal banking prefix/suffix logic.
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: `-Dnezerlinks(BILLSTACK)`, // Appends to the tail end of Billstack's merge
-            lastName: userNamePart,               // Forces "Firstname Lastname" to the absolute front
+            firstName: finalFirstName,  // Sent directly as the First Name (e.g., "Ukoje")
+            lastName: shortLastName,    // Sent directly as the Last Name (e.g., "fa")
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
