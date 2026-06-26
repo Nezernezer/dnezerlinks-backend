@@ -1,3 +1,4 @@
+~/dnezerlinks/routes $ cat accountRoutes.js
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -34,7 +35,7 @@ router.post('/fund', async (req, res) => {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
             firstName: userNamePart,
-            lastName: `-Dnezerlinks(BILLSTACK)`, 
+            lastName: `-Dnezerlinks(BILLSTACK)`,
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
@@ -86,3 +87,4 @@ router.post('/fund', async (req, res) => {
 });
 
 module.exports = router;
+~/dnezerlinks/routes $
