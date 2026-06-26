@@ -217,16 +217,6 @@ module.exports = router;
 
 
 
-
-
-
-
-
-
-
-
-
-
 // Handles: POST /api/rechargepin/generate
 router.post('/generate', async (req, res) => {
     // Destructure explicit fields safely sent from the frontend
