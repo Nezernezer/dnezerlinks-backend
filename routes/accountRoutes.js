@@ -19,22 +19,22 @@ router.post('/fund', async (req, res) => {
         if (last_name && last_name.toLowerCase().includes('client')) last_name = "";
 
         // 2. Format names correctly. Uses registered names exactly.
-        let finalFirstName = first_name ? first_name.trim() : "";
-        let finalLastName = last_name ? last_name.trim() : "";
+        let finalFirstName = first_name ? first_name.trim() : ""; // e.g., "Ukoje"
+        let finalLastName = last_name ? last_name.trim() : "";   // e.g., "Faith"
 
         // Get the first two letters of the last name if it exists
         let shortLastName = finalLastName.length >= 2 ? finalLastName.substring(0, 2) : finalLastName;
 
-        // Combine first name and 2-letter last name slice with a space
+        // Force layout order: Firstname followed by the 2-letter last name slice (e.g., "Ukoje Fa")
         const userNamePart = shortLastName ? `${finalFirstName} ${shortLastName}` : finalFirstName;
 
-        // Construct payload structurally flipped to accommodate Billstack's API arrangement behavior.
-        // This makes sure the final output builds: User Name -Dnezerlinks(BILLSTACK)
+        // Construct payload engineered for Billstack's internal string concatenation behavior.
+        // This forces the final bank name to display exactly as: Ukoje Fa-Dnezerlinks(BILLSTACK)
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: `-Dnezerlinks(BILLSTACK)`, // Flipped to the end of Billstack's merge
-            lastName: userNamePart,               // Flipped to the start of Billstack's merge
+            firstName: `-Dnezerlinks(BILLSTACK)`, // Appends to the tail end of Billstack's merge
+            lastName: userNamePart,               // Forces "Firstname Lastname" to the absolute front
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
