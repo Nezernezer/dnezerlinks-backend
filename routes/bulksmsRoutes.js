@@ -4,7 +4,7 @@ const admin = require('firebase-admin');
 
 // --- COMPREHENSIVE NIGERIAN FINANCIAL/BRAND BLACKLIST ---
 const RESTRICTED_SENDER_IDS = [
-    "dnezerlinks", "dnezer", "admin", "support", "verify", "otp",
+    "admin", "support", "verify", "otp",
     "access", "accessbank", "fidelity", "fidelitybank", "firstbank", "fbn",
     "guaranty", "gtbank", "gtb", "gtco", "unitedbank", "uba", "zenith", "zenithbank",
     "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint",
@@ -41,7 +41,7 @@ router.post('/send-sms', async (req, res) => {
 
         // Daytime rate (8 AM - 7:59 PM) = ₦7 | Nighttime rate (8 PM - 7:59 AM) = ₦14
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
-
+        
         // Clean phone numbers list
         const cleanRecipient = recipient.replace(/\+/g, '').replace(/\s+/g, '').trim();
         const totalRecipients = cleanRecipient.split(',').filter(n => n.length >= 10).length;
@@ -69,10 +69,22 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // 5. Sender ID Spoofing Guard
+        // 5. Sender ID Spoofing & Admin Brand Guard
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
+        // Check for platform brand protection
+        const isPlatformBrand = normalizedSender.includes("dnezerlinks") || normalizedSender.includes("dnezer");
+        const adminUid = process.env.ADMIN_UID; // Ensure this is set in your Render environment variables
+
+        if (isPlatformBrand && activeUid !== adminUid) {
+            return res.status(403).json({
+                success: false,
+                error: "Security Alert: 'Dnezerlinks' branding is restricted to administrative accounts only."
+            });
+        }
+
+        // Check for financial/government restrictions
         const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
             normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
         );
@@ -80,13 +92,13 @@ router.post('/send-sms', async (req, res) => {
         if (isRestricted) {
             return res.status(403).json({
                 success: false,
-                error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted brand name.`
+                error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted institutional brand name.`
             });
         }
 
         let finalSenderName = requestedSender.substring(0, 11);
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
-
+        
         if (!apiKey) {
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
