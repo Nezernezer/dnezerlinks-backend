@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dnezerlinks | Recharge PINs</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        :root { --primary: #0d47a1; --accent: #ffab00; }
-        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
-        
+        :root { --primary: #0d47a1; --accent: #ffab00; --success: #2e7d32; --danger: #c62828; --light: #f8f9fa; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; color: #333; }
+
         /* Persistent Contextual Notification Banners */
         .form-msg-banner { display: none; padding: 15px; margin: 15px; margin-top: 15px; border-radius: 10px; font-weight: bold; font-size: 14px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .banner-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
         .banner-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
-        
+
         .modal-msg-banner { display: none; padding: 10px; margin-bottom: 15px; border-radius: 8px; font-size: 13px; font-weight: bold; text-align: center; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
 
         .header-card { background: var(--primary); color:#fff; padding:20px; border-radius:0 0 20px 20px; display: flex; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -25,8 +25,14 @@
         label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
         select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
         .summary { background: #e3f2fd; padding: 12px; border-radius: 10px; margin-top: 10px; font-size: 15px; color: var(--primary); font-weight: bold; text-align: center; border: 1px dashed var(--primary); }
-        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 15px; transition: 0.3s; }
+
+        .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 15px; transition: 0.3s; display: flex; justify-content: center; align-items: center; gap: 10px; }
         .buy-btn:active { transform: scale(0.98); background: #1565c0; }
+
+        /* Secondary Action Buttons Styling */
+        .reprint-btn { background: #37474f; margin-top: 10px; display: none; }
+        .reprint-btn:active { background: #263238; }
+
         .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 100; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
 
@@ -35,109 +41,88 @@
         .modal-sheet { background: #fff; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 25px 20px; box-sizing: border-box; animation: slideUp 0.3s ease-out; }
         .dialog-box { background: #fff; border-radius: 15px; width: 85%; max-width: 400px; padding: 20px; box-sizing: border-box; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); animation: fadeIn 0.2s ease-out; }
         .dialog-buttons { display: flex; gap: 10px; margin-top: 20px; }
-        .btn-flex { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-flex { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; }
 
-        /* Anti-Credential Utility for Dial Pad Field Elements */
+        .spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         .secure-dial-input {
-            text-align: center; 
-            letter-spacing: 6px; 
-            font-size: 20px; 
+            text-align: center;
+            letter-spacing: 6px;
+            font-size: 20px;
             font-weight: bold;
-            -webkit-text-security: disc !important; /* Visual masking without invoking password state */
+            -webkit-text-security: disc !important;
         }
 
-        /* --- STRICT 10-COLUMN ULTRA COMPACT GRID PRINT CONFIGURATION --- */
-        #printArea { display: none; background: white; padding: 0; margin: 0; }
-        
-        .tickets-grid { 
-            display: grid; 
-            grid-template-columns: repeat(10, 1fr); 
-            gap: 2px; 
-            max-width: 100%; 
-            padding: 2px; 
-            box-sizing: border-box; 
-        }
-        
-        .pin-ticket { 
-            border: 1px dashed #333; 
-            padding: 4px 1px; 
-            background: #fff; 
-            border-radius: 3px; 
-            text-align: center; 
-            box-sizing: border-box; 
-            page-break-inside: avoid; 
-            height: 48mm; 
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            overflow: hidden;
-        }
-        
-        .ticket-header { 
-            font-weight: bold; 
-            font-size: 6px; 
-            color: #444; 
-            text-transform: uppercase; 
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .ticket-brand { 
-            font-size: 9px; 
-            font-weight: 800; 
-            color: #0d47a1; 
-            margin: 1px 0; 
-            white-space: nowrap;
-        }
-        
-        .pin-box { 
-            background: #f5f5f5; 
-            border: 1px solid #ddd; 
-            padding: 3px 0; 
-            margin: 2px 0; 
-            border-radius: 2px; 
-        }
-        
-        .pin-label { 
-            font-size: 5.5px; 
-            color: #666; 
-            font-weight: bold; 
-            text-transform: uppercase;
-        }
-        
-        .pin-code { 
-            font-size: 9.5px; 
-            font-weight: 900; 
-            color: #000; 
-            letter-spacing: -0.2px;
-            word-wrap: break-word;
-            line-height: 1.1;
-            display: block;
-        }
-        
-        .ticket-footer { 
-            font-size: 5.5px; 
-            color: #333; 
-            line-height: 1.1; 
-            border-top: 1px dotted #ccc; 
-            padding-top: 2px; 
-            word-break: break-all;
-        }
+        /* --- EXACT COPIED PRINT ENGINE FROM HISTORY.HTML --- */
+        #printArea { display: none; background: white; padding: 0; margin: 0; width: 100%; }
 
-        .print-actions { display: flex; gap: 10px; max-width: 500px; margin: 20px auto; padding: 0 15px; }
-        .btn-print { background: #2e7d32; color: #fff; }
-        .btn-close { background: #c62828; color: #fff; }
+        .tickets-grid.layout-a4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 100%; padding: 0; box-sizing: border-box; }
+        .tickets-grid.layout-pos { display: flex; flex-direction: column; gap: 15px; max-width: 58mm; margin: 0 auto; padding: 5px; box-sizing: border-box; }
 
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .pin-ticket { border: 1px solid #333; padding: 3px 5px; background: #fff; border-radius: 4px; box-sizing: border-box; page-break-inside: avoid; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; position: relative; line-height: 1.0; }
+
+        .layout-a4 .pin-ticket { height: 28mm; }
+        .layout-pos .pin-ticket { height: auto; padding: 10px 6px; border-bottom: 2px dashed #000; border-top: none; border-left: none; border-right: none; border-radius: 0; }
+
+        .ticket-top-wrapper { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: 0px; line-height: 1.0; }
+        .ticket-header { font-weight: 900; font-size: 12px; color: #000; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.0; text-align: center; width: 100%; padding: 0 22px; box-sizing: border-box; }
+
+        .layout-pos .ticket-header { font-size: 15px; }
+
+        .ticket-brand { font-size: 10px; font-weight: 800; color: #0d47a1; margin: 0 0 1px 0; white-space: nowrap; line-height: 1.0; text-align: center; }
+        .layout-pos .ticket-brand { font-size: 13px; margin: 4px 0; }
+
+        .pin-row { display: flex; align-items: center; justify-content: center; gap: 4px; line-height: 1.0; margin: 0; padding: 0; background: none; border: none; }
+        .pin-label { font-size: 8px; color: #444; font-weight: bold; text-transform: uppercase; line-height: 1.0; }
+        .layout-pos .pin-label { font-size: 11px; }
+
+        .pin-code { font-size: 13px; font-weight: 900; color: #000; letter-spacing: 0.2px; line-height: 1.0; }
+        .layout-pos .pin-code { font-size: 18px; letter-spacing: 0.5px; margin: 4px 0; }
+
+        .serial-row { font-size: 8px; font-weight: 800; color: #222; line-height: 1.0; margin: 0 0 1px 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .layout-pos .serial-row { font-size: 10px; margin: 2px 0; }
+
+        .ticket-footer { font-size: 8.5px; color: #111; line-height: 1.1; border-top: none; padding-top: 0px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+        .layout-pos .ticket-footer { font-size: 10px; line-height: 1.3; white-space: normal; }
+
+        .ticket-timestamp { font-size: 7.5px; color: #333; margin-top: 1px; font-weight: bold; line-height: 1.0; }
+        .layout-pos .ticket-timestamp { font-size: 9px; margin-top: 3px; }
+
+        /* Logos */
+        .logo-box { position: absolute; top: 3px; right: 4px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box; }
+        .layout-pos .logo-box { width: 22px; height: 22px; top: 6px; right: 2px; }
+
+        .logo-mtn { background: #ffcc00; border: 1px solid #000; border-radius: 50%; }
+        .logo-mtn::before { content: "MTN"; color: #000; font-size: 5px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.8); }
+        .layout-pos .logo-mtn::before { font-size: 6px; }
+
+        .logo-glo { background: radial-gradient(circle at 35% 35%, #a6df20, #008543); border-radius: 50%; border: 0.5px solid #005a2c; }
+        .logo-glo::before { content: "glo"; color: #fff; font-size: 8.5px; font-family: 'Arial', sans-serif; font-style: italic; font-weight: 900; letter-spacing: -0.5px; transform: translateY(-0.5px); }
+        .layout-pos .logo-glo::before { font-size: 10px; }
+
+        .logo-airtel { background: #e50000; border-radius: 4px; }
+        .logo-airtel::before { content: "a"; color: #fff; font-size: 13px; font-family: sans-serif; font-weight: 900; transform: translateY(-1.5px); }
+        .layout-pos .logo-airtel::before { font-size: 15px; }
+
+        .logo-9mobile { background: #002d24; border-radius: 3px; border-left: 3.5px solid #b3c100; }
+        .logo-9mobile::before { content: "9m"; color: #b3c100; font-size: 6px; font-family: sans-serif; font-weight: 900; transform: scale(0.9) translateX(-0.5px); }
+
+        .paper-selector-bar { background: #eef2f7; border: 1px solid #dcdfe6; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 400px; margin: 15px auto; font-size: 13px; font-weight: bold; }
+        .paper-selector-bar select { flex: 1; padding: 8px; border-radius: 6px; font-weight: bold; border: 1px solid #b4bccc; background: white; }
 
         @media print {
-            @page { size: A4; margin: 4mm; } 
-            body * { visibility: hidden; }
-            #printArea, #printArea * { visibility: visible; }
-            #printArea { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
-            .print-actions { display: none !important; }
+            body { background: white; margin: 0; padding: 0; }
+            body.printing-vouchers #mainFormContainer, body.printing-vouchers #bottomNav, body.printing-vouchers .modal-overlay, body.printing-vouchers #printControlsEngine, body.printing-vouchers #paperSelectionControl { display: none !important; }
+            body.printing-vouchers #printArea { display: block !important; position: absolute; left: 0; top: 0; margin: 0; padding: 0; width: 100%; }
         }
     </style>
 </head>
@@ -174,7 +159,7 @@
 
         <div class="form-group">
             <label>Quantity</label>
-            <input type="number" id="qty" value="40" min="1" max="100" oninput="updateTotal()">
+            <input type="number" id="qty" value="1" min="1" max="100" oninput="updateTotal()">
         </div>
 
         <div class="form-group">
@@ -182,9 +167,12 @@
             <input type="text" id="brandName" placeholder="e.g. Dnezerlinks Enterprise" maxlength="25">
         </div>
 
-        <div class="summary" id="totalDisplay">Total Payable: ₦4,000.00</div>
+        <div class="summary" id="totalDisplay">Total Payable: ₦100.00</div>
 
         <button class="buy-btn" id="procBtn" onclick="initiateTransactionFlow()">GENERATE PIN</button>
+
+        <!-- Reprint Trigger Button -->
+        <button class="buy-btn reprint-btn" id="reprintBatchBtn" onclick="fetchAndReprintLastBatch()">🖨️ REPRINT PREVIOUS BATCH</button>
     </div>
 </div>
 
@@ -192,7 +180,7 @@
 <div class="modal-overlay" id="kycDialogOverlay" style="align-items: center;">
     <div class="dialog-box">
         <h3 style="margin: 0 0 10px 0; color: #c62828;">KYC Verification Warning</h3>
-        <p style="color: #555; font-size: 14px; line-height: 1.5;">Your KYC verification portfolio is currently incomplete. Would you like to complete verification security parameters now?</p>
+        <p style="color: #555; font-size: 14px; line-height: 1.5;">Your KYC verification portfolio is currently incomplete. Would you like to complete the verification of security parameters now?</p>
         <div class="dialog-buttons">
             <button class="btn-flex" style="background: #e0e0e0; color: #333;" onclick="bypassKycToPinModal()">Do Later</button>
             <button class="btn-flex" style="background: var(--primary); color: #fff;" onclick="location.href='../kyc_status.html'">Verify Now</button>
@@ -208,23 +196,33 @@
         <h3 style="margin: 0 0 15px 0; color: var(--primary);">Enter Security PIN</h3>
         <div class="form-group">
             <label>4-Digit Transaction PIN</label>
-            <!-- Optimized for phone pad deployment without browser auto-save hooks -->
             <input type="tel" id="transactionPin" class="secure-dial-input" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
         </div>
         <div style="display: flex; gap: 10px;">
-            <button class="btn-flex" style="background:#e0e0e0;" onclick="closePinModal()">Cancel</button>
-            <button class="btn-flex" style="background:var(--primary); color:#fff;" id="confirmAuthBtn" onclick="sendGenerationRequest()">Confirm & Pay</button>
+            <button class="btn-flex" style="background:#e0e0e0;" id="cancelAuthBtn" onclick="closePinModal()">Cancel</button>
+            <button class="btn-flex" style="background:var(--primary); color:#fff;" id="confirmAuthBtn" onclick="sendGenerationRequest()">
+                <span id="authBtnSpinner" class="spinner"></span>
+                <span id="authBtnText">Confirm & Pay</span>
+            </button>
         </div>
     </div>
 </div>
 
-<!-- Output Grid A4 Panel View -->
+<!-- EXACT OUTPUT CANVAS PROFILE MATCHED TO HISTORY.HTML -->
 <div id="printArea">
-    <h2 style="text-align: center; margin: 10px 0 5px 0; color: #222; font-size: 15px;">E-Voucher Printing System</h2>
+    <div id="paperSelectionControl" class="paper-selector-bar">
+        <span>📄 Paper Type:</span>
+        <select id="paperTypeSelector" onchange="switchPaperLayoutProfile()">
+            <option value="a4">Standard A4 Sheet (4-Column Grid)</option>
+            <option value="pos">Thermal POS Receipt (Continuous Roll)</option>
+        </select>
+    </div>
+
     <div id="ticketsWrapper"></div>
-    <div class="print-actions">
-        <button class="buy-btn btn-print" onclick="window.print()">🖨️ PRINT SHEET / SAVE PDF</button>
-        <button class="buy-btn btn-close" onclick="closePrintView()">CLOSE SHEET</button>
+
+    <div id="printControlsEngine" style="display: flex; gap: 12px; max-width: 400px; margin: 25px auto; padding: 0 15px; box-sizing: border-box;">
+        <button style="flex: 1; background: #2e7d32; color: white; padding: 14px; border: none; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);" onclick="executeVoucherPrint()">🖨️ PRINT SHEET</button>
+        <button style="flex: 1; background: #c62828; color: white; padding: 14px; border: none; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(198,40,40,0.3);" onclick="closePrintView()">❌ CLOSE SHEET</button>
     </div>
 </div>
 
@@ -244,11 +242,39 @@
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
+    const database = firebase.database();
+
+    let activeReprintTimestamp = null;
+    let currentlyLoadedDataPayload = null; // Caches payload for seamless real-time layout toggle
 
     window.addEventListener('DOMContentLoaded', () => {
         fetch('https://Dnezerlinks-backend.onrender.com/api/ping').catch(() => {});
         updateTotal();
+
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                checkLastTransactionAvailability(user.uid);
+            }
+        });
     });
+
+    async function checkLastTransactionAvailability(uid) {
+        try {
+            database.ref(`Transaction/${uid}`)
+                .orderByChild('type')
+                .equalTo('Recharge PIN')
+                .limitToLast(1)
+                .on('value', (snap) => {
+                    if (snap.exists()) {
+                        document.getElementById('reprintBatchBtn').style.display = 'flex';
+                    } else {
+                        document.getElementById('reprintBatchBtn').style.display = 'none';
+                    }
+                });
+        } catch (e) {
+            console.error("Error evaluating visibility listener:", e);
+        }
+    }
 
     function showFormMessage(text, isSuccess = false) {
         const banner = document.getElementById('topFormBanner');
@@ -269,13 +295,24 @@
         document.getElementById('modalBanner').style.display = 'none';
     }
 
+    function resetAuthBtn() {
+        const btn = document.getElementById('confirmAuthBtn');
+        const cancelBtn = document.getElementById('cancelAuthBtn');
+        const spinner = document.getElementById('authBtnSpinner');
+        const btnText = document.getElementById('authBtnText');
+
+        btn.disabled = false;
+        cancelBtn.disabled = false;
+        spinner.style.display = 'none';
+        btnText.innerText = "Confirm & Pay";
+    }
+
     function updateTotal() {
         const amt = parseFloat(document.getElementById('amount').value);
         const qty = parseInt(document.getElementById('qty').value) || 0;
         document.getElementById('totalDisplay').innerText = "Total Payable: ₦" + (amt * qty).toLocaleString();
     }
 
-    // Dynamic KYC verification fetch and processing pipeline
     async function initiateTransactionFlow() {
         clearBanners();
         const user = auth.currentUser;
@@ -289,25 +326,21 @@
         procBtn.innerText = "Checking KYC Profiles...";
 
         try {
-            // Read snapshot node data from real-time instance tree path
-            const snapshot = await firebase.database().ref(`users/${user.uid}/kyc_status`).once('value');
+            const snapshot = await database.ref(`users/${user.uid}/kyc_status`).once('value');
             const currentKycStatus = snapshot.val();
 
             procBtn.disabled = false;
             procBtn.innerText = "GENERATE PIN";
 
             if (currentKycStatus === "VERIFIED") {
-                // Instantly bypass dialog warning frames for confirmed vendors
                 openPinModal();
             } else {
-                // Serve modal alert sheet context to other profile types
                 document.getElementById('kycDialogOverlay').style.display = 'flex';
             }
         } catch (dbErr) {
-            console.error("KYC verification tree fetch error:", dbErr);
+            console.error("KYC root fetch failure:", dbErr);
             procBtn.disabled = false;
             procBtn.innerText = "GENERATE PIN";
-            // Structural fallback safety
             document.getElementById('kycDialogOverlay').style.display = 'flex';
         }
     }
@@ -329,16 +362,14 @@
         resetAuthBtn();
     }
 
-    function resetAuthBtn() {
-        const btn = document.getElementById('confirmAuthBtn');
-        btn.disabled = false;
-        btn.innerText = "Confirm & Pay";
-    }
-
     async function sendGenerationRequest() {
         document.getElementById('modalBanner').style.display = 'none';
         const user = auth.currentUser;
         const btn = document.getElementById('confirmAuthBtn');
+        const cancelBtn = document.getElementById('cancelAuthBtn');
+        const spinner = document.getElementById('authBtnSpinner');
+        const btnText = document.getElementById('authBtnText');
+
         const amt = parseFloat(document.getElementById('amount').value);
         const qty = parseInt(document.getElementById('qty').value);
         const net = document.getElementById('network').value;
@@ -350,7 +381,9 @@
         }
 
         btn.disabled = true;
-        btn.innerText = "Authorizing...";
+        cancelBtn.disabled = true;
+        spinner.style.display = 'inline-block';
+        btnText.innerText = "Processing...";
 
         const calculatedTotalPayable = amt * qty;
 
@@ -370,11 +403,10 @@
             });
 
             const result = await response.json();
-            console.log("Canvas Processing Payload Log:", result);
 
             if (!response.ok || !result.success) {
                 const parsedError = result.error || result.message || "Unresolved API core failure.";
-                
+
                 if (parsedError.toLowerCase().includes("pin") || response.status === 401 || response.status === 403) {
                     showModalMessage(`❌ Authorization Rejected: ${parsedError}`);
                 } else {
@@ -384,10 +416,12 @@
                 resetAuthBtn();
             } else {
                 closePinModal();
+                activeReprintTimestamp = null;
                 showFormMessage("✅ Vouchers compiled successfully! Loading canvas view...", true);
                 setTimeout(() => {
                     clearBanners();
-                    displayPinsForPrinting(result);
+                    document.getElementById('paperTypeSelector').value = 'a4';
+                    buildVoucherCanvas('a4', result);
                 }, 1500);
             }
         } catch (err) {
@@ -397,53 +431,180 @@
         }
     }
 
-    function displayPinsForPrinting(data) {
-        const mainContainer = document.getElementById('mainFormContainer');
-        const bottomNav = document.getElementById('bottomNav');
-        const printArea = document.getElementById('printArea');
+    async function fetchAndReprintLastBatch() {
+        clearBanners();
+        const user = auth.currentUser;
+        if (!user) return showFormMessage("❌ Authorization Required: Please login first.");
+
+        const reprintBtn = document.getElementById('reprintBatchBtn');
+        reprintBtn.disabled = true;
+        reprintBtn.innerText = "Fetching Data Canvas...";
+
+        try {
+            database.ref(`Transaction/${user.uid}`)
+                .orderByChild('type')
+                .equalTo('Recharge PIN')
+                .limitToLast(1)
+                .once('value', (snap) => {
+                    reprintBtn.disabled = false;
+                    reprintBtn.innerText = "🖨️ REPRINT PREVIOUS BATCH";
+
+                    if (!snap.exists()) {
+                        return showFormMessage("❌ History Sync Error: No recent vouchers found matching your account.");
+                    }
+
+                    let keys = Object.keys(snap.val());
+                    let lastRefKey = keys[keys.length - 1];
+                    const transactionRecord = snap.val()[lastRefKey];
+
+                    activeReprintTimestamp = transactionRecord.date || null;
+
+                    let detectedNetwork = 'MTN';
+                    if (transactionRecord.service) {
+                        const svc = transactionRecord.service.toUpperCase();
+                        if (svc.includes('GLO')) detectedNetwork = 'GLO';
+                        if (svc.includes('AIRTEL')) detectedNetwork = 'AIRTEL';
+                        if (svc.includes('9MOBILE')) detectedNetwork = '9MOBILE';
+                    }
+
+                    const dataPayload = {
+                        network: transactionRecord.network || detectedNetwork,
+                        amount: transactionRecord.amount,
+                        brandName: transactionRecord.brandName || "Dnezerlinks",
+                        pins: transactionRecord.pins
+                    };
+
+                    if (!dataPayload.pins || dataPayload.pins.length === 0) {
+                        return showFormMessage("❌ Layout Mapping Error: Pins data payload empty within this log record.");
+                    }
+
+                    document.getElementById('network').value = dataPayload.network;
+                    document.getElementById('amount').value = dataPayload.amount;
+                    document.getElementById('qty').value = dataPayload.pins.length;
+                    document.getElementById('brandName').value = dataPayload.brandName || "";
+                    updateTotal();
+
+                    showFormMessage("✅ Historical batch pulled successfully! Remapping print frame...", true);
+                    setTimeout(() => {
+                        clearBanners();
+                        document.getElementById('paperTypeSelector').value = 'a4';
+                        buildVoucherCanvas('a4', dataPayload);
+                    }, 1200);
+                });
+
+        } catch (err) {
+            console.error("Reprint handling pipeline crash:", err);
+            reprintBtn.disabled = false;
+            reprintBtn.innerText = "🖨️ REPRINT PREVIOUS BATCH";
+            showFormMessage("❌ Database Read Timeout: Failed to load previous print engine context.");
+        }
+    }
+
+    function switchPaperLayoutProfile() {
+        const selectedPaperFormat = document.getElementById('paperTypeSelector').value;
+        if (currentlyLoadedDataPayload) {
+            buildVoucherCanvas(selectedPaperFormat, currentlyLoadedDataPayload);
+        }
+    }
+
+    /* EXACT DYNAMIC RENDERING PROFILE LOGIC FROM HISTORY.HTML */
+    function buildVoucherCanvas(profileMode, data) {
+        currentlyLoadedDataPayload = data;
+
+        document.getElementById('mainFormContainer').style.display = 'none';
+        document.getElementById('bottomNav').style.display = 'none';
+
         const wrapper = document.getElementById('ticketsWrapper');
+        wrapper.innerHTML = '';
 
-        wrapper.innerHTML = ""; 
-        
         const gridContainer = document.createElement('div');
-        gridContainer.className = 'tickets-grid';
-        
-        const typedBrandName = document.getElementById('brandName').value.trim();
-        const fallbackBrandHeader = typedBrandName ? typedBrandName : "DNEZERLINKS";
-        const activeUssd = '*311*PIN#';
+        gridContainer.className = `tickets-grid layout-${profileMode}`;
 
-        data.pins.forEach((item) => {
-            const ticket = document.createElement('div');
-            ticket.className = 'pin-ticket';
-            ticket.innerHTML = `
-                <div class="ticket-header">${fallbackBrandHeader}</div>
-                <div class="ticket-brand">${data.network.toUpperCase()} ₦${data.amount}</div>
-                
-                <div class="pin-box">
-                    <div class="pin-label">PIN</div>
-                    <div class="pin-code">${item.pin}</div>
+        const typedBrandName = document.getElementById('brandName').value.trim();
+        const fallbackBrandHeader = typedBrandName ? typedBrandName : (data.brandName || "DNEZERLINKS");
+        const activeUssd = '*311*PIN#';
+        const customerCareNumber = "300";
+
+        let formattedTimestamp = activeReprintTimestamp;
+        if (!formattedTimestamp) {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            let hr12 = now.getHours();
+            const ampm = hr12 >= 12 ? 'PM' : 'AM';
+            hr12 = hr12 % 12;
+            hr12 = hr12 ? hr12 : 12; 
+            const strHr = String(hr12).padStart(2, '0');
+            
+            formattedTimestamp = `${day}/${month}/${year}, ${strHr}:${minutes} ${ampm}`;
+        }
+
+        let targetNetwork = data.network.toUpperCase();
+        const brandUpper = fallbackBrandHeader.toUpperCase();
+        if (targetNetwork.startsWith(brandUpper)) {
+            targetNetwork = targetNetwork.replace(brandUpper, '').trim();
+        }
+
+        let logoClass = 'logo-mtn';
+        if (targetNetwork.includes('GLO')) logoClass = 'logo-glo';
+        else if (targetNetwork.includes('AIRTEL')) logoClass = 'logo-airtel';
+        else if (targetNetwork.includes('9MOBILE')) logoClass = 'logo-9mobile';
+
+        let finalPinsArray = [];
+        if (Array.isArray(data.pins)) {
+            finalPinsArray = data.pins;
+        } else if (typeof data.pins === 'object') {
+            finalPinsArray = Object.values(data.pins);
+        }
+
+        finalPinsArray.forEach((item) => {
+            const voucherPinValue = item.pin || item.pin_code || (typeof item === 'string' ? item : 'N/A');
+            const voucherSerialValue = item.serial || item.serial_number || 'N/A';
+            const individualCardAmount = data.amount || '0';
+
+            const ticketCard = document.createElement('div');
+            ticketCard.className = 'pin-ticket';
+            ticketCard.innerHTML = `
+                <div class="ticket-top-wrapper">
+                    <div class="ticket-header">${fallbackBrandHeader}</div>
+                    <div class="logo-box ${logoClass}"></div>
                 </div>
-                
+                <div class="ticket-brand">${targetNetwork} ₦${parseFloat(individualCardAmount).toLocaleString()}</div>
+                <div class="pin-row">
+                    <span class="pin-label">PIN:</span>
+                    <span class="pin-code">${voucherPinValue}</span>
+                </div>
+                <div class="serial-row">Serial Number: ${voucherSerialValue}</div>
                 <div class="ticket-footer">
-                    S/N: ${item.serial || 'N/A'}<br>
-                    Load: ${activeUssd}
+                    Load: ${activeUssd} | Customer Care: ${customerCareNumber}
+                    <div class="ticket-timestamp">${formattedTimestamp}</div>
                 </div>
             `;
-            gridContainer.appendChild(ticket);
+            gridContainer.appendChild(ticketCard);
         });
 
         wrapper.appendChild(gridContainer);
+        document.getElementById('printArea').style.display = 'block';
+        window.scrollTo(0, 0);
+    }
 
-        mainContainer.style.display = 'none';
-        bottomNav.style.display = 'none';
-        printArea.style.display = 'block';
+    function executeVoucherPrint() {
+        document.body.classList.add('printing-vouchers');
+        window.print();
     }
 
     function closePrintView() {
+        document.body.classList.remove('printing-vouchers');
+        document.getElementById('printArea').style.display = 'none';
         document.getElementById('mainFormContainer').style.display = 'block';
         document.getElementById('bottomNav').style.display = 'flex';
-        document.getElementById('printArea').style.display = 'none';
         document.getElementById('brandName').value = "";
+        activeReprintTimestamp = null;
+        currentlyLoadedDataPayload = null;
         clearBanners();
     }
 </script>

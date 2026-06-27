@@ -12,11 +12,11 @@
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
         .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
         .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
-        
+
         /* Repositioned Notification Button down slightly to clear room for API Container */
         .notif-btn { position: absolute; top: 38px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
         .notif-badge { position: absolute; top: -5px; right: -5px; background: red; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; font-weight: bold; display: none; }
-        
+
         /* New Style Rules for Top Left Corner API Display Dashboard */
         .vtu-api-container { position: absolute; top: 12px; left: 15px; text-align: left; font-family: 'Segoe UI', sans-serif; display: none; }
         .vtu-api-label { font-size: 9px; color: rgba(255, 255, 255, 0.7); display: block; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
@@ -47,10 +47,10 @@
 
 <div class="header">
     <div id="vtuApiContainer" class="vtu-api-container">
-        <span class="vtu-api-label">VTU Naija Balance</span>
+        <span class="vtu-api-label">Master </span>
         <span id="vtuApiBalance" class="vtu-api-value">Loading...</span>
     </div>
-    
+
     <button class="notif-btn" onclick="openNotif()">🔔<span id="notifBadge" class="notif-badge">0</span></button>
     <div id="adminContainer"></div>
     <div id="userName" style="font-size: 14px;">Updating your dashboard...</div>
@@ -108,6 +108,10 @@
     let currentUser = null;
     const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
 
+    // Data Engine States for Merging Channels
+    let userNotifications = [];
+    let globalBroadcast = null;
+
     firebase.auth().onAuthStateChanged(user => {
         if (user) {
             currentUser = user;
@@ -115,9 +119,8 @@
                 const d = snap.val() || {};
                 document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
                 document.getElementById('userName').innerText = "Welcome, " + (d.name || "User");
-                
+
                 if (user.uid === MASTER_ADMIN_UID) {
-                    // Show container and execute backend fetch if master logged in
                     document.getElementById('vtuApiContainer').style.display = 'block';
                     fetchVtuNaijaBalance();
 
@@ -128,16 +131,103 @@
                     });
                 }
             });
+
+            // Sync Stream A: User Personal Notifications Realtime Listener
             db.ref('notifications/' + user.uid).on('value', snap => {
-                let unread = 0;
-                snap.forEach(child => { if (child.val().read === false) unread++; });
-                const b = document.getElementById('notifBadge');
-                if (unread > 0) { b.innerText = unread; b.style.display = 'block'; } else { b.style.display = 'none'; }
+                userNotifications = [];
+                snap.forEach(child => {
+                    userNotifications.push({
+                        key: child.key,
+                        ...child.val()
+                    });
+                });
+                renderCombinedNotifications();
             });
+
+            // Sync Stream B: Global Broadcast Settings Realtime Listener
+            db.ref('system_settings').on('value', snap => {
+                const settings = snap.val() || {};
+                if (settings.global_broadcast_message && settings.global_broadcast_message.trim() !== "") {
+                    globalBroadcast = {
+                        message: settings.global_broadcast_message,
+                        timestamp: settings.broadcast_timestamp || Date.now()
+                    };
+                } else {
+                    globalBroadcast = null;
+                }
+                renderCombinedNotifications();
+            });
+
             document.getElementById('tickerBar').style.display = 'block';
             loadMarquee();
         } else { window.location.href = 'login.html'; }
     });
+
+    // Combined Array UI Renderer Function
+    function renderCombinedNotifications() {
+        if (!currentUser) return;
+        const badge = document.getElementById('notifBadge');
+        const container = document.getElementById('notifContainer');
+        
+        let unreadCount = 0;
+        userNotifications.forEach(n => { if (!n.read) unreadCount++; });
+        
+        if (globalBroadcast) {
+            const seenBroadcastTime = localStorage.getItem('dnezer_seen_broadcast_time');
+            if (seenBroadcastTime !== globalBroadcast.timestamp.toString()) {
+                unreadCount++;
+            }
+        }
+
+        if (unreadCount > 0) {
+            badge.innerText = unreadCount;
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+
+        if (document.getElementById('notifModal').style.display === "block") {
+            container.innerHTML = '';
+            let combinedItems = [];
+
+            userNotifications.forEach(n => combinedItems.push(n));
+
+            if (globalBroadcast) {
+                const seenBroadcastTime = localStorage.getItem('dnezer_seen_broadcast_time');
+                const isUnread = seenBroadcastTime !== globalBroadcast.timestamp.toString();
+                combinedItems.push({
+                    id: 'global_broadcast_msg',
+                    message: `📢 ANNOUNCEMENT: ${globalBroadcast.message}`,
+                    timestamp: globalBroadcast.timestamp,
+                    read: !isUnread,
+                    isGlobal: true
+                });
+            }
+
+            combinedItems.sort((a, b) => b.timestamp - a.timestamp);
+
+            if (combinedItems.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>';
+                return;
+            }
+
+            combinedItems.forEach(n => {
+                const item = document.createElement('div');
+                item.className = `notif-item ${n.read ? '' : 'unread'}`;
+                item.innerHTML = `<div>${n.message}</div><span class="notif-time">${new Date(n.timestamp).toLocaleString()}</span>`;
+                
+                if (!n.read && !n.isGlobal) {
+                    db.ref(`notifications/${currentUser.uid}/${n.key}`).update({ read: true });
+                }
+                
+                container.appendChild(item);
+            });
+
+            if (globalBroadcast) {
+                localStorage.setItem('dnezer_seen_broadcast_time', globalBroadcast.timestamp);
+            }
+        }
+    }
 
     async function fetchVtuNaijaBalance() {
         const balanceElement = document.getElementById('vtuApiBalance');
@@ -173,25 +263,10 @@
             setTimeout(() => { ticker.style.animation = "ticker 25s linear infinite"; }, 50);
         });
     }
-    
+
     function openNotif() {
-        const modal = document.getElementById('notifModal');
-        const container = document.getElementById('notifContainer');
-        modal.style.display = "block";
-        if (currentUser) {
-            db.ref('notifications/' + currentUser.uid).once('value', snap => {
-                container.innerHTML = '';
-                if (!snap.exists()) { container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>'; return; }
-                snap.forEach(child => {
-                    const n = child.val();
-                    const item = document.createElement('div');
-                    item.className = `notif-item ${n.read ? '' : 'unread'}`;
-                    item.innerHTML = `<div>${n.message}</div><span class="notif-time">${new Date(n.timestamp).toLocaleString()}</span>`;
-                    container.prepend(item);
-                    if (!n.read) db.ref('notifications/' + currentUser.uid + '/' + child.key).update({ read: true });
-                });
-            });
-        }
+        document.getElementById('notifModal').style.display = "block";
+        renderCombinedNotifications();
     }
     function closeNotif() { document.getElementById('notifModal').style.display = "none"; }
     window.onclick = function(event) { if (event.target == document.getElementById('notifModal')) closeNotif(); }
@@ -233,8 +308,7 @@
         }
 
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'toggle-bal-btn';
-        toggleBtn.id = 'toggleBalBtn';
+        toggleBtn.className = 'toggle-bal-btn';                                                 toggleBtn.id = 'toggleBalBtn';
         toggleBtn.innerHTML = isHidden ? 'Show' : 'Hide';
         balEl.parentNode.appendChild(toggleBtn);
 

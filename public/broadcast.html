@@ -16,20 +16,21 @@
         .header-top h2 { margin: 0; font-size: 1.4rem; }
         .status-bar { font-size: 10px; color: #4caf50; font-weight: bold; }
         .content-area { padding: 20px 15px; }
-        .section { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #eee; }
+        .section { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
         h4 { margin: 0 0 10px 0; color: var(--primary); }
-        textarea, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        textarea, input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; font-family: inherit; font-size: 14px; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .btn-marquee { background: var(--primary); color: white; }
         .btn-global { background: var(--accent); color: #000; }
-        .btn:disabled { opacity: 0.5; }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 </head>
 <body>
 <div class="header-top">
     <div class="nav-links">
         <a href="index.html">← ADMIN HUB</a>
-        <span id="authStatus" class="status-bar">Verifying...</span>
+        <span id="authStatus" class="status-bar">Verifying Master Access...</span>
     </div>
     <h2>Broadcast Center</h2>
 </div>
@@ -40,9 +41,22 @@
         <button class="btn btn-marquee" id="marqueeBtn" onclick="updateMarquee()">Update Marquee</button>
     </div>
     <div class="section">
-        <h4>Global In-App Message</h4>
-        <textarea id="globalMsg" rows="3" placeholder="Message to all users..."></textarea>
-        <button class="btn btn-global" id="globalBtn" onclick="sendGlobal()">Send to All Accounts</button>
+        <h4>In-App Message Dispatcher</h4>
+        
+        <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Target Audience</label>
+        <select id="targetType" onchange="toggleTargetInput()">
+            <option value="all">Send to All Accounts (Broadcast)</option>
+            <option value="single">Send to a Specific User (UID)</option>
+        </select>
+
+        <div id="singleUserContainer" style="display: none;">
+            <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Target User UID</label>
+            <input type="text" id="targetUid" placeholder="Paste user identity key (UID) here...">
+        </div>
+
+        <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Message Content</label>
+        <textarea id="globalMsg" rows="3" placeholder="Type your message details here..."></textarea>
+        <button class="btn btn-global" id="globalBtn" onclick="sendMessage()">Dispatch Message</button>
     </div>
 </div>
 <script>
@@ -58,58 +72,99 @@
     const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
 
     auth.onAuthStateChanged(user => {
-        if (user && user.uid === MASTER_ADMIN_UID) {
-            document.getElementById('authStatus').innerText = "Session Active ●";
-            // Sync current values from the database
-            db.ref('system_settings/global_update').once('value', s => {
-                document.getElementById('marqueeText').value = s.val() || "";
-            });
+        if (user) {
+            if (user.uid === MASTER_ADMIN_UID) {
+                document.getElementById('authStatus').innerText = "Session Active ●";
+                initSync();
+            } else {
+                alert("ACCESS DENIED");
+                window.location.href = "../home.html";
+            }
         } else {
             window.location.href = "../login.html";
         }
     });
 
+    function initSync() {
+        db.ref('system_settings/global_update').once('value').then(s => {
+            document.getElementById('marqueeText').value = s.val() || "";
+        }).catch(error => {
+            console.error("Sync error:", error);
+        });
+    }
+
+    function toggleTargetInput() {
+        const type = document.getElementById('targetType').value;
+        const inputContainer = document.getElementById('singleUserContainer');
+        if (type === 'single') {
+            inputContainer.style.display = 'block';
+        } else {
+            inputContainer.style.display = 'none';
+        }
+    }
+
     function updateMarquee() {
         const text = document.getElementById('marqueeText').value;
         const btn = document.getElementById('marqueeBtn');
+        if(!text.trim()) return alert("Please enter text for marquee.");
         btn.disabled = true;
 
-        // DIRECT PATH WRITING
-        // We update BOTH paths to ensure the Home Page multi-path check definitely sees it
-        const updates = {};
-        updates['system_settings/global_update'] = text;
-        updates['settings/global_update'] = text;
-
-        db.ref().update(updates)
-        .then(() => alert("✅ Marquee updated on all paths!"))
+        db.ref('system_settings').update({
+            global_update: text,
+            global_broadcast_message: text,
+            broadcast_timestamp: Date.now()
+        })
+        .then(() => alert("✅ Marquee updated successfully across all configurations!"))
         .catch(error => alert("❌ FAILED: " + error.message))
         .finally(() => btn.disabled = false);
     }
 
-    async function sendGlobal() {
-        const msg = document.getElementById('globalMsg').value;
+    async function sendMessage() {
+        const msg = document.getElementById('globalMsg').value.trim();
+        const targetType = document.getElementById('targetType').value;
+        const targetUid = document.getElementById('targetUid').value.trim();
         const btn = document.getElementById('globalBtn');
+
         if(!msg) return alert("Please enter a message.");
+
+        if (targetType === 'single' && !targetUid) {
+            return alert("Please enter the target user's UID.");
+        }
+
+        const confirmMsg = targetType === 'all' 
+            ? "Send to all users regardless of registration time?" 
+            : `Send this direct notification to user UID: ${targetUid}?`;
+
+        if(!confirm(confirmMsg)) return;
+
         btn.disabled = true;
+        btn.innerText = "DISPATCHING MESSAGE...";
+
         try {
-            const usersSnap = await db.ref('users').once('value');
-            const updates = {};
-            usersSnap.forEach(u => {
-                const uid = u.key;
-                const notifKey = db.ref('notifications').child(uid).push().key;
-                updates["/notifications/" + uid + "/" + notifKey] = {
+            if (targetType === 'all') {
+                await db.ref('system_settings').update({
+                    global_broadcast_message: msg,
+                    broadcast_timestamp: Date.now()
+                });
+                alert("✅ Global broadcast message delivered to all users!");
+            } else {
+                const timestamp = Date.now();
+                const newNotifRef = db.ref(`notifications/${targetUid}`).push();
+                await newNotifRef.set({
+                    id: newNotifRef.key,
                     message: msg,
-                    timestamp: Date.now(),
-                    read: false
-                };
-            });
-            await db.ref().update(updates);
-            alert("✅ Global message delivered!");
+                    read: false,
+                    timestamp: timestamp
+                });
+                alert(`✅ Message successfully delivered directly to user: ${targetUid}`);
+                document.getElementById('targetUid').value = "";
+            }
             document.getElementById('globalMsg').value = "";
         } catch (error) {
             alert("❌ FAILED: " + error.message);
         } finally {
             btn.disabled = false;
+            btn.innerText = "Dispatch Message";
         }
     }
 </script>

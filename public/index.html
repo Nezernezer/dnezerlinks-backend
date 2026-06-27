@@ -14,7 +14,7 @@
         .status-msg {
             height: 20px;
             font-size: 0.95rem;
-            color: #FFB300; 
+            color: #FFB300;
             margin-bottom: 20px;
             font-weight: 600;
         }
@@ -42,12 +42,108 @@
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0); }
         }
 
-        .features { padding: 50px 20px; text-align: center; background: #fff; }
+        .features { padding: 50px 20px; text-align: center; background: #fff; padding-bottom: 120px; }
         .features h2 { font-size: 2.2rem; margin-bottom: 40px; color: #333; font-weight: 700; }
         .card-container { display: flex; flex-direction: column; gap: 20px; max-width: 380px; margin: 0 auto; }
         .card { background: #fff; padding: 40px 20px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.07); border: 1px solid #f1f1f1; }
         .card h3 { color: #222; margin: 0 0 15px; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; }
         .card p { color: #444; margin: 0; font-size: 1.05rem; line-height: 1.5; }
+
+        /* ==================== 📞 FLOATING CONTACT MODULE STYLES ==================== */
+        .contact-fab {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background: #0D47A1;
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(13, 71, 161, 0.4);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+        .contact-fab:active { transform: scale(0.92); }
+
+        .contact-modal {
+            display: none;
+            position: fixed;
+            z-index: 4000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        .contact-modal-content {
+            background: white;
+            margin: 20vh auto;
+            padding: 25px;
+            border-radius: 20px;
+            width: 85%;
+            max-width: 360px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            text-align: center;
+            position: relative;
+            box-sizing: border-box;
+        }
+        .contact-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+        .contact-modal-header h3 { margin: 0; color: #0D47A1; font-size: 1.3rem; font-weight: 700; }
+        .contact-close-btn { font-size: 26px; font-weight: bold; cursor: pointer; color: #888; border: none; background: none; outline: none; }
+        
+        .contact-channel-item {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .contact-channel-item label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .contact-channel-value {
+            font-size: 14px;
+            color: #222;
+            font-weight: 600;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        .contact-action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            box-sizing: border-box;
+        }
+        .contact-action-btn:active { opacity: 0.85; }
+        .btn-email { background: #e3f2fd; color: #0D47A1; }
+        .btn-whatsapp { background: #e8f5e9; color: #2e7d32; }
+        .btn-call { background: #fff8e1; color: #ff8f00; }
     </style>
 </head>
 <body>
@@ -70,6 +166,35 @@
         </div>
     </section>
 
+    <button class="contact-fab" onclick="openContactModal()">📞</button>
+
+    <div id="contactModal" class="contact-modal">
+        <div class="contact-modal-content">
+            <div class="contact-modal-header">
+                <h3>CONTACT US</h3>
+                <button class="contact-close-btn" onclick="closeContactModal()">&times;</button>
+            </div>
+            
+            <div class="contact-channel-item">
+                <label>Email Address</label>
+                <div class="contact-channel-value">dnezerlinks@gmail.com</div>
+                <a href="mailto:dnezerlinks@gmail.com" class="contact-action-btn btn-email">✉️ Send Email</a>
+            </div>
+
+            <div class="contact-channel-item">
+                <label>Whatsapp Connection</label>
+                <div class="contact-channel-value">08117776509</div>
+                <a href="https://wa.me/2348117776509" target="_blank" class="contact-action-btn btn-whatsapp">💬 Chat on WhatsApp</a>
+            </div>
+
+            <div class="contact-channel-item">
+                <label>Phone Hotlines</label>
+                <div class="contact-channel-value">08117776509</div>
+                <a href="tel:08117776509" class="contact-action-btn btn-call">📞 Call Center</a>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Typing Animation Logic
         const text = "Touch get started to login or create account.";
@@ -85,7 +210,7 @@
                 el.innerHTML = text.substring(0, i + 1);
                 i++;
                 if (i === text.length) {
-                    setTimeout(() => isDeleting = true, 3000); 
+                    setTimeout(() => isDeleting = true, 3000);
                 }
             } else if (isDeleting && i > 0) {
                 el.innerHTML = text.substring(0, i - 1);
@@ -97,9 +222,23 @@
             setTimeout(type, isDeleting ? 40 : speed);
         }
 
+        // Floating Modal Interactive Scripts
+        function openContactModal() {
+            document.getElementById('contactModal').style.display = "block";
+        }
+        function closeContactModal() {
+            document.getElementById('contactModal').style.display = "none";
+        }
+        window.onclick = function(event) {
+            const modal = document.getElementById('contactModal');
+            if (event.target == modal) {
+                closeContactModal();
+            }
+        }
+
         window.onload = () => {
             type();
-            
+
             // Service Worker Registration
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js')

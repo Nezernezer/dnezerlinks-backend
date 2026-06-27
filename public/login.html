@@ -21,7 +21,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         /* Persistent Top Brand Header Banner */
         .top-banner {
             width: 100%;
@@ -55,6 +55,7 @@
             width: 100%;
             max-width: 380px;
             box-sizing: border-box;
+            z-index: 10;
         }
         h2 { color: var(--main); text-align: center; margin-top: 0; margin-bottom: 5px; }
         h3 { color: #555; text-align: center; margin: 0 0 5px 0; font-size: 18px; }
@@ -79,7 +80,7 @@
         .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
         @keyframes blink { 50% { opacity: 0; } }
 
-        input {
+        input, select {
             width: 100%;
             padding: 12px;
             border: 1px solid #ddd;
@@ -87,6 +88,8 @@
             box-sizing: border-box;
             font-size: 15px;
             margin-bottom: 10px;
+            background: white;
+            font-family: inherit;
         }
         .password-wrapper { margin: 0 0 8px 0; }
         .password-container {
@@ -111,6 +114,102 @@
         .loading { width: 100%; height: 3px; background: #eee; margin: 10px 0; display: none; overflow: hidden; }
         .bar { width: 100%; height: 100%; background: var(--warn); animation: pulse 1.2s infinite linear; }
         @keyframes pulse { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+        /* ==================== 📞 FLOATING CONTACT MODULE STYLES ==================== */
+        .contact-fab {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background: var(--main);
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(13, 71, 161, 0.4);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+        .contact-fab:active { transform: scale(0.92); }
+
+        .contact-modal {
+            display: none;
+            position: fixed;
+            z-index: 4000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        .contact-modal-content {
+            background: white;
+            margin: 20vh auto;
+            padding: 25px;
+            border-radius: 20px;
+            width: 85%;
+            max-width: 360px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            text-align: center;
+            position: relative;
+            box-sizing: border-box;
+        }
+        .contact-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+        .contact-modal-header h3 { margin: 0; color: var(--main); font-size: 1.3rem; font-weight: 700; }
+        .contact-close-btn { font-size: 26px; font-weight: bold; cursor: pointer; color: #888; border: none; background: none; outline: none; }
+        
+        .contact-channel-item {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .contact-channel-item label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .contact-channel-value {
+            font-size: 14px;
+            color: #222;
+            font-weight: 600;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        .contact-action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            box-sizing: border-box;
+        }
+        .contact-action-btn:active { opacity: 0.85; }
+        .btn-email { background: #e3f2fd; color: #0D47A1; }
+        .btn-whatsapp { background: #e8f5e9; color: #2e7d32; }
+        .btn-call { background: #fff8e1; color: #ff8f00; }
     </style>
 </head>
 <body>
@@ -118,6 +217,7 @@
 <div class="top-banner">Dnezerlinks</div>
 
 <div class="auth-wrapper-container">
+    <!-- LOGIN BOX -->
     <div class="card" id="loginBox">
         <h2>Dnezerlinks</h2>
         <div class="status-msg" id="loginStatus"></div>
@@ -131,9 +231,11 @@
         <div class="loading" id="lLoad"><div class="bar"></div></div>
         <button id="lBtn" onclick="handleLogin()">Login</button>
         <div class="link" onclick="toggle('regBox')">Create Account</div>
-        <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888;">Forgot Password?</div>
+        <div class="link" onclick="toggle('forgotBox')" style="font-size: 11px; color: #888; margin-bottom: 5px;">Forgot Password?</div>
+        <div class="link" onclick="toggle('recoverEmailBox')" style="font-size: 11px; color: #d32f2f; margin-top: 5px;">Forget Email?</div>
     </div>
 
+    <!-- REGISTRATION BOX -->
     <div class="card hidden" id="regBox">
         <h2>Dnezerlinks</h2>
         <h3>Join Us</h3>
@@ -153,12 +255,58 @@
         <div class="link" onclick="toggle('loginBox')">Back to Login</div>
     </div>
 
+    <!-- FORGOT PASSWORD BOX -->
     <div class="card hidden" id="forgotBox">
         <h2>Reset</h2>
         <input type="email" id="fEmail" placeholder="Your Email">
         <div class="loading" id="fLoad"><div class="bar"></div></div>
         <button onclick="handleReset()">Send Reset Link</button>
         <div class="link" onclick="toggle('loginBox')">Back</div>
+    </div>
+
+    <!-- EMAIL RECOVERY BOX -->
+    <div class="card hidden" id="recoverEmailBox">
+        <h2>Recover Email</h2>
+        <div class="status-msg" id="recoverEmailStatus"></div>
+        <input type="text" id="recFullName" placeholder="Full Name on Account">
+        <select id="recGender">
+            <option value="" disabled selected>Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+        </select>
+        <input type="tel" id="recPhone" placeholder="Phone Number">
+        <input type="email" id="recSuspectedEmail" placeholder="Suspected Email (Optional)">
+        <button onclick="handleRecoverEmailSubmit()">Submit Review Request</button>
+        <div class="link" onclick="toggle('loginBox')">Back to Login</div>
+    </div>
+</div>
+
+<button class="contact-fab" onclick="openContactModal()">📞</button>
+
+<div id="contactModal" class="contact-modal">
+    <div class="contact-modal-content">
+        <div class="contact-modal-header">
+            <h3>CONTACT US</h3>
+            <button class="contact-close-btn" onclick="closeContactModal()">&times;</button>
+        </div>
+        
+        <div class="contact-channel-item">
+            <label>Email Address</label>
+            <div class="contact-channel-value">dnezerlinks@gmail.com</div>
+            <a href="mailto:dnezerlinks@gmail.com" class="contact-action-btn btn-email">✉️ Send Email</a>
+        </div>
+
+        <div class="contact-channel-item">
+            <label>Whatsapp Connection</label>
+            <div class="contact-channel-value">08117776509</div>
+            <a href="https://wa.me/2348117776509" target="_blank" class="contact-action-btn btn-whatsapp">💬 Chat on WhatsApp</a>
+        </div>
+
+        <div class="contact-channel-item">
+            <label>Phone Hotlines</label>
+            <div class="contact-channel-value">08117776509</div>
+            <a href="tel:08117776509" class="contact-action-btn btn-call">📞 Call Center</a>
+        </div>
     </div>
 </div>
 
@@ -214,8 +362,14 @@
         const statusEl = document.getElementById(activeStatusId);
         if (isCustomError && statusEl) {
             statusEl.classList.add('error-active');
-            fallbackStoredText = (activeStatusId === "loginStatus") ? "Please login with your details below" : "Welcome, please touch any field below for me to guide you.";
-            
+            if (activeStatusId === "loginStatus") {
+                fallbackStoredText = "Please login with your details below";
+            } else if (activeStatusId === "regStatus") {
+                fallbackStoredText = "Welcome, please touch any field below for me to guide you.";
+            } else {
+                fallbackStoredText = "Provide details below to review your missing registration credentials.";
+            }
+
             currentText = msg;
             charIdx = 0;
             isDeleting = false;
@@ -254,7 +408,25 @@
         document.getElementById(id).addEventListener('blur', () => setStatus("Welcome, please touch any field below for me to guide you."));
     });
 
+    // Input Focus Listeners (Email Recovery Form)
+    document.getElementById('recFullName').addEventListener('focus', () => setStatus("Provide the legal Full Name matching your Dnezerlinks profile records."));
+    document.getElementById('recGender').addEventListener('focus', () => setStatus("Select your preferred identity gender type profile marker."));
+    document.getElementById('recPhone').addEventListener('focus', () => setStatus("Provide the structural registered account phone line contact details."));
+    document.getElementById('recSuspectedEmail').addEventListener('focus', () => setStatus("Optional: Type in any email variations you might have structured previously."));
+    
+    ['recFullName', 'recGender', 'recPhone', 'recSuspectedEmail'].forEach(id => {
+        document.getElementById(id).addEventListener('blur', () => setStatus("Provide details below to review your missing registration credentials."));
+    });
+
     runTyping();
+
+    // Floating Modal Interactive Scripts
+    function openContactModal() {
+        document.getElementById('contactModal').style.display = "block";
+    }
+    function closeContactModal() {
+        document.getElementById('contactModal').style.display = "none";
+    }
 
     function toggle(id) {
         if (errorHoldTimeout) {
@@ -273,12 +445,60 @@
             activeStatusId = "regStatus";
             currentText = "Welcome, please touch any field below for me to guide you.";
             charIdx = 0; isDeleting = false;
+        } else if(id === 'recoverEmailBox') {
+            activeStatusId = "recoverEmailStatus";
+            currentText = "Provide details below to review your missing registration credentials.";
+            charIdx = 0; isDeleting = false;
         }
     }
 
     function togglePassword(inputId, checkbox) {
         const input = document.getElementById(inputId);
         input.type = checkbox.checked ? "text" : "password";
+    }
+
+    // Handle Email Recovery Submission with smart WhatsApp fallback
+    function handleRecoverEmailSubmit() {
+        const fullName = document.getElementById('recFullName').value.trim();
+        const gender = document.getElementById('recGender').value;
+        const phone = document.getElementById('recPhone').value.trim();
+        const suspectedEmail = document.getElementById('recSuspectedEmail').value.trim() || "Not Provided";
+
+        if (!fullName || !gender || !phone) {
+            setStatus("Form Error: Please provide Full Name, Gender, and your Phone Number!", true);
+            return;
+        }
+
+        const messageText = 
+            "Hello Dnezerlinks Support,\n\n" +
+            "I need assistance recovering the linked login email address for my account.\n\n" +
+            "--- ACCOUNT VERIFICATION INFORMATION ---\n" +
+            "Full Name: " + fullName + "\n" +
+            "Gender Indicator: " + gender + "\n" +
+            "Registered Phone Number: " + phone + "\n" +
+            "Suspected Profile Email Address: " + suspectedEmail + "\n\n" +
+            "Please review my records and reach out via phone/mail to restore dashboard operations.";
+
+        const subject = encodeURIComponent("Dnezerlinks Profile Email Recovery Review Request");
+        const body = encodeURIComponent(messageText);
+
+        let emailAppOpened = false;
+
+        // Listen for window blur event to see if an email app handles it
+        const checkBlur = () => { emailAppOpened = true; };
+        window.addEventListener('blur', checkBlur);
+
+        // Attempt opening native email application
+        window.location.href = "mailto:dnezerlinks@gmail.com?subject=" + subject + "&body=" + body;
+
+        // Trigger WhatsApp routing fallback if the window is still focused after 1500ms
+        setTimeout(() => {
+            window.removeEventListener('blur', checkBlur);
+            if (!emailAppOpened) {
+                const whatsappUrl = "https://wa.me/2348117776509?text=" + encodeURIComponent(messageText);
+                window.open(whatsappUrl, '_blank');
+            }
+        }, 1500);
     }
 
     // Handle Auth logic
@@ -341,6 +561,13 @@
             toggle('loginBox');
         } catch (e) { alert(e.message); }
         document.getElementById('fLoad').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        const modal = document.getElementById('contactModal');
+        if (event.target == modal) {
+            closeContactModal();
+        }
     }
 </script>
 </body>
