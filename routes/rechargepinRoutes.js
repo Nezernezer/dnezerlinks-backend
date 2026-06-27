@@ -77,12 +77,15 @@ router.post('/generate', async (req, res) => {
         }
 
         // 3. Contact VTU NAIJA API using dynamic form properties
+        // FIX: Removed the malformed markdown link string wrappers here
+        const fallBackBrandName = brandName || "Dnezerlinks"; 
+        
         try {
             const pinRequest = await axios.post('https://vtunaija.com.ng/api/rechargepin/', {
                 network: apiNetworkId,
                 network_amount: String(parsedAmt),
                 quantity: String(parsedQty),
-                name_on_card: brandName || "Dnezerlinks" // Dynamic fallback assignment
+                name_on_card: fallBackBrandName
             }, {
                 headers: {
                     'Authorization': `Token ${apiKey}`,
@@ -119,7 +122,6 @@ router.post('/generate', async (req, res) => {
 
         // 4. If transaction on provider was successful, structure assets and respond
         if (orderStatus) {
-            // Extrapolate and parse comma-separated string arrays safely
             let pinStringArray = [];
             let serialStringArray = [];
 
@@ -135,28 +137,31 @@ router.post('/generate', async (req, res) => {
                 serial: serialStringArray[index] ? serialStringArray[index].trim() : 'N/A'
             })).filter(p => p.pin !== "");
 
-
-            //Save log data into user's transaction ledger history
-           const txRef = db.ref(`transactions/${uid}`).push();
+            // Save log data into user's transaction ledger history
+            // FIX: Replaced non-existent finalBrandValue references with fallBackBrandName
+            const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
-              type: 'Recharge PIN',
-               service: `${network} (₦${parsedAmt} x ${parsedQty})`,
+                type: 'debit',
+                service: `${network} (₦${parsedAmt} x ${parsedQty})`,
+                description: `Generated ${parsedQty} Pcs of ${network} ₦${parsedAmt} vouchers`,
+                phone: `Qty: ${parsedQty} (${network})`,
                 amount: totalCost,
                 date: new Date().toLocaleString(),
-                status: "Successful",
+                status: "SUCCESSFUL",
+                timestamp: Date.now(),
                 pins: pinsGenerated,
-		brandName: finalBrandValue
+                brandName: fallBackBrandName
             });
 
-           return res.status(200).json({
-             success: true,
-               message: 'PINs Generated Successfully!',
+            return res.status(200).json({
+                success: true,
+                message: 'PINs Generated Successfully!',
                 pins: pinsGenerated,
                 network: network,
                 amount: parsedAmt,
-		brandName: finalBrandValue
+                brandName: fallBackBrandName
             });
-       }
+        }
 
     } catch (rootError) {
         console.error("Critical System failure:", rootError);
@@ -165,4 +170,3 @@ router.post('/generate', async (req, res) => {
 });
 
 module.exports = router;
-
