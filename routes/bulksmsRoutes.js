@@ -11,17 +11,17 @@ const RESTRICTED_SENDER_IDS = [
     "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
 ];
 
-// Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
 router.post('/send-sms', async (req, res) => {
     try {
-        const { recipient, message, senderName, uid, userId } = req.body;
+        // 1. Extract PIN along with other parameters
+        const { recipient, message, senderName, uid, userId, pin } = req.body;
         const activeUid = uid || userId;
 
-        // 1. Validation Check
-        if (!recipient || !message || !activeUid) {
+        // Validation Check
+        if (!recipient || !message || !activeUid || !pin) {
             return res.status(400).json({
                 success: false,
-                error: "Missing fields: recipient, message, and userId are mandatory."
+                error: "Missing fields: recipient, message, pin, and userId are mandatory."
             });
         }
 
@@ -41,8 +41,7 @@ router.post('/send-sms', async (req, res) => {
 
         // Daytime rate (8 AM - 7:59 PM) = ₦7 | Nighttime rate (8 PM - 7:59 AM) = ₦14
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
-        
-        // Clean phone numbers list
+
         const cleanRecipient = recipient.replace(/\+/g, '').replace(/\s+/g, '').trim();
         const totalRecipients = cleanRecipient.split(',').filter(n => n.length >= 10).length;
 
@@ -52,7 +51,7 @@ router.post('/send-sms', async (req, res) => {
 
         const totalCost = totalPages * ratePerPage * totalRecipients;
 
-        // 4. Balance Verification from Firebase Realtime Database
+        // 4. Verification from Firebase (Balance & PIN)
         const userRef = admin.database().ref(`users/${activeUid}`);
         const userSnap = await userRef.once('value');
 
@@ -60,7 +59,14 @@ router.post('/send-sms', async (req, res) => {
             return res.status(404).json({ success: false, error: "User account wallet not found." });
         }
 
-        const currentBalance = userSnap.val().balance || 0;
+        const userData = userSnap.val();
+        const currentBalance = userData.balance || 0;
+        const savedPin = userData.pin; // Assumes your signup/profile flow stores 'pin' here
+
+        // Secure PIN match
+        if (!savedPin || String(enteredPin).trim() !== String(savedPin).trim()) {
+            return res.status(401).json({ success: false, error: "Security Exception: Invalid Transaction PIN." });
+        }
 
         if (currentBalance < totalCost) {
             return res.status(402).json({
@@ -73,9 +79,8 @@ router.post('/send-sms', async (req, res) => {
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
-        // Check for platform brand protection
         const isPlatformBrand = normalizedSender.includes("dnezerlinks") || normalizedSender.includes("dnezer");
-        const adminUid = process.env.ADMIN_UID; // Ensure this is set in your Render environment variables
+        const adminUid = process.env.ADMIN_UID; 
 
         if (isPlatformBrand && activeUid !== adminUid) {
             return res.status(403).json({
@@ -84,7 +89,6 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // Check for financial/government restrictions
         const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
             normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
         );
@@ -98,7 +102,7 @@ router.post('/send-sms', async (req, res) => {
 
         let finalSenderName = requestedSender.substring(0, 11);
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
-        
+
         if (!apiKey) {
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
