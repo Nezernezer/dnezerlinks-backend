@@ -37,22 +37,25 @@ const securityGatekeeper = async (req, res, next) => {
         req.path === '/' ||
         req.path.includes('/validate') ||
         req.path.includes('/webhook') ||
-	req.path.includes('/validate-meter') ||
-req.path.includes('/users') || 
-        req.path.includes('/fund') 
+        req.path.includes('/validate-meter') ||
+        req.path.includes('/users') ||
+        req.path.includes('/fund')
     ) return next();
 
-    const { uid, pin } = req.body;
-    if (!uid || String(uid).includes('.')) {
+    // UPDATED: Destructure both uid and userId to avoid key mismatches from different frontends
+    const { uid, userId, pin } = req.body;
+    const activeUid = uid || userId;
+
+    if (!activeUid || String(activeUid).includes('.')) {
         return res.status(400).json({ success: false, error: 'Invalid Session' });
     }
 
     try {
-        // Querying transaction_pin from the user node
-        const pinSnapshot = await admin.database().ref(`users/${uid}/transaction_pin`).once('value');
-        const altPinSnapshot = await admin.database().ref(`users/${uid}/pin`).once('value');
+        // Querying transaction_pin or fallback pin from the user node using the resolved activeUid
+        const pinSnapshot = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
+        const altPinSnapshot = await admin.database().ref(`users/${activeUid}/pin`).once('value');
         const storedPin = pinSnapshot.val() || altPinSnapshot.val();
-        
+
         if (!storedPin || String(storedPin).trim() !== String(pin || '').trim()) {
             return res.status(400).json({ success: false, error: 'Invalid PIN' });
         }
