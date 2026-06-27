@@ -2,34 +2,13 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 
-// --- EXPANDED NIGERIAN FINANCIAL/BRAND/AGENCY BLACKLIST ---
+// --- COMPREHENSIVE NIGERIAN FINANCIAL/BRAND BLACKLIST ---
 const RESTRICTED_SENDER_IDS = [
-    // --- System & Core Admin ---
     "dnezerlinks", "dnezer", "admin", "support", "verify", "otp",
-
-    // --- Regulatory, Government & Tax ---
-    "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs",
-    "icpc","nan", "fan", "frsc", "nscdc", "customs", "ncs", "nis", "immigration", "dss", "nia",
-    "nafdac", "ncc", "nimc", "nin", "cac", "inec", "ndlea", "nema", "cibn", "sec",
-
-    // --- Tier 1 & 2 Commercial Banks (and Holding Companies) ---
     "access", "accessbank", "fidelity", "fidelitybank", "firstbank", "fbn",
     "guaranty", "gtbank", "gtb", "gtco", "unitedbank", "uba", "zenith", "zenithbank",
-    "fcmb", "ecobank", "citibank", "globus", "keystone", "keystonebank", "polaris", 
-    "polarisbank", "stanbic", "stanbicibtc", "standardchartered", "stanchart", 
-    "sterling", "sterlingbank", "titan", "titantrust", "union", "unionbank", 
-    "unity", "unitybank", "wema", "providus", "providusbank", "parallex", "parallexbank", 
-    "suntrust", "suntrustbank", "signature", "signaturebank", "optimus", "optimusbank",
-    "heritage", "heritagebank", "premiumtrust",
-
-    // --- Non-Interest & Merchant Banks ---
-    "jaiz", "jaizbank", "taj", "tajbank", "lotus", "lotusbank", "altbank", "alternativebank",
-    "coronation", "fbnmerchant", "fsdh", "greenwich", "nova", "novabank", "randmerchant", "rmb",
-
-    // --- Top Fintechs, Neo-banks & Payment Operators ---
-    "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint", "flutterwave", "f4w",
-    "interswitch", "vulte", "carbon", "fairmoney", "piggyvest", "cowrywise", "rubies",
-    "chipper", "chippercash", "bundle", "paga", "baxi"
+    "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint",
+    "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
 ];
 
 // Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
@@ -90,29 +69,18 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // 5. Sender ID Spoofing Guard & Admin Authorization
+        // 5. Sender ID Spoofing Guard
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
-        // TODO: Replace this placeholder string with your absolute admin Firebase UID
-        const ADMIN_UID = 'YOUR_ACTUAL_ADMIN_UID_HERE'; 
+        const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
+            normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
+        );
 
-        // Block unauthorized impersonation of the core admin brand name
-        const isTryingToImpersonateAdmin = (normalizedSender.includes('dnezerlinks') || normalizedSender.includes('dnezer')) && activeUid !== ADMIN_UID;
-
-        // Check against the expanded financial, tech, and agency blacklist
-        const isRestrictedBrand = RESTRICTED_SENDER_IDS.some(restrictedWord => {
-            // If the sender is the official admin, skip the system-level brand block
-            if ((restrictedWord === 'dnezerlinks' || restrictedWord === 'dnezer') && activeUid === ADMIN_UID) {
-                return false; 
-            }
-            return normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord);
-        });
-
-        if (isTryingToImpersonateAdmin || isRestrictedBrand) {
+        if (isRestricted) {
             return res.status(403).json({
                 success: false,
-                error: `Security Alert: The Sender ID '${requestedSender}' matches a restricted commercial brand, financial institution, or government agency.`
+                error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted brand name.`
             });
         }
 
