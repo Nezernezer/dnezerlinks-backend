@@ -2,13 +2,34 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 
-// --- COMPREHENSIVE NIGERIAN FINANCIAL/BRAND BLACKLIST ---
+// --- EXPANDED NIGERIAN FINANCIAL/BRAND/AGENCY BLACKLIST ---
 const RESTRICTED_SENDER_IDS = [
+    // --- System & Core Admin ---
     "dnezerlinks", "dnezer", "admin", "support", "verify", "otp",
+
+    // --- Regulatory, Government & Tax ---
+    "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs",
+    "icpc","nan", "fan", "frsc", "nscdc", "customs", "ncs", "nis", "immigration", "dss", "nia",
+    "nafdac", "ncc", "nimc", "nin", "cac", "inec", "ndlea", "nema", "cibn", "sec",
+
+    // --- Tier 1 & 2 Commercial Banks (and Holding Companies) ---
     "access", "accessbank", "fidelity", "fidelitybank", "firstbank", "fbn",
     "guaranty", "gtbank", "gtb", "gtco", "unitedbank", "uba", "zenith", "zenithbank",
-    "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint",
-    "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
+    "fcmb", "ecobank", "citibank", "globus", "keystone", "keystonebank", "polaris", 
+    "polarisbank", "stanbic", "stanbicibtc", "standardchartered", "stanchart", 
+    "sterling", "sterlingbank", "titan", "titantrust", "union", "unionbank", 
+    "unity", "unitybank", "wema", "providus", "providusbank", "parallex", "parallexbank", 
+    "suntrust", "suntrustbank", "signature", "signaturebank", "optimus", "optimusbank",
+    "heritage", "heritagebank", "premiumtrust",
+
+    // --- Non-Interest & Merchant Banks ---
+    "jaiz", "jaizbank", "taj", "tajbank", "lotus", "lotusbank", "altbank", "alternativebank",
+    "coronation", "fbnmerchant", "fsdh", "greenwich", "nova", "novabank", "randmerchant", "rmb",
+
+    // --- Top Fintechs, Neo-banks & Payment Operators ---
+    "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint", "flutterwave", "f4w",
+    "interswitch", "vulte", "carbon", "fairmoney", "piggyvest", "cowrywise", "rubies",
+    "chipper", "chippercash", "bundle", "paga", "baxi"
 ];
 
 // Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
@@ -41,7 +62,7 @@ router.post('/send-sms', async (req, res) => {
 
         // Daytime rate (8 AM - 7:59 PM) = ₦7 | Nighttime rate (8 PM - 7:59 AM) = ₦14
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
-        
+
         // Clean phone numbers list
         const cleanRecipient = recipient.replace(/\+/g, '').replace(/\s+/g, '').trim();
         const totalRecipients = cleanRecipient.split(',').filter(n => n.length >= 10).length;
@@ -69,24 +90,35 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // 5. Sender ID Spoofing Guard
+        // 5. Sender ID Spoofing Guard & Admin Authorization
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
-        const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
-            normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
-        );
+        // TODO: Replace this placeholder string with your absolute admin Firebase UID
+        const ADMIN_UID = 'YOUR_ACTUAL_ADMIN_UID_HERE'; 
 
-        if (isRestricted) {
+        // Block unauthorized impersonation of the core admin brand name
+        const isTryingToImpersonateAdmin = (normalizedSender.includes('dnezerlinks') || normalizedSender.includes('dnezer')) && activeUid !== ADMIN_UID;
+
+        // Check against the expanded financial, tech, and agency blacklist
+        const isRestrictedBrand = RESTRICTED_SENDER_IDS.some(restrictedWord => {
+            // If the sender is the official admin, skip the system-level brand block
+            if ((restrictedWord === 'dnezerlinks' || restrictedWord === 'dnezer') && activeUid === ADMIN_UID) {
+                return false; 
+            }
+            return normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord);
+        });
+
+        if (isTryingToImpersonateAdmin || isRestrictedBrand) {
             return res.status(403).json({
                 success: false,
-                error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted brand name.`
+                error: `Security Alert: The Sender ID '${requestedSender}' matches a restricted commercial brand, financial institution, or government agency.`
             });
         }
 
         let finalSenderName = requestedSender.substring(0, 11);
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
-        
+
         if (!apiKey) {
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
