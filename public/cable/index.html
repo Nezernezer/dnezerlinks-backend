@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -70,7 +69,7 @@
         <input type="text" id="iuc" name="iuc_history" autocomplete="on" placeholder="Enter Decoder Number" oninput="autoLookupCustomer()" inputmode="numeric">
         <div id="customerInfo" style="margin-top: 5px; font-size: 0.85rem; font-weight: bold; min-height: 1.2rem;"></div>
 
-        <button id="buyBtn" onclick="validateUserAndOpenModal()">Activate Subscription</button>
+        <button id="buyBtn" onclick="validateUserAndOpenModal()" disabled>Activate Subscription</button>
     </div>
 </div>
 
@@ -145,6 +144,7 @@
         document.getElementById("statusMsg").style.display = "none";
         isIucVerified = false;
         document.getElementById("customerInfo").innerText = "";
+        document.getElementById('buyBtn').disabled = true;
 
         if (providerID && typeof localPlans !== 'undefined' && localPlans[providerID]) {
             localPlans[providerID].forEach(plan => {
@@ -170,13 +170,15 @@
         const iuc = document.getElementById("iuc").value.trim();
         const provider = document.getElementById("provider").value;
         const infoDiv = document.getElementById("customerInfo");
-        
-        if (iuc.length < 8) { infoDiv.innerText = ""; isIucVerified = false; return; }
-        if (!provider) { infoDiv.innerText = "Select provider first"; infoDiv.style.color = "red"; return; }
+        const buyBtn = document.getElementById('buyBtn');
+
+        if (iuc.length < 8) { infoDiv.innerText = ""; isIucVerified = false; buyBtn.disabled = true; return; }
+        if (!provider) { infoDiv.innerText = "Select provider first"; infoDiv.style.color = "red"; buyBtn.disabled = true; return; }
 
         if (lookupTimeout) clearTimeout(lookupTimeout);
         infoDiv.style.color = "orange";
         infoDiv.innerText = "Verifying...";
+        buyBtn.disabled = true;
 
         lookupTimeout = setTimeout(async () => {
             try {
@@ -186,21 +188,23 @@
                     body: JSON.stringify({ iuc, providerID: provider })
                 });
                 const data = await res.json();
-                
-                // Fixed logic condition checking
+
                 if (data.success && data.customerName) {
                     infoDiv.style.color = "green";
                     infoDiv.innerText = "✅ " + data.customerName;
                     isIucVerified = true;
+                    buyBtn.disabled = false;
                 } else {
                     infoDiv.style.color = "red";
-                    infoDiv.innerText = "❌ Invalid Decoder Number";
+                    infoDiv.innerText = "✅ Invalid IUC/card number, please check and try again";
                     isIucVerified = false;
+                    buyBtn.disabled = true;
                 }
-            } catch (e) { 
+            } catch (e) {
                 infoDiv.style.color = "red";
-                infoDiv.innerText = "Network verification error"; 
-                isIucVerified = false; 
+                infoDiv.innerText = "Network verification error";
+                isIucVerified = false;
+                buyBtn.disabled = true;
             }
         }, 1200);
     }
@@ -220,12 +224,14 @@
             document.getElementById('txnPin').value = '';
             document.getElementById('pinError').textContent = '';
         } catch (e) { showMessage("Validation error."); }
-        finally { buyBtn.disabled = false; }
+        finally { buyBtn.disabled = !isIucVerified; }
     }
 
-    function closePinModal() { 
-        document.getElementById('pinModal').style.display = 'none'; 
-        document.getElementById('confirmBtn').style.display = 'inline-block';
+    function closePinModal() {
+        document.getElementById('pinModal').style.display = 'none';
+        const confirmBtn = document.getElementById('confirmBtn');
+        confirmBtn.style.display = 'inline-block';
+        confirmBtn.disabled = false;
         document.getElementById('processingSpinner').style.display = 'none';
     }
 
