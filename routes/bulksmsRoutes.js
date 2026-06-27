@@ -11,17 +11,17 @@ const RESTRICTED_SENDER_IDS = [
     "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
 ];
 
+// Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
 router.post('/send-sms', async (req, res) => {
     try {
-        // 1. Extract PIN along with other parameters
-        const { recipient, message, senderName, uid, userId, pin } = req.body;
+        const { recipient, message, senderName, uid, userId } = req.body;
         const activeUid = uid || userId;
 
-        // Validation Check
-        if (!recipient || !message || !activeUid || !pin) {
+        // 1. Validation Check (PIN is already securely validated by index.js global gatekeeper)
+        if (!recipient || !message || !activeUid) {
             return res.status(400).json({
                 success: false,
-                error: "Missing fields: recipient, message, pin, and userId are mandatory."
+                error: "Missing fields: recipient, message, and userId are mandatory."
             });
         }
 
@@ -42,6 +42,7 @@ router.post('/send-sms', async (req, res) => {
         // Daytime rate (8 AM - 7:59 PM) = ₦7 | Nighttime rate (8 PM - 7:59 AM) = ₦14
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
 
+        // Clean phone numbers list
         const cleanRecipient = recipient.replace(/\+/g, '').replace(/\s+/g, '').trim();
         const totalRecipients = cleanRecipient.split(',').filter(n => n.length >= 10).length;
 
@@ -51,7 +52,7 @@ router.post('/send-sms', async (req, res) => {
 
         const totalCost = totalPages * ratePerPage * totalRecipients;
 
-        // 4. Verification from Firebase (Balance & PIN)
+        // 4. Balance Verification from Firebase Realtime Database
         const userRef = admin.database().ref(`users/${activeUid}`);
         const userSnap = await userRef.once('value');
 
@@ -61,13 +62,8 @@ router.post('/send-sms', async (req, res) => {
 
         const userData = userSnap.val();
         const currentBalance = userData.balance || 0;
-        const savedPin = userData.pin; // Assumes your signup/profile flow stores 'pin' here
 
-        // Secure PIN match
-        if (!savedPin || String(enteredPin).trim() !== String(savedPin).trim()) {
-            return res.status(401).json({ success: false, error: "Security Exception: Invalid Transaction PIN." });
-        }
-
+        // Fixed: Removed conflicting, hardcoded local PIN check to align perfectly with Airtime route logic
         if (currentBalance < totalCost) {
             return res.status(402).json({
                 success: false,
@@ -79,6 +75,7 @@ router.post('/send-sms', async (req, res) => {
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
+        // Check for platform brand protection
         const isPlatformBrand = normalizedSender.includes("dnezerlinks") || normalizedSender.includes("dnezer");
         const adminUid = process.env.ADMIN_UID; 
 
@@ -89,6 +86,7 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
+        // Check for financial/government restrictions
         const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
             normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
         );
