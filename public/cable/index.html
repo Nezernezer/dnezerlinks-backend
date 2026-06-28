@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -24,7 +25,6 @@
         .toggle-pin { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.7rem; font-weight: bold; padding: 5px; margin: 0; width: auto; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
 
-        /* Loader inside modal */
         .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid var(--primary);
@@ -172,8 +172,19 @@
         const infoDiv = document.getElementById("customerInfo");
         const buyBtn = document.getElementById('buyBtn');
 
-        if (iuc.length < 8) { infoDiv.innerText = ""; isIucVerified = false; buyBtn.disabled = true; return; }
-        if (!provider) { infoDiv.innerText = "Select provider first"; infoDiv.style.color = "red"; buyBtn.disabled = true; return; }
+        if (iuc.length < 8) { 
+            infoDiv.innerText = ""; 
+            infoDiv.style.color = "";
+            isIucVerified = false; 
+            buyBtn.disabled = true; 
+            return; 
+        }
+        if (!provider) { 
+            infoDiv.innerText = "Select provider first"; 
+            infoDiv.style.color = "#d32f2f"; 
+            buyBtn.disabled = true; 
+            return; 
+        }
 
         if (lookupTimeout) clearTimeout(lookupTimeout);
         infoDiv.style.color = "orange";
@@ -190,19 +201,22 @@
                 const data = await res.json();
 
                 if (data.success && data.customerName) {
-                    infoDiv.style.color = "green";
+                    infoDiv.style.color = "#2e7d32";
                     infoDiv.innerText = "✅ " + data.customerName;
                     isIucVerified = true;
                     buyBtn.disabled = false;
                 } else {
-                    infoDiv.style.color = "red";
-                    infoDiv.innerText = "✅ Invalid IUC/card number, please check and try again";
+                    // FIXED: Clear red error
+                    infoDiv.style.color = "#d32f2f";
+                    infoDiv.style.fontWeight = "bold";
+                    infoDiv.innerText = "❌ Invalid IUC/card number.";
                     isIucVerified = false;
                     buyBtn.disabled = true;
                 }
             } catch (e) {
-                infoDiv.style.color = "red";
-                infoDiv.innerText = "Network verification error";
+                infoDiv.style.color = "#d32f2f";
+                infoDiv.style.fontWeight = "bold";
+                infoDiv.innerText = "❌ Network verification error. Please try again.";
                 isIucVerified = false;
                 buyBtn.disabled = true;
             }
