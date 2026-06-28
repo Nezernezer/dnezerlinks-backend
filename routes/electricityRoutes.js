@@ -10,7 +10,7 @@ const discoIdMap = {
     'KEDCO': 9, 'PHEDC': 10, 'YEDC': 11
 };
 
-// 🔌 METER VALIDATION
+// 🔌 METER VALIDATION - Fixed to match your curl
 router.post('/validate-meter', async (req, res) => {
     try {
         const { meterNumber, disco } = req.body;
@@ -20,22 +20,25 @@ router.post('/validate-meter', async (req, res) => {
 
         const discoId = discoIdMap[disco];
         if (!discoId) {
-            return res.status(400).json({ status: 'error', error: 'Unsupported Disco type' });
+            return res.status(400).json({ status: 'error', error: 'Unsupported Disco' });
         }
 
         const vtuKey = process.env.VTUNAIJA_API_KEY?.trim();
         if (!vtuKey) {
-            return res.status(500).json({ status: 'error', error: 'Gateway configuration missing. Contact admin.' });
+            return res.status(500).json({ status: 'error', error: 'API Key not configured' });
         }
 
         const response = await axios.post(
             'https://vtunaija.com.ng/api/billpayment/verify/',
             {
-                disco_name: String(discoId),
+                disco_name: String(discoId),     // As in your curl
                 meter_number: String(meterNumber)
             },
             {
-                headers: { 'Authorization': `Token ${vtuKey}`, 'Content-Type': 'application/json' },
+                headers: {
+                    'Authorization': `Token ${vtuKey}`,
+                    'Content-Type': 'application/json'
+                },
                 timeout: 15000
             }
         );
@@ -43,22 +46,28 @@ router.post('/validate-meter', async (req, res) => {
         if (response.data && (response.data.status === 'success' || response.data.Status === 'successful')) {
             return res.status(200).json({
                 status: 'success',
-                customer: response.data.Customer_Name || response.data.name || 'Verified Customer'
+                customer: response.data.Customer_Name || response.data.name || response.data.customer || 'Verified Customer'
             });
         } else {
             return res.status(400).json({
                 status: 'error',
-                error: response.data?.api_response || response.data?.message || 'Meter validation failed'
+                error: response.data?.api_response || response.data?.message || 'Invalid meter'
             });
         }
     } catch (err) {
-        console.error("Meter Validation Error:", err.response?.data || err.message);
+        console.error("Validation Error:", err.response?.data || err.message);
         
-        let errorMsg = 'Verification system offline';
-        if (err.response?.status === 401) errorMsg = 'Invalid API key';
-        else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') errorMsg = 'Cannot reach payment gateway';
+        if (err.code === 'ECONNREFUSED' || err.message.includes('connect')) {
+            return res.status(503).json({ 
+                status: 'error', 
+                error: 'VTUNAIJA service is currently offline' 
+            });
+        }
         
-        return res.status(500).json({ status: 'error', error: errorMsg });
+        return res.status(500).json({ 
+            status: 'error', 
+            error: 'Verification failed. Please try again.' 
+        });
     }
 });
 
@@ -67,64 +76,58 @@ router.post('/pay', async (req, res) => {
     try {
         const { uid, meterNumber, amount, tokenType, disco } = req.body;
         if (!uid || !meterNumber || !amount || !disco || !tokenType) {
-            return res.status(400).json({ success: false, error: 'Missing payment fields' });
+            return res.status(400).json({ success: false, error: 'Missing fields' });
         }
 
         const discoId = discoIdMap[disco];
-        if (!discoId) {
-            return res.status(400).json({ success: false, error: 'Unsupported Disco selection' });
-        }
+        if (!discoId) return res.status(400).json({ success: false, error: 'Invalid Disco' });
 
         const vtuKey = process.env.VTUNAIJA_API_KEY?.trim();
-        if (!vtuKey) {
-            return res.status(500).json({ success: false, error: 'Gateway configuration missing' });
-        }
+        if (!vtuKey) return res.status(500).json({ success: false, error: 'API Key missing' });
 
+        // Wallet deduction
         const userRef = admin.database().ref(`users/${uid}`);
-        let balanceUpdateSuccess = false;
-
-        await userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < amount) return;
-            balanceUpdateSuccess = true;
-            return currentBal - amount;
+        let success = false;
+        await userRef.child('balance').transaction((bal) => {
+            if (bal == null || bal < amount) return;
+            success = true;
+            return bal - amount;
         });
 
-        if (!balanceUpdateSuccess) {
-            return res.status(400).json({ success: false, error: 'Insufficient Wallet Balance' });
-        }
+        if (!success) return res.status(400).json({ success: false, error: 'Insufficient balance' });
 
-        try {
-            const vtuPayload = {
-                disco_name: String(discoId),
-                meter_number: String(meterNumber),
-                MeterType: tokenType.toLowerCase(),
-                amount: String(amount)
-            };
+        // Payment request
+        const payload = {
+            disco_name: String(discoId),
+            meter_number: String(meterNumber),
+            MeterType: tokenType.toLowerCase(),
+            amount: String(amount)
+        };
 
-            const vtuRes = await axios.post('https://vtunaija.com.ng/api/billpayment/', vtuPayload, {
-                headers: { 'Authorization': `Token ${vtuKey}`, 'Content-Type': 'application/json' },
-                timeout: 25000
+        const vtuRes = await axios.post('https://vtunaija.com.ng/api/billpayment/', payload, {
+            headers: {
+                'Authorization': `Token ${vtuKey}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 25000
+        });
+
+        if (vtuRes.data && (vtuRes.data.status === 'success' || vtuRes.data.Status === 'successful')) {
+            return res.status(200).json({
+                success: true,
+                token: vtuRes.data.electricitytoken || vtuRes.data.token
             });
-
-            if (vtuRes.data && (vtuRes.data.status === 'success' || vtuRes.data.Status === 'successful')) {
-                return res.status(200).json({
-                    success: true,
-                    token: vtuRes.data.electricitytoken || vtuRes.data.token || null
-                });
-            } else {
-                await userRef.child('balance').transaction(currentBal => (currentBal || 0) + amount);
-                return res.status(400).json({
-                    success: false,
-                    error: vtuRes.data?.api_response || vtuRes.data?.message || 'Provider rejected request'
-                });
-            }
-        } catch (apiErr) {
-            await userRef.child('balance').transaction(currentBal => (currentBal || 0) + amount);
-            console.error("VTUNAIJA Payment Error:", apiErr.response?.data || apiErr.message);
-            return res.status(500).json({ success: false, error: 'External billing gateway timeout' });
+        } else {
+            // Refund on failure
+            await userRef.child('balance').transaction(bal => (bal || 0) + Number(amount));
+            return res.status(400).json({ 
+                success: false, 
+                error: vtuRes.data?.api_response || 'Payment rejected by provider' 
+            });
         }
     } catch (err) {
-        return res.status(500).json({ success: false, error: 'Internal system error' });
+        console.error("Payment Error:", err.message);
+        return res.status(500).json({ success: false, error: 'Payment gateway error' });
     }
 });
 
