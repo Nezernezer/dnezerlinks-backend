@@ -3,22 +3,14 @@ const router = express.Router();
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-// 🗺️ VTUNAIJA PLAN DISCO MAPPER MAPPINGS
+// VTUNAIJA DISCO MAPPER
 const discoIdMap = {
-    'AEDC': 1,
-    'BEDC': 2,
-    'EEDC': 3,
-    'EKEDC': 4,
-    'IBEDC': 5,
-    'IKEDC': 6,
-    'JEDC': 7,
-    'KAEDCO': 8,
-    'KEDCO': 9,
-    'PHEDC': 10,
-    'YEDC': 11
+    'AEDC': 1, 'BEDC': 2, 'EEDC': 3, 'EKEDC': 4,
+    'IBEDC': 5, 'IKEDC': 6, 'JEDC': 7, 'KAEDCO': 8,
+    'KEDCO': 9, 'PHEDC': 10, 'YEDC': 11
 };
 
-// 🔌 METER VALIDATION ENDPOINT
+// 🔌 METER VALIDATION
 router.post('/validate-meter', async (req, res) => {
     try {
         const { meterNumber, disco } = req.body;
@@ -33,7 +25,7 @@ router.post('/validate-meter', async (req, res) => {
 
         const vtuKey = process.env.VTUNAIJA_API_KEY?.trim();
         if (!vtuKey) {
-            return res.status(500).json({ status: 'error', error: 'Gateway configuration missing' });
+            return res.status(500).json({ status: 'error', error: 'Gateway configuration missing. Contact admin.' });
         }
 
         const response = await axios.post(
@@ -43,10 +35,7 @@ router.post('/validate-meter', async (req, res) => {
                 meter_number: String(meterNumber)
             },
             {
-                headers: { 
-                    'Authorization': `Token ${vtuKey}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Authorization': `Token ${vtuKey}`, 'Content-Type': 'application/json' },
                 timeout: 15000
             }
         );
@@ -59,21 +48,24 @@ router.post('/validate-meter', async (req, res) => {
         } else {
             return res.status(400).json({
                 status: 'error',
-                error: response.data.api_response || 'Meter validation failed'
+                error: response.data?.api_response || response.data?.message || 'Meter validation failed'
             });
         }
-
     } catch (err) {
         console.error("Meter Validation Error:", err.response?.data || err.message);
-        return res.status(500).json({ status: 'error', error: 'Verification system offline' });
+        
+        let errorMsg = 'Verification system offline';
+        if (err.response?.status === 401) errorMsg = 'Invalid API key';
+        else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') errorMsg = 'Cannot reach payment gateway';
+        
+        return res.status(500).json({ status: 'error', error: errorMsg });
     }
 });
 
-// 💳 DISCO BILL PAYMENT ENDPOINT
+// 💳 PAYMENT ENDPOINT
 router.post('/pay', async (req, res) => {
     try {
         const { uid, meterNumber, amount, tokenType, disco } = req.body;
-
         if (!uid || !meterNumber || !amount || !disco || !tokenType) {
             return res.status(400).json({ success: false, error: 'Missing payment fields' });
         }
@@ -92,7 +84,7 @@ router.post('/pay', async (req, res) => {
         let balanceUpdateSuccess = false;
 
         await userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < amount) return; 
+            if (currentBal === null || currentBal < amount) return;
             balanceUpdateSuccess = true;
             return currentBal - amount;
         });
@@ -110,10 +102,7 @@ router.post('/pay', async (req, res) => {
             };
 
             const vtuRes = await axios.post('https://vtunaija.com.ng/api/billpayment/', vtuPayload, {
-                headers: {
-                    'Authorization': `Token ${vtuKey}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Authorization': `Token ${vtuKey}`, 'Content-Type': 'application/json' },
                 timeout: 25000
             });
 
@@ -123,23 +112,19 @@ router.post('/pay', async (req, res) => {
                     token: vtuRes.data.electricitytoken || vtuRes.data.token || null
                 });
             } else {
-                // Reverse transaction balance if VTU fails explicitly
                 await userRef.child('balance').transaction(currentBal => (currentBal || 0) + amount);
                 return res.status(400).json({
                     success: false,
-                    error: vtuRes.data.api_response || 'Provider rejected processing request'
+                    error: vtuRes.data?.api_response || vtuRes.data?.message || 'Provider rejected request'
                 });
             }
-
         } catch (apiErr) {
-            // Reverse transaction balance on timeout drops
             await userRef.child('balance').transaction(currentBal => (currentBal || 0) + amount);
-            console.error("VTUNAIJA Payment Hook Connection failed:", apiErr.response?.data || apiErr.message);
+            console.error("VTUNAIJA Payment Error:", apiErr.response?.data || apiErr.message);
             return res.status(500).json({ success: false, error: 'External billing gateway timeout' });
         }
-
     } catch (err) {
-        return res.status(500).json({ success: false, error: 'Internal system routing anomaly' });
+        return res.status(500).json({ success: false, error: 'Internal system error' });
     }
 });
 
