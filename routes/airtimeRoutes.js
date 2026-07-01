@@ -33,7 +33,7 @@ router.post('/buy', async (req, res) => {
         });
 
         if (!apiCallAllowed) {
-            return res.status(400).json({ success: false, error: "Insufficient Balance" });
+            return res.status(400).json({ success: false, error: "Api connection error" });
         }
 
         console.log(`💳 Debit Locked: ₦${amountNum} deducted from UID: ${uid}. Initiating provider call...`);
