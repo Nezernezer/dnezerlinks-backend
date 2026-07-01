@@ -29,6 +29,12 @@ app.use('/api/webhook', require('./routes/webhookRoutes'));
 // JSON parser
 app.use(express.json());
 
+// =============================================================
+// GLOBAL INTERCEPTOR: Runs background reconciliation on all requests
+// =============================================================
+const reconciliationGatekeeper = require('./routes/reconciliationRoutes');
+app.use('/api', reconciliationGatekeeper);
+
 // Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {
     // GET requests, home route, data/cable validations, webhooks, and virtual account generation (/fund) bypass this check
@@ -43,7 +49,7 @@ const securityGatekeeper = async (req, res, next) => {
     ) return next();
 
     // UPDATED: Destructure both uid and userId to avoid key mismatches from different frontends
-    const { uid, userId, pin } = req.body;
+    const { uid, userId, pin } = req.body || {};
     const activeUid = uid || userId;
 
     if (!activeUid || String(activeUid).includes('.')) {

@@ -23,6 +23,22 @@ router.post('/buy', async (req, res) => {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
+        // Generate the transaction reference node early
+        const txRef = db.ref(`transactions/${uid}`).push();
+
+        // 📝 WRITE LOG AS PENDING BEFORE CALLING VTUNAIJA
+        await txRef.set({
+            service: "Airtime Purchase",
+            network: networkID,
+            phone: phone,
+            amount: amountNum,
+            type: "debit",
+            status: "pending",
+            timestamp: Date.now(),
+            reference: txRef.key,
+            description: `Airtime purchase for ${phone}`
+        });
+
         // 2. Call VTU API with a timeout (e.g., 30 seconds)
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
@@ -46,18 +62,10 @@ router.post('/buy', async (req, res) => {
                 return (currentBalance || 0) - amountNum;
             });
 
-            // Log transaction only once
-            const txRef = db.ref(`transactions/${uid}`).push();
-            await txRef.set({
-                service: "Airtime Purchase",
-                network: networkID,
-                phone: phone,
-                amount: amountNum,
-                type: "debit",
+            // CHANGE STATUS TO SUCCESSFUL
+            await txRef.update({
                 status: "successful",
-                timestamp: Date.now(),
-                reference: response.data.request_id || txRef.key,
-                description: `Airtime purchase for ${phone}`
+                reference: response.data.request_id || txRef.key
             });
 
             console.log(`✅ Airtime bought: ${amount} to ${phone} (UID: ${uid})`);
@@ -66,6 +74,10 @@ router.post('/buy', async (req, res) => {
 
         // VTU API returned failure
         console.error("VTU API error:", response.data);
+        
+        // Change status to failed on clear provider error
+        await txRef.update({ status: "failed" });
+
         return res.status(400).json({
             success: false,
             error: response.data.api_response || "VTU provider failed"

@@ -83,6 +83,7 @@
             const payBtn = document.getElementById('payBtn');
             const statusBox = document.getElementById('statusBox');
 
+            // Reset dynamically if backspaced below 8 digits
             if (meterNumber.length < 8) {
                 payBtn.disabled = true;
                 statusBox.style.display = "none";
@@ -92,7 +93,8 @@
             }
 
             if (meterNumber.length >= 8) {
-                const validationKey = `\( {disco}_ \){meterNumber}`;
+                // FIXED: Fixed broken string interpolation template logic
+                const validationKey = `${disco}_${meterNumber}`;
                 if (validationKey !== lastValidatedNumber) {
                     if (!disco) {
                         showStatus("❌ Please select a Disco first.", "status-error");
@@ -124,6 +126,7 @@
                     showStatus(`👤 Customer: ${verifiedCustomerName}`, "status-success");
                     payBtn.disabled = false;
                 } else {
+                    // FIXED: This handles formatting the error box red ("status-error") and keeps the action button firmly disabled
                     showStatus(`❌ ${data.error || 'Invalid meter detail'}`, "status-error");
                     payBtn.disabled = true;
                 }
@@ -155,7 +158,8 @@
                 return;
             }
 
-            const confirmMsg = `CONFIRM PAYMENT\n\n👤 Name: ${verifiedCustomerName}\n🏢 Disco: ${disco}\n⚡ Type: ${meterType}\n🔢 Meter: \( {meterNum}\n💰 Amount: ₦ \){amount.toLocaleString()}\n\nProceed?`;
+            // FIXED: Fixed template literal broken string inside confirmation prompt
+            const confirmMsg = `CONFIRM PAYMENT\n\n👤 Name: ${verifiedCustomerName}\n🏢 Disco: ${disco}\n⚡ Type: ${meterType}\n🔢 Meter: ${meterNum}\n💰 Amount: ₦${amount.toLocaleString()}\n\nProceed?`;
             if (!confirm(confirmMsg)) return;
 
             payBtn.disabled = true;
