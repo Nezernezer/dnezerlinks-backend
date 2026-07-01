@@ -2,28 +2,43 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const db = require('../config/firebase');
+const admin = require('firebase-admin');
 
 router.post('/buy', async (req, res) => {
     const { uid, phone, amount, networkID } = req.body;
 
-    // Validate required fields
+    // 1. Strict Request Validation
     if (!uid || !phone || !amount || !networkID) {
         return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    try {
-        // 1. Check balance
-        const userRef = db.ref(`users/${uid}/balance`);
-        const snap = await userRef.once('value');
-        const balance = snap.val() || 0;
-        const amountNum = parseFloat(amount);
+    const db = admin.database();
+    const userRef = db.ref(`users/${uid}/balance`);
+    const amountNum = parseFloat(amount);
+    
+    // 2. Pre-generate the exact Firebase push reference for tracking
+    const txRef = db.ref(`transactions/${uid}`).push();
+    const uniqueTxKey = txRef.key; 
 
-        if (balance < amountNum) {
+    try {
+        // 🔒 LOCK TRANSACTION: Check balance and debit user UPFRONT to prevent double-spending
+        let apiCallAllowed = false;
+        
+        await userRef.transaction((currentBalance) => {
+            if (currentBalance === null || currentBalance < amountNum) {
+                return; // Cancel transaction if balance is insufficient
+            }
+            apiCallAllowed = true;
+            return currentBalance - amountNum;
+        });
+
+        if (!apiCallAllowed) {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // 2. Call VTU API with a timeout (UPDATED: 45 seconds timeout)
+        console.log(`💳 Debit Locked: ₦${amountNum} deducted from UID: ${uid}. Initiating provider call...`);
+
+        // 3. Call VTU API with your required payload structure and tracking parameter
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
             {
@@ -31,23 +46,19 @@ router.post('/buy', async (req, res) => {
                 mobile_number: phone,
                 amount: amount,
                 airtime_type: "VTU",
-                Ported_number: "true"
+                Ported_number: "true",
+                "request-id": uniqueTxKey // ⚡ Sent to VTUNaija so code can look it up automatically
             },
             {
                 headers: { 'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}` },
-                timeout: 45000  // 45 seconds timeout
+                timeout: 45000  // 45 Seconds provider window
             }
         );
 
-        // 3. Handle response
-        if (response.data.Status === "successful") {
-            // Deduct balance atomically
-            await userRef.transaction(currentBalance => {
-                return (currentBalance || 0) - amountNum;
-            });
+        const apiStatus = String(response.data.Status || response.data.status || "").toLowerCase();
 
-            // Log transaction only once
-            const txRef = db.ref(`transactions/${uid}`).push();
+        // 4. Handle Successful Execution
+        if (apiStatus === "successful" || apiStatus === "success") {
             await txRef.set({
                 service: "Airtime Purchase",
                 network: networkID,
@@ -56,52 +67,53 @@ router.post('/buy', async (req, res) => {
                 type: "debit",
                 status: "successful",
                 timestamp: Date.now(),
-                reference: response.data.request_id || txRef.key,
-                description: `Airtime purchase for ${phone}`
+                reference: uniqueTxKey, 
+                description: `Successfully purchased ${amount} Airtime for ${phone}`
             });
 
-            console.log(`✅ Airtime bought: ${amount} to ${phone} (UID: ${uid})`);
             return res.json({ success: true, message: "Airtime Successful" });
         }
 
-        // VTU API returned failure
-        console.error("VTU API error:", response.data);
+        // 5. Handle Known Provider Failures (Refund immediately if provider rejects cleanly)
+        console.error("❌ VTU Provider rejected request:", response.data);
+        
+        await userRef.transaction(currentBalance => (currentBalance || 0) + amountNum);
         return res.status(400).json({
             success: false,
-            error: response.data.api_response || "VTU provider failed"
+            error: response.data.api_response || "VTU provider failed to complete request"
         });
 
     } catch (error) {
-        console.error("Airtime purchase error:", error.message);
+        console.error("⚠️ Airtime Purchase Exception Handler Active:", error.message);
         
-        // ⏳ Handle timeout or network errors explicitly
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        // 6. Handle Network Hangs / Midway Timeouts
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('Network Error')) {
             try {
-                // Generate a unique transaction record node for tracking
-                const txRef = db.ref(`transactions/${uid}`).push();
-                
-                // Log the transaction state explicitly as 'pending' to activate the reconciliation engine later
+                // Keep the money debited, log as pending. Gatekeeper will handle checkout or refund automatically.
                 await txRef.set({
                     service: "Airtime Purchase",
                     network: networkID,
                     phone: phone,
-                    amount: parseFloat(amount),
+                    amount: amountNum,
                     type: "debit",
-                    status: "pending", // 🕒 Explicitly flagged as pending on timeout
+                    status: "pending", 
                     timestamp: Date.now(),
-                    reference: txRef.key, // Using fallback Firebase push ID as reference
-                    description: `Airtime purchase for ${phone} (Timed out midway)`
+                    reference: uniqueTxKey, 
+                    description: `Airtime purchase for ${phone} (Pending background reconciliation)`
                 });
-                
-                console.log(`📝 Timeout captured: Logged transaction ${txRef.key} as pending for UID: ${uid}`);
             } catch (dbErr) {
-                console.error("❌ Failed to log pending transaction to Firebase during timeout:", dbErr.message);
+                console.error("❌ Failed to commit pending node state to Firebase:", dbErr.message);
             }
             
-            return res.status(504).json({ success: false, error: "VTU API timeout" });
+            return res.status(504).json({ 
+                success: false, 
+                error: "Network timeout with provider. Your transaction status is being verified in the background." 
+            });
         }
         
-        return res.status(500).json({ success: false, error: "API Connection Error" });
+        // 7. Handle System Connection/Route Crashes (Safe Instant Refund)
+        await userRef.transaction(currentBalance => (currentBalance || 0) + amountNum);
+        return res.status(500).json({ success: false, error: "System routing failure. Balance safely returned." });
     }
 });
 
