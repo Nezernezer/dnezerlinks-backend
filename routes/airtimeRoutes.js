@@ -23,23 +23,7 @@ router.post('/buy', async (req, res) => {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // Generate the transaction reference node early
-        const txRef = db.ref(`transactions/${uid}`).push();
-
-        // 📝 WRITE LOG AS PENDING BEFORE CALLING VTUNAIJA
-        await txRef.set({
-            service: "Airtime Purchase",
-            network: networkID,
-            phone: phone,
-            amount: amountNum,
-            type: "debit",
-            status: "pending",
-            timestamp: Date.now(),
-            reference: txRef.key,
-            description: `Airtime purchase for ${phone}`
-        });
-
-        // 2. Call VTU API with a timeout (e.g., 30 seconds)
+        // 2. Call VTU API with a timeout (UPDATED: 45 seconds timeout)
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
             {
@@ -51,7 +35,7 @@ router.post('/buy', async (req, res) => {
             },
             {
                 headers: { 'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}` },
-                timeout: 30000  // 30 seconds timeout
+                timeout: 45000  // 45 seconds timeout
             }
         );
 
@@ -62,10 +46,18 @@ router.post('/buy', async (req, res) => {
                 return (currentBalance || 0) - amountNum;
             });
 
-            // CHANGE STATUS TO SUCCESSFUL
-            await txRef.update({
+            // Log transaction only once
+            const txRef = db.ref(`transactions/${uid}`).push();
+            await txRef.set({
+                service: "Airtime Purchase",
+                network: networkID,
+                phone: phone,
+                amount: amountNum,
+                type: "debit",
                 status: "successful",
-                reference: response.data.request_id || txRef.key
+                timestamp: Date.now(),
+                reference: response.data.request_id || txRef.key,
+                description: `Airtime purchase for ${phone}`
             });
 
             console.log(`✅ Airtime bought: ${amount} to ${phone} (UID: ${uid})`);
@@ -74,10 +66,6 @@ router.post('/buy', async (req, res) => {
 
         // VTU API returned failure
         console.error("VTU API error:", response.data);
-        
-        // Change status to failed on clear provider error
-        await txRef.update({ status: "failed" });
-
         return res.status(400).json({
             success: false,
             error: response.data.api_response || "VTU provider failed"
@@ -85,10 +73,34 @@ router.post('/buy', async (req, res) => {
 
     } catch (error) {
         console.error("Airtime purchase error:", error.message);
-        // Handle timeout or network errors
-        if (error.code === 'ECONNABORTED') {
+        
+        // ⏳ Handle timeout or network errors explicitly
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            try {
+                // Generate a unique transaction record node for tracking
+                const txRef = db.ref(`transactions/${uid}`).push();
+                
+                // Log the transaction state explicitly as 'pending' to activate the reconciliation engine later
+                await txRef.set({
+                    service: "Airtime Purchase",
+                    network: networkID,
+                    phone: phone,
+                    amount: parseFloat(amount),
+                    type: "debit",
+                    status: "pending", // 🕒 Explicitly flagged as pending on timeout
+                    timestamp: Date.now(),
+                    reference: txRef.key, // Using fallback Firebase push ID as reference
+                    description: `Airtime purchase for ${phone} (Timed out midway)`
+                });
+                
+                console.log(`📝 Timeout captured: Logged transaction ${txRef.key} as pending for UID: ${uid}`);
+            } catch (dbErr) {
+                console.error("❌ Failed to log pending transaction to Firebase during timeout:", dbErr.message);
+            }
+            
             return res.status(504).json({ success: false, error: "VTU API timeout" });
         }
+        
         return res.status(500).json({ success: false, error: "API Connection Error" });
     }
 });
