@@ -29,11 +29,16 @@ app.use('/api/webhook', require('./routes/webhookRoutes'));
 // JSON parser
 app.use(express.json());
 
-// =============================================================
-// GLOBAL INTERCEPTOR: Runs background reconciliation on all requests
-// =============================================================
-const reconciliationGatekeeper = require('./routes/reconciliationRoutes');
-app.use('/api', reconciliationGatekeeper);
+// ===========================================================================
+// GLOBAL INTERCEPTOR: DISABLED TO PREVENT BLIND 404 ERRORS ON UNRELATED ROUTES
+// ===========================================================================
+// Instead of running this globally, import this middleware inside your 
+// individual route files (e.g., `./routes/api.js`) and pass it specifically 
+// to payment verification or callback routes. Example: 
+// router.post('/verify', reconciliationGatekeeper, (req, res) => { ... })
+// ===========================================================================
+// const reconciliationGatekeeper = require('./routes/reconciliationRoutes');
+// app.use('/api', reconciliationGatekeeper);
 
 // Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {
