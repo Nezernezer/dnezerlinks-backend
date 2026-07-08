@@ -29,17 +29,6 @@ app.use('/api/webhook', require('./routes/webhookRoutes'));
 // JSON parser
 app.use(express.json());
 
-// ===========================================================================
-// GLOBAL INTERCEPTOR: DISABLED TO PREVENT BLIND 404 ERRORS ON UNRELATED ROUTES
-// ===========================================================================
-// Instead of running this globally, import this middleware inside your 
-// individual route files (e.g., `./routes/api.js`) and pass it specifically 
-// to payment verification or callback routes. Example: 
-// router.post('/verify', reconciliationGatekeeper, (req, res) => { ... })
-// ===========================================================================
-// const reconciliationGatekeeper = require('./routes/reconciliationRoutes');
-// app.use('/api', reconciliationGatekeeper);
-
 // Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {
     // GET requests, home route, data/cable validations, webhooks, and virtual account generation (/fund) bypass this check
@@ -54,7 +43,7 @@ const securityGatekeeper = async (req, res, next) => {
     ) return next();
 
     // UPDATED: Destructure both uid and userId to avoid key mismatches from different frontends
-    const { uid, userId, pin } = req.body || {};
+    const { uid, userId, pin } = req.body;
     const activeUid = uid || userId;
 
     if (!activeUid || String(activeUid).includes('.')) {
