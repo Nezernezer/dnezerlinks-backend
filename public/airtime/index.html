@@ -331,9 +331,9 @@
         }
 
         try {
-            // Create an AbortController with a 35-second timeout
+            // Create an AbortController with a 50-second timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 35000);
+            const timeoutId = setTimeout(() => controller.abort(), 50000);
 
             const response = await fetch("https://dnezerlinks-backend.onrender.com/api/airtime/buy", {
                 method: "POST",
