@@ -23,7 +23,7 @@ router.post('/buy', async (req, res) => {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // 2. Call VTU API with a timeout (e.g., 30 seconds)
+        // 2. Call VTU API with a timeout (50 seconds)
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
             {
@@ -35,7 +35,7 @@ router.post('/buy', async (req, res) => {
             },
             {
                 headers: { 'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}` },
-                timeout: 30000  // 30 seconds timeout
+                timeout: 50000  // 50 seconds timeout
             }
         );
 
@@ -73,10 +73,34 @@ router.post('/buy', async (req, res) => {
 
     } catch (error) {
         console.error("Airtime purchase error:", error.message);
-        // Handle timeout or network errors
+        
+        // Handle timeout error
         if (error.code === 'ECONNABORTED') {
-            return res.status(504).json({ success: false, error: "VTU API timeout" });
+            const amountNum = parseFloat(amount);
+            
+            // Deduct balance atomically on timeout
+            await userRef.transaction(currentBalance => {
+                return (currentBalance || 0) - amountNum;
+            });
+
+            // Log transaction as pending
+            const txRef = db.ref(`transactions/${uid}`).push();
+            await txRef.set({
+                service: "Airtime Purchase",
+                network: networkID,
+                phone: phone,
+                amount: amountNum,
+                type: "debit",
+                status: "pending",
+                timestamp: Date.now(),
+                reference: txRef.key,
+                description: `Airtime purchase for ${phone} (Timed out - Pending)`
+            });
+
+            console.log(`⏳ Airtime timed out after 50s. Logged as pending and deducted: ${amount} (UID: ${uid})`);
+            return res.status(504).json({ success: false, error: "VTU API timeout. Transaction marked as pending." });
         }
+        
         return res.status(500).json({ success: false, error: "API Connection Error" });
     }
 });

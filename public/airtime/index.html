@@ -135,7 +135,8 @@
         </select>
 
         <label>Amount (₦)</label>
-        <input type="number" id="amount" placeholder="Min 100" min="100">
+        <input type="tel" id="amount" placeholder="Min 100" list="recentAmounts" inputmode="numeric" autocomplete="off">
+        <datalist id="recentAmounts"></datalist>
 
         <button id="buyBtn" onclick="validateUserAndOpenModal()">Buy Airtime</button>
     </div>
@@ -148,7 +149,6 @@
         <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
         <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="toggleBtn">Show PIN</button>
 
-        <!-- Spinner for loading state -->
         <div id="processingSpinner" class="spinner"></div>
 
         <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
@@ -177,6 +177,7 @@
     window.onload = () => {
         fetch("https://dnezerlinks-backend.onrender.com/").catch(() => {});
         loadRecentPhone();
+        loadRecentAmount();
     };
 
     function showMessage(msg, isError = true) {
@@ -196,6 +197,15 @@
         }
     }
 
+    function loadRecentAmount() {
+        const savedAmount = localStorage.getItem('last_amount');
+        if (savedAmount) {
+            const list = document.getElementById('recentAmounts');
+            list.innerHTML = `<option value="${savedAmount}">Recently Used</option>`;
+            document.getElementById('amount').value = savedAmount;
+        }
+    }
+
     auth.onAuthStateChanged(user => {
         if (!user) window.location.href = "../login.html";
     });
@@ -204,7 +214,7 @@
         const user = auth.currentUser;
         const phone = document.getElementById('phone').value;
         const network = document.getElementById('network').value;
-        const amount = document.getElementById('amount').value;
+        const amount = Number(document.getElementById('amount').value);
         const buyBtn = document.getElementById('buyBtn');
 
         if (!network || !amount || amount < 100 || phone.length < 11) {
@@ -348,6 +358,7 @@
 
             if (res.success) {
                 localStorage.setItem('last_phone', phone);
+                localStorage.setItem('last_amount', amount);
                 closePinModal();
                 showMessage("Transaction Successful!", false);
                 setTimeout(() => { window.location.href = "../home.html"; }, 2000);
