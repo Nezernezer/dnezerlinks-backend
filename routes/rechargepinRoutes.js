@@ -21,7 +21,7 @@ router.post('/generate', async (req, res) => {
 
     const apiKey = process.env.VTUNAIJA_API_KEY;
     if (!apiKey) {
-        console.error("🔥 Environment Variable 'VTUNAIJA_API_KEY' is missing on Render!");
+        console.error("ðŸ”¥ Environment Variable 'VTUNAIJA_API_KEY' is missing on Render!");
         return res.status(500).json({ success: false, error: 'Server configuration error.' });
     }
 
@@ -72,7 +72,7 @@ router.post('/generate', async (req, res) => {
         if (!transactionResult.committed) {
             return res.status(400).json({
                 success: false,
-                error: `Genuinely Insufficient Balance! Your wallet balance is less than the required ₦${totalCost.toLocaleString()}`
+                error: `Genuinely Insufficient Balance! Your wallet balance is less than the required â‚¦${totalCost.toLocaleString()}`
             });
         }
 
@@ -106,7 +106,7 @@ router.post('/generate', async (req, res) => {
             }
 
         } catch (apiError) {
-            console.error("🔥 VTU Naija Connection Failure:", apiError.message);
+            console.error("ðŸ”¥ VTU Naija Connection Failure:", apiError.message);
 
             // Auto-refund user using the exact processing totalCost if provider endpoint fails
             await userRef.child('balance').transaction((currentBal) => {
@@ -142,8 +142,8 @@ router.post('/generate', async (req, res) => {
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 type: 'debit',
-                service: `${network} (₦${parsedAmt} x ${parsedQty})`,
-                description: `Generated ${parsedQty} Pcs of ${network} ₦${parsedAmt} vouchers`,
+                service: `${network} (â‚¦${parsedAmt} x ${parsedQty})`,
+                description: `Generated ${parsedQty} Pcs of ${network} â‚¦${parsedAmt} vouchers`,
                 phone: `Qty: ${parsedQty} (${network})`,
                 amount: totalCost,
                 date: new Date().toLocaleString(),
