@@ -77,6 +77,7 @@ router.post('/generate', async (req, res) => {
         }
 
         // 3. Contact VTU NAIJA API using dynamic form properties
+        // FIX: Removed the malformed markdown link string wrappers here
         const fallBackBrandName = brandName || "Dnezerlinks"; 
         
         try {
@@ -89,8 +90,7 @@ router.post('/generate', async (req, res) => {
                 headers: {
                     'Authorization': `Token ${apiKey}`,
                     'Content-Type': 'application/json'
-                },
-                timeout: 50000 // Extended timeout configuration to 50 seconds
+                }
             });
 
             // Handle multiple response variance strings from VTU Naija's processing engine
@@ -108,30 +108,7 @@ router.post('/generate', async (req, res) => {
         } catch (apiError) {
             console.error("🔥 VTU Naija Connection Failure:", apiError.message);
 
-            // Handle timeout explicitly: Deduct money, save as PENDING, skip refund logic entirely
-            if (apiError.code === 'ECONNABORTED' || apiError.message.includes('timeout')) {
-                const txRef = db.ref(`transactions/${uid}`).push();
-                await txRef.set({
-                    type: 'debit',
-                    service: `${network} (₦${parsedAmt} x ${parsedQty})`,
-                    description: `Voucher generation timed out. Processing status pending.`,
-                    phone: `Qty: ${parsedQty} (${network})`,
-                    amount: totalCost,
-                    date: new Date().toLocaleString(),
-                    status: "PENDING",
-                    timestamp: Date.now(),
-                    pins: [],
-                    brandName: fallBackBrandName
-                });
-
-                return res.status(202).json({
-                    success: false,
-                    isPending: true,
-                    error: `Network response delayed. Your order has been logged as PENDING.`
-                });
-            }
-
-            // Regular Error (Non-Timeout): Trigger explicit Auto-Refund
+            // Auto-refund user using the exact processing totalCost if provider endpoint fails
             await userRef.child('balance').transaction((currentBal) => {
                 const currentNumericBal = currentBal === null ? 0 : Number(currentBal);
                 return currentNumericBal + totalCost;
@@ -161,6 +138,7 @@ router.post('/generate', async (req, res) => {
             })).filter(p => p.pin !== "");
 
             // Save log data into user's transaction ledger history
+            // FIX: Replaced non-existent finalBrandValue references with fallBackBrandName
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 type: 'debit',
