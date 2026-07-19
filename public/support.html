@@ -6,10 +6,10 @@
     <title>Dnezerlinks | Support Center</title>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; }
-        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding:20px; text-align:center; box-sizing: border-box; }
-        
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding:20px; padding-bottom: 90px; text-align:center; box-sizing: border-box; }
+
         .header-title { color: var(--primary); margin: 10px 0 5px 0; font-size: 24px; font-weight: bold; }
-        
+
         /* Typing Animation Style */
         .status-msg {
             height: 20px;
@@ -22,41 +22,59 @@
         @keyframes blink { 50% { opacity: 0; } }
 
         .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.08); margin-bottom:20px; }
-        
-        .support-btn { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            width: 100%; 
-            padding: 15px; 
-            margin: 12px 0; 
-            border-radius: 12px; 
-            border: 1px solid #eee; 
-            background: white; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 16px; 
-            transition: transform 0.2s, box-shadow 0.2s; 
+
+        .support-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 15px;
+            margin: 12px 0;
+            border-radius: 12px;
+            border: 1px solid #eee;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
             box-sizing: border-box;
             text-decoration: none;
         }
         .support-btn:active { transform: scale(0.98); background: #fafafa; }
-        
+
         .wa { color: #25D366; border-left: 5px solid #25D366; }
         .mail { color: #D44638; border-left: 5px solid #D44638; }
         .call { color: var(--primary); border-left: 5px solid var(--primary); }
-        
-        .back-btn { 
-            background: var(--primary); 
-            color: white; 
-            border: none; 
-            padding: 14px 40px; 
-            border-radius: 10px; 
-            margin-top: 10px; 
-            cursor: pointer; 
+
+        .back-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            border-radius: 10px;
+            margin-top: 10px;
+            cursor: pointer;
             font-weight: bold;
             width: 100%;
         }
+
+        /* Fixed Static Bottom Navigation Menu Layer */
+        .bottom-nav { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0;
+            right: 0;
+            width: 100%; 
+            background: white; 
+            display: flex; 
+            justify-content: space-around; 
+            padding: 15px 0; 
+            border-top: 1px solid #ddd; 
+            z-index: 9999; 
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
+        .nav-link.active { color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
@@ -81,25 +99,29 @@
         </button>
     </div>
 
-    <button class="back-btn" onclick="location.href='account.html'">Back to Account</button>
+   <!--<button class="back-btn" onclick="location.href='home.html'">Back to dashboard</button> -->
+
+    <!-- Static Bottom Navigation with SUPPORT as Active -->
+    <div class="bottom-nav">
+        <a href="home.html" class="nav-link">🏠<br>HOME</a>
+        <a href="profile.html" class="nav-link">👤<br>PROFILE</a>
+        <a href="support.html" class="nav-link active">📞<br>SUPPORT</a>
+        <a href="account.html" class="nav-link">⚙️<br>ACCOUNT</a>
+    </div>
 
     <script>
         // --- Call Handler Fix ---
         function handleCall(phoneNumber) {
-            // This method is more reliable for mobile WebViews
             const telUrl = 'tel:' + phoneNumber;
-            
-            // Create a temporary hidden anchor to trigger a clean "intent"
             const link = document.createElement('a');
             link.href = telUrl;
             link.target = '_blank';
             document.body.appendChild(link);
-            
+
             try {
                 link.click();
                 document.body.removeChild(link);
             } catch (e) {
-                // Failsafe if the browser completely blocks tel: links
                 window.location.href = telUrl;
             }
         }

@@ -10,22 +10,92 @@
     <script src="js/modals.js"></script>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; --danger: #d32f2f; --success: #2e7d32; }
-        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; padding: 20px; margin: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; padding: 20px; margin: 0; padding-bottom: 90px; }
         .card { background:#fff; padding:25px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width: 450px; margin: auto; margin-bottom: 20px; }
         h3 { color: var(--primary); text-align: center; margin-bottom: 20px; margin-top: 0; }
         label { display: block; margin-top: 15px; color: #666; font-weight: bold; }
         input, select, button { width:100%; padding:14px; margin:8px 0; border-radius:10px; border:1px solid #ddd; box-sizing: border-box; font-size: 16px; outline: none; }
         .btn-save { background: var(--primary); color:#fff; border:none; font-weight:bold; cursor: pointer; transition: 0.3s; }
         .btn-save:active { transform: scale(0.98); }
+        .btn-save:disabled { background: #cccccc; color: #666666; cursor: not-allowed; transform: none; }
         .btn-back { background:#f4f4f4; color:#555; border:1px solid #ddd; margin-top:10px; cursor: pointer; }
         input[readonly] { background: #f9f9f9; color: #999; border: 1px dashed #ccc; }
+
+        /* Notification Banners */
+        .top-banner { display: none; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 16px; position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        #successBanner { background: var(--success); }
+        #errorBanner { background: var(--danger); }
+
+        /* Fullscreen Loader Overlay */
+        .loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        /* Custom Circular Progress Bar */
+        .circular-loader {
+            width: 90px;
+            height: 90px;
+            border: 6px solid #e0e0e0;
+            border-top: 6px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            position: relative;
+        }
+        .loader-text {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary);
+            letter-spacing: 0.5px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Fixed Static Bottom Navigation Menu Layer */
+        .bottom-nav { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0;
+            right: 0;
+            width: 100%; 
+            background: white; 
+            display: flex; 
+            justify-content: space-around; 
+            padding: 15px 0; 
+            border-top: 1px solid #ddd; 
+            z-index: 9999; 
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
+        .nav-link.active { color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
+
+<!-- Notification Banners -->
+<div id="successBanner" class="top-banner">Profile updated successfully!</div>
+<div id="errorBanner" class="top-banner">An error occurred!</div>
+
+<!-- Customized Loading Overlay -->
+<div id="loadingOverlay" class="loader-overlay">
+    <div class="circular-loader"></div>
+    <div class="loader-text">Dnezerlinks</div>
+</div>
+
 <div class="card">
     <h3>My Profile Info</h3>
-    <label><small>Full Name (Locked)</small></label>
+    <label><small>Full Name </small></label>
     <input type="text" id="profName" readonly>
+    <label><small>Email Address </small></label>
+    <input type="email" id="profEmail" readonly>
     <label><small>Gender</small></label>
     <select id="profGender">
         <option value="Male">Male</option>
@@ -35,9 +105,18 @@
     <input type="tel" id="profPhone" placeholder="e.g., 08012345678">
     <label><small>Home Address</small></label>
     <input type="text" id="profAddress" placeholder="Enter your full address">
-    <button id="saveBtn" class="btn-save" onclick="save()">Save Updates</button>
-    <button class="btn-back" onclick="location.href='home.html'">Back to Dashboard</button>
+    <button id="saveBtn" class="btn-save" onclick="save()" disabled>Save Updates</button>
+   <!-- <button class="btn-back" onclick="location.href='home.html'">Back to Dashboard</button> -->
 </div>
+
+<!-- Static Bottom Navigation with PROFILE as Active -->
+<div class="bottom-nav">
+    <a href="home.html" class="nav-link">🏠<br>HOME</a>
+    <a href="profile.html" class="nav-link active">👤<br>PROFILE</a>
+    <a href="support.html" class="nav-link">📞<br>SUPPORT</a>
+    <a href="account.html" class="nav-link">⚙️<br>ACCOUNT</a>
+</div>
+
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
@@ -49,35 +128,108 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const database = firebase.database();
+
+    function enableSaveButton() {
+        document.getElementById('saveBtn').disabled = false;
+    }
+
+    document.getElementById('profGender').addEventListener('change', enableSaveButton);
+    document.getElementById('profPhone').addEventListener('input', enableSaveButton);
+    document.getElementById('profAddress').addEventListener('input', enableSaveButton);
+
+    const cachedProfile = sessionStorage.getItem('cached_user_profile');
+    if (cachedProfile) {
+        const cachedData = JSON.parse(cachedProfile);
+        document.getElementById('profEmail').value = cachedData.email || "";
+        document.getElementById('profName').value = cachedData.name || "";
+        document.getElementById('profGender').value = cachedData.gender || "Male";
+        document.getElementById('profPhone').value = cachedData.phone || "";
+        document.getElementById('profAddress').value = cachedData.address || "";
+    }
+
     auth.onAuthStateChanged(user => {
         if (user) {
+            document.getElementById('profEmail').value = user.email || "";
             database.ref('users/' + user.uid).on('value', snapshot => {
                 const d = snapshot.val();
                 if(d) {
-                    document.getElementById('profName').value = d.name || d.fullName || "User";
-                    document.getElementById('profGender').value = d.gender || "Male";
-                    document.getElementById('profPhone').value = d.phone || "";
-                    document.getElementById('profAddress').value = d.address || "";
+                    const profileData = {
+                        email: user.email || "",
+                        name: d.name || d.fullName || "User",
+                        gender: d.gender || "Male",
+                        phone: d.phone || "",
+                        address: d.address || ""
+                    };
+
+                    document.getElementById('profName').value = profileData.name;
+                    document.getElementById('profGender').value = profileData.gender;
+                    document.getElementById('profPhone').value = profileData.phone;
+                    document.getElementById('profAddress').value = profileData.address;
+
+                    sessionStorage.setItem('cached_user_profile', JSON.stringify(profileData));
                 }
             });
-        } else { location.href = 'login.html'; }
+        } else {
+            sessionStorage.removeItem('cached_user_profile');
+            location.href = 'login.html';
+        }
     });
+
     async function save() {
         const btn = document.getElementById('saveBtn');
+        const overlay = document.getElementById('loadingOverlay');
+        const successBanner = document.getElementById('successBanner');
+        const errorBanner = document.getElementById('errorBanner');
         const user = auth.currentUser;
+
         if (!user) return;
+
+        // Hide previous banners and show progress bar overlay
+        successBanner.style.display = 'none';
+        errorBanner.style.display = 'none';
+        overlay.style.display = 'flex';
+
         btn.innerText = "Saving...";
         btn.disabled = true;
+
+        const updatedData = {
+            gender: document.getElementById('profGender').value,
+            phone: document.getElementById('profPhone').value.trim(),
+            address: document.getElementById('profAddress').value.trim(),
+            lastUpdated: Date.now()
+        };
+
         try {
-            await database.ref('users/' + user.uid).update({
-                gender: document.getElementById('profGender').value,
-                phone: document.getElementById('profPhone').value.trim(),
-                address: document.getElementById('profAddress').value.trim(),
-                lastUpdated: Date.now()
-            });
-            DnezerPopup.alert("Success", "Profile updated!", "success");
-        } catch (e) { DnezerPopup.alert("Error", e.message, "error"); }
-        finally { btn.innerText = "Save Updates"; btn.disabled = false; }
+            await database.ref('users/' + user.uid).update(updatedData);
+
+            const currentCache = JSON.parse(sessionStorage.getItem('cached_user_profile') || '{}');
+            sessionStorage.setItem('cached_user_profile', JSON.stringify({
+                ...currentCache,
+                gender: updatedData.gender,
+                phone: updatedData.phone,
+                address: updatedData.address
+            }));
+
+            // Stop loading overlay and show Success Banner
+            overlay.style.display = 'none';
+            successBanner.style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            setTimeout(() => { successBanner.style.display = 'none'; }, 15000);
+
+        } catch (e) {
+            // Stop loading overlay and show Error Banner
+            overlay.style.display = 'none';
+            errorBanner.innerText = "Error: " + e.message;
+            errorBanner.style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            setTimeout(() => { errorBanner.style.display = 'none'; }, 15000);
+            btn.disabled = false;
+        }
+        finally {
+            btn.innerText = "Save Updates";
+        }
     }
 </script>
 </body>

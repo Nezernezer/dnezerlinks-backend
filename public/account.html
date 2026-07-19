@@ -11,11 +11,33 @@
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; --success: #00c853; --danger: #d32f2f; }
         body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
+        
+        /* Inline Status Notification Banner */
+        .alert-banner {
+            display: none;
+            width: 100%;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+            box-sizing: border-box;
+            border-bottom: 2px solid transparent;
+        }
+        .alert-success { background-color: #d4edda; color: #155724; border-color: var(--success); }
+        .alert-error { background-color: #f8d7da; color: #721c24; border-color: var(--danger); }
+
         .balance-card { background: var(--primary); color: #fff; text-align: center; padding: 25px; border-radius: 0 0 20px 20px; }
         .balance { font-size: 28px; font-weight: bold; color: var(--accent); margin-bottom: 10px; }
         .card { background:#fff; margin:15px; padding:20px; border-radius:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
-        button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; transition: background 0.2s ease; }
+        
+        /* Default Disabled State styled uniformly */
+        button:disabled { background: #cccccc !important; color: #666666 !important; opacity: 0.7; cursor: not-allowed; }
+        
+        /* Brand Colors for Active Update Buttons */
+        .btn-brand-update { background: var(--primary); color: white; }
+        
         .btn-fund { background: var(--success); color: white; }
         .btn-small-fund { background: var(--accent); color: var(--primary); width: auto; padding: 5px 20px; font-size: 11px; margin-top: 5px; }
         .btn-danger { background: var(--danger); color: white; }
@@ -27,9 +49,33 @@
         .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 1000; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
         .active { color: var(--primary); font-weight: bold; }
+
+        /* Fullscreen Overlay Circular Loader */
+        .overlay-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+        }
+        .spinner-box { position: relative; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; }
+        .circular-spinner {
+            width: 100%; height: 100%;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            position: absolute;
+            box-sizing: border-box;
+        }
+        .brand-text { font-size: 12px; font-weight: bold; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+
+<!-- Top Alert Message Container -->
+<div id="alertBox" class="alert-banner"></div>
 
 <div class="balance-card">
     <div class="balance">₦<span id="balDisplay">0.00</span></div>
@@ -49,7 +95,7 @@
     <input type="password" id="field_p1" maxlength="4" placeholder="New 4-Digit PIN" readonly onfocus="this.removeAttribute('readonly');">
     <input type="password" id="field_p2" maxlength="4" placeholder="Verify New PIN" readonly onfocus="this.removeAttribute('readonly');">
     <input type="password" id="field_p_auth" placeholder="Login Password to Confirm" readonly onfocus="this.removeAttribute('readonly');">
-    <button class="btn-fund" id="pinBtn" onclick="updatePin()">Update PIN</button>
+    <button class="btn-brand-update" id="pinBtn" onclick="updatePin()" disabled>Update PIN</button>
 
     <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
 
@@ -57,11 +103,19 @@
     <input type="password" id="field_s1" placeholder="New Password (min 6 chars)" readonly onfocus="this.removeAttribute('readonly');">
     <input type="password" id="field_s2" placeholder="Verify New Password" readonly onfocus="this.removeAttribute('readonly');">
     <input type="password" id="field_s_auth" maxlength="4" placeholder="Transaction PIN to Confirm" readonly onfocus="this.removeAttribute('readonly');">
-    <button class="btn-danger" id="passBtn" onclick="updatePass()">Update Password</button>
+    <button class="btn-brand-update" id="passBtn" onclick="updatePass()" disabled>Update Password</button>
 </div>
 
 <div class="card">
     <button class="btn-danger" onclick="logout()">🚪 Logout</button>
+</div>
+
+<!-- Dnezerlinks Spinner Overlay -->
+<div id="loadingOverlay" class="overlay-container" style="display: none;">
+    <div class="spinner-box">
+        <div class="circular-spinner"></div>
+        <div class="brand-text">Dnezerlinks</div>
+    </div>
 </div>
 
 <div class="bottom-nav">
@@ -109,36 +163,63 @@
         });
     }
 
+    // Dynamic Tracking to enable buttons only if field has inputs
+    function setupFormTracker(inputIds, buttonId) {
+        const inputs = inputIds.map(id => document.getElementById(id));
+        const button = document.getElementById(buttonId);
+
+        const handleInputEvent = () => {
+            // Checks if any of the target section inputs contains data
+            const anyFieldFilled = inputs.some(input => input.value.trim() !== "");
+            button.disabled = !anyFieldFilled;
+        };
+
+        inputs.forEach(input => input.addEventListener('input', handleInputEvent));
+    }
+
+    // Initialize trackers on DOM content ready
+    setupFormTracker(['field_p1', 'field_p2', 'field_p_auth'], 'pinBtn');
+    setupFormTracker(['field_s1', 'field_s2', 'field_s_auth'], 'passBtn');
+
+    // Display banner status message at top and scroll to it smoothly
+    function displayTopBanner(message, type) {
+        const alertBox = document.getElementById('alertBox');
+        alertBox.innerText = message;
+        alertBox.className = `alert-banner alert-${type}`;
+        alertBox.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     async function updatePin() {
         const pin = document.getElementById('field_p1').value;
         const confirm = document.getElementById('field_p2').value;
         const pass = document.getElementById('field_p_auth').value;
         const btn = document.getElementById('pinBtn');
+        const loader = document.getElementById('loadingOverlay');
         const user = auth.currentUser;
 
-        if (!pin || !confirm || !pass) return DnezerPopup.alert("Error", "Please fill all fields", "error");
-        if (pin !== confirm) return DnezerPopup.alert("Error", "New PINs do not match", "error");
-        if (pin.length !== 4) return DnezerPopup.alert("Error", "PIN must be 4 digits", "error");
+        if (!pin || !confirm || !pass) return displayTopBanner("Please fill all fields", "error");
+        if (pin !== confirm) return displayTopBanner("New PINs do not match", "error");
+        if (pin.length !== 4) return displayTopBanner("PIN must be 4 digits", "error");
 
         btn.disabled = true;
+        loader.style.display = 'flex';
         try {
-            // Re-authenticate user before updating sensitive info
             const credential = firebase.auth.EmailAuthProvider.credential(user.email, pass);
             await user.reauthenticateWithCredential(credential);
-            
-            // Update PIN in Database
+
             await db.ref(`users/${user.uid}`).update({ transaction_pin: pin });
-            
-            DnezerPopup.alert("Success", "PIN changed successfully", "success");
-            
-            // Clear fields
-            document.getElementById('field_p1').value = ""; 
-            document.getElementById('field_p2').value = ""; 
+
+            displayTopBanner("PIN changed successfully", "success");
+
+            document.getElementById('field_p1').value = "";
+            document.getElementById('field_p2').value = "";
             document.getElementById('field_p_auth').value = "";
-        } catch (e) { 
-            DnezerPopup.alert("Error", e.message.includes("password") ? "Incorrect Login Password" : e.message, "error"); 
-        } finally { 
-            btn.disabled = false; 
+        } catch (e) {
+            displayTopBanner(e.message.includes("password") ? "Incorrect Login Password" : e.message, "error");
+        } finally {
+            loader.style.display = 'none';
+            btn.disabled = true; // reset to disabled until fields change again
         }
     }
 
@@ -147,33 +228,33 @@
         const confirm = document.getElementById('field_s2').value;
         const pin = document.getElementById('field_s_auth').value;
         const btn = document.getElementById('passBtn');
+        const loader = document.getElementById('loadingOverlay');
         const user = auth.currentUser;
 
-        if (!pass || !confirm || !pin) return DnezerPopup.alert("Error", "Please fill all fields", "error");
-        if (pass !== confirm) return DnezerPopup.alert("Error", "New passwords do not match", "error");
-        if (pass.length < 6) return DnezerPopup.alert("Error", "Password too short", "error");
+        if (!pass || !confirm || !pin) return displayTopBanner("Please fill all fields", "error");
+        if (pass !== confirm) return displayTopBanner("New passwords do not match", "error");
+        if (pass.length < 6) return displayTopBanner("Password too short", "error");
 
         btn.disabled = true;
+        loader.style.display = 'flex';
         try {
-            // Verify Transaction PIN from Database
             const snap = await db.ref(`users/${user.uid}/transaction_pin`).once('value');
             if (snap.val() !== pin) {
                 throw new Error("Incorrect Transaction PIN");
             }
 
-            // Update Password in Firebase Auth
             await user.updatePassword(pass);
-            
-            DnezerPopup.alert("Success", "Password changed successfully", "success");
-            
-            // Clear fields
-            document.getElementById('field_s1').value = ""; 
-            document.getElementById('field_s2').value = ""; 
+
+            displayTopBanner("Password changed successfully", "success");
+
+            document.getElementById('field_s1').value = "";
+            document.getElementById('field_s2').value = "";
             document.getElementById('field_s_auth').value = "";
-        } catch (e) { 
-            DnezerPopup.alert("Failed", e.message, "error"); 
-        } finally { 
-            btn.disabled = false; 
+        } catch (e) {
+            displayTopBanner(e.message, "error");
+        } finally {
+            loader.style.display = 'none';
+            btn.disabled = true; // reset to disabled until fields change again
         }
     }
 
