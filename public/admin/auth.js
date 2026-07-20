@@ -1,6 +1,15 @@
 (function () {
     const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
+    document.addEventListener("DOMContentLoaded", () => {
+        if (document.body && document.body.id !== "loadingOverlay") {
+            // Keep hidden until verified if not using the loading screen wrapper
+            if(window.getComputedStyle(document.body).display !== "block" && !document.getElementById('loadingOverlay')) {
+                document.body.style.display = "none";
+            }
+        }
+    });
+
     firebase.auth().onAuthStateChanged(async (user) => {
         if (!user) {
             window.location.href = '../login.html';
@@ -10,7 +19,7 @@
         try {
             const idToken = await user.getIdToken(true);
 
-            // Calls your newly deployed route protected by Render's environment variable
+            // 1. Verify master token authenticity with Render backend
             const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
                 method: "GET",
                 headers: {
@@ -24,11 +33,25 @@
             if (!response.ok || !data.isAdmin) {
                 alert("Access Denied: You do not possess the required administrator rights.");
                 window.location.href = '../home.html';
-            } else {
-                console.log("Admin credentials verified via Render successfully.");
-                // Makes the layout visible once security clears the connection passes
-                document.body.style.display = "block"; 
+                return;
             }
+
+            // 2. Fetch granular permissions directly from the database node
+            const rolesSnap = await firebase.database().ref(`admin_roles/${user.uid}`).once('value');
+            const roles = rolesSnap.val() || {};
+
+            // 3. Store roles globally so pages like users.html or wallet.html can check them instantly
+            window.CurrentAdminRoles = roles;
+
+            console.log("Admin credentials and dynamic role matrix verified successfully.");
+            
+            if (document.body) {
+                document.body.style.display = "block";
+            }
+            
+            // Dispatch event to kick off page synchronization
+            window.dispatchEvent(new CustomEvent('admin-verified', { detail: roles }));
+
         } catch (error) {
             console.error("Auth security gate handshake dropped:", error);
             alert("Security connection validation dropped. Returning to safety.");

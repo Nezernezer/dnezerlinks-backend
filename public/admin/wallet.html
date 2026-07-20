@@ -49,7 +49,7 @@
         </div>
     </div>
     <div class="content-area" id="walletList">
-        <p style="text-align:center; color:#888;">Connecting to secure vault...</p>     
+        <p style="text-align:center; color:#888;">Connecting to secure vault...</p>
     </div>
 </div>
 
@@ -63,14 +63,43 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+    const backendDomain = "https://dnezerlinks-backend.onrender.com";
     let allUsers = {};
+    
+    // Dynamic Privilege Object Container State
+    let currentAdminRoles = {};
 
-    auth.onAuthStateChanged(user => {
-        if (user && user.uid === MASTER_ADMIN_UID) {
-            document.getElementById('authStatus').innerText = "Session Active ●";
-            startLiveSync();
-            fetchVtuNaijaBalance();
+    auth.onAuthStateChanged(async user => {
+        if (user) {
+            try {
+                const idToken = await user.getIdToken(true);
+
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const verifyData = await response.json();
+
+                if (response.ok && verifyData.isAdmin) {
+                    // Fetch dynamic permission node states
+                    const rolesSnap = await db.ref(`admin_roles/${user.uid}`).once('value');
+                    currentAdminRoles = rolesSnap.val() || {};
+
+                    document.getElementById('authStatus').innerText = "Session Active ●";
+                    startLiveSync();
+                    fetchVtuNaijaBalance();
+                } else {
+                    alert("ACCESS DENIED");
+                    window.location.href = "../home.html";
+                }
+            } catch (err) {
+                console.error("Security gateway communication error:", err);
+                window.location.href = "../login.html";
+            }
         } else {
             window.location.href = "../login.html";
         }
@@ -82,9 +111,6 @@
             if (!auth.currentUser) return;
             const idToken = await auth.currentUser.getIdToken(true);
 
-            const backendDomain = "https://dnezerlinks-backend.onrender.com";
-
-            // ✅ ROUTE SELECTION MATCHES API.JS LAYER STRUCTURE PATTERN
             const response = await fetch(`${backendDomain}/api/admin/user`, {
                 method: "GET",
                 headers: {
@@ -116,9 +142,19 @@
     function render() {
         const container = document.getElementById('walletList');
         container.innerHTML = "";
+        
         Object.keys(allUsers).forEach(uid => {
             const u = allUsers[uid];
             const name = u.fullName || u.name || 'Unknown User';
+            
+            // Render explicit operations action configuration maps
+            let actionMarkup = '';
+            if (currentAdminRoles.isMaster || currentAdminRoles.canManageWallets) {
+                actionMarkup = `<button class="fund-btn" onclick="fund('${uid}', '${name.replace(/'/g, "\\'")}', this)">MANAGE</button>`;
+            } else {
+                actionMarkup = `<span style="color:#64748b; font-size:11px; font-weight:600; padding:10px; background:#f1f5f9; border-radius:6px;">🔒 Read-Only</span>`;
+            }
+
             container.innerHTML += `
                 <div class="user-card" data-search="${name.toLowerCase()} ${uid}">
                     <div class="user-info">
@@ -127,12 +163,17 @@
                         <div class="balance-tag">₦${Number(u.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                         <div class="uid-text">UID: ${uid}</div>
                     </div>
-                    <button class="fund-btn" onclick="fund('${uid}', '${name.replace(/'/g, "\\'")}', this)">MANAGE</button>
+                    ${actionMarkup}
                 </div>`;
         });
     }
 
     async function fund(uid, name, btn) {
+        // Redundant explicit runtime validation fallback sequence
+        if (!currentAdminRoles.isMaster && !currentAdminRoles.canManageWallets) {
+            return alert("Security Exception: Operation rejected. Access Denied.");
+        }
+
         const amt = prompt(`Adjust balance for ${name}:`);
         if (!amt) return;
         const val = parseFloat(amt);
@@ -141,6 +182,14 @@
         btn.disabled = true;
         try {
             await db.ref('users/' + uid + '/balance').transaction(b => (Number(b) || 0) + val);
+            
+            // Append transaction adjustments telemetry to the user's operational message thread
+            await db.ref('notifications/' + uid).push({
+                message: `💼 Your wallet balance was modified by ${val >= 0 ? 'adding ₦' + val.toLocaleString() : 'deducting ₦' + Math.abs(val).toLocaleString()} via systemic administrator adjustments.`,
+                timestamp: Date.now(),
+                read: false
+            });
+
             alert("Updated successfully.");
         } catch (e) {
             alert("Error: " + e.message);

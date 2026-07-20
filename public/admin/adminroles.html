@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Role Management | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { 
+            --primary: #0d47a1; 
+            --accent: #ffab00; 
+            --bg: #f4f7f6; 
+            --success: #2e7d32;
+            --dark: #1e293b;
+        }
+        html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); font-family: 'Segoe UI', sans-serif; }
+        .wrapper { display: flex; flex-direction: column; height: 100%; }
+        
+        /* Fixed Branded Loading Screen Overlay */
+        #loadingOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #f4f7f6;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(13, 71, 161, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Branded Page Header Elements */
+        .brand-header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1565c0 100%);
+            color: white;
+            padding: 18px 20px;
+            box-shadow: 0 4px 12px rgba(13, 71, 161, 0.25);
+            flex-shrink: 0;
+            z-index: 10;
+        }
+        .header-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .back-hub-btn {
+            color: rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 13px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: background 0.2s;
+        }
+        .back-hub-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+        .brand-title-area {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+        .brand-title-area h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .brand-title-area h1 span {
+            color: var(--accent);
+        }
+        .brand-title-area h2 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.85);
+        }
+        .system-stats-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            font-size: 13px;
+        }
+
+        .search-container { margin-top: 12px; }
+        .search-box { width: 100%; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; background: rgba(255,255,255,0.12); color: white; outline: none; font-size: 14px; box-sizing: border-box; transition: background 0.2s; }
+        .search-box:focus { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.5); }
+        .search-box::placeholder { color: rgba(255,255,255,0.65); }
+        
+        .content-area { padding: 20px 15px; flex-grow: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .user-card { background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; }
+        .user-info b { color: var(--dark); font-size: 16px; display: block; margin-bottom: 4px; }
+        .user-info span { color: #64748b; font-size: 13px; display: block; }
+        .uid-text { font-family: monospace; font-size: 11px; color: #94a3b8; margin-top: 5px; display: block; }
+        
+        /* Roles Matrix Styles */
+        .roles-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; border-top: 1px solid #f1f5f9; margin-top: 14px; padding-top: 10px; letter-spacing: 0.5px; }
+        .matrix-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 8px; }
+        @media (min-width: 600px) { .matrix-grid { grid-template-columns: repeat(4, 1fr); } }
+        
+        .role-option { display: flex; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; cursor: pointer; user-select: none; font-size: 12px; font-weight: 600; color: #475569; transition: all 0.2s; }
+        .role-option input { margin-right: 8px; width: 16px; height: 16px; cursor: pointer; }
+        
+        /* Cross-browser compatible checked state styling */
+        .role-option.active-role { background: #e8f5e9; border-color: #a5d6a7; color: var(--success); }
+        
+        #authStatus { font-size: 11px; color: #a7f3d0; font-weight: 700; background: rgba(16, 185, 129, 0.25); padding: 4px 10px; border-radius: 12px; }
+        #userCount { font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+    </style>
+</head>
+<body>
+
+<!-- Secure Loading Screen Overlay -->
+<div id="loadingOverlay">
+    <div class="spinner"></div>
+    <p style="margin-top: 15px; color: #0d47a1; font-weight: 600; font-size: 14px; letter-spacing: 0.5px;">Dnezerlinks Security Handshake...</p>
+</div>
+
+<div class="wrapper">
+    <!-- Dnezerlinks Branded System Header -->
+    <div class="brand-header">
+        <div class="header-meta">
+            <a href="index.html" class="back-hub-btn">← Admin Hub</a>
+            <span id="authStatus">Verifying Session...</span>
+        </div>
+        <div class="brand-title-area">
+            <h1>Dnezer<span>links</span></h1>
+            <h2>| Privilege Management Matrix</h2>
+        </div>
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-box" placeholder="Search system operators by name or account UID..." onkeyup="filterUsers()">
+        </div>
+        <div class="system-stats-bar">
+            <span id="userCount">Loading platform metrics...</span>
+            <span style="opacity: 0.85;">Secure Node Connection</span>
+        </div>
+    </div>
+    
+    <div class="content-area" id="usersContainer">
+        <p style="text-align:center; color:#888; margin-top: 30px;">Synchronizing structural security registers...</p>
+    </div>
+</div>
+
+<script>
+    const config = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks"
+    };
+    if (!firebase.apps.length) {
+        firebase.initializeApp(config);
+    }
+    
+    const db = firebase.database();
+    let allUsers = {};
+    let allRoles = {};
+
+    const AVAILABLE_ROLES = [
+        { id: 'isMaster', label: 'Master Admin' },
+        { id: 'canVerifyKyc', label: 'Verify KYC' },
+        { id: 'canManageWallets', label: 'Manage Wallets' },
+        { id: 'canBroadcast', label: 'Send Broadcasts' }
+    ];
+
+    // Global event handler responding directly to auth.js authorization success
+    window.addEventListener('admin-verified', () => {
+        // Explicitly force layout tree visibility and tear down loader overlay instantly
+        document.body.style.display = "block";
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.remove();
+        
+        document.getElementById('authStatus').innerText = "Session Active ●";
+        startLiveSync();
+    });
+
+    // Backup failsafe: If auth.js bypassed display properties manually, safely drop loader anyway
+    setTimeout(() => {
+        if (document.body.style.display === "block") {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.remove();
+        }
+    }, 2500);
+
+    function startLiveSync() {
+        db.ref('users').on('value', userSnap => {
+            allUsers = userSnap.val() || {};
+            db.ref('admin_roles').on('value', roleSnap => {
+                allRoles = roleSnap.val() || {};
+                render();
+            });
+        });
+    }
+
+    function render() {
+        const container = document.getElementById('usersContainer');
+        container.innerHTML = "";
+        let totalCount = 0;
+        
+        Object.keys(allUsers).forEach(uid => {
+            const u = allUsers[uid];
+            const name = u.name || u.fullName || 'Unknown User';
+            const email = u.email || 'No email registered';
+            const userRoles = allRoles[uid] || {};
+            totalCount++;
+
+            let checkboxHtml = "";
+            AVAILABLE_ROLES.forEach(role => {
+                const isChecked = userRoles[role.id] === true;
+                checkboxHtml += `
+                    <label class="role-option ${isChecked ? 'active-role' : ''}">
+                        <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="togglePrivilege('${uid}', '${role.id}', this.checked)">
+                        ${role.label}
+                    </label>
+                `;
+            });
+
+            container.innerHTML += `
+                <div class="user-card" data-search="${name.toLowerCase()} ${uid.toLowerCase()}">
+                    <div class="user-info">
+                        <b>${name}</b>
+                        <span>✉️ ${email}</span>
+                        <small class="uid-text">UID: ${uid}</small>
+                    </div>
+                    <div class="roles-title">Assigned Privileges</div>
+                    <div class="matrix-grid">
+                        ${checkboxHtml}
+                    </div>
+                </div>`;
+        });
+        
+        document.getElementById('userCount').innerText = `Total Platform Accounts: ${totalCount}`;
+    }
+
+    async function togglePrivilege(uid, roleId, isGranted) {
+        try {
+            await db.ref(`admin_roles/${uid}/${roleId}`).set(isGranted);
+            await db.ref(`notifications/${uid}`).push({
+                message: `🔒 Your administrator privilege permissions profiles were updated. (${roleId}: ${isGranted ? 'GRANTED' : 'REVOKED'})`,
+                timestamp: Date.now(),
+                read: false
+            });
+        } catch (e) {
+            alert("Database write failure: " + e.message);
+            render();
+        }
+    }
+
+    function filterUsers() {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        let visibleCount = 0;
+        
+        document.querySelectorAll('.user-card').forEach(card => {
+            const match = card.getAttribute('data-search').includes(term);
+            card.style.display = match ? 'block' : 'none';
+            if (match) visibleCount++;
+        });
+        
+        if (term.trim() !== "") {
+            document.getElementById('userCount').innerText = `Matches Found: ${visibleCount}`;
+        } else {
+            document.getElementById('userCount').innerText = `Total Platform Accounts: ${Object.keys(allUsers).length}`;
+        }
+    }
+</script>
+
+<!-- Execution script handling domain validation processes -->
+<script src="auth.js"></script>
+</body>
+</html>

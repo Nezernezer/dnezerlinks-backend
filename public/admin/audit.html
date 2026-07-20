@@ -21,13 +21,13 @@
         .user-info { font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: flex-start; }
         .email-text { font-size: 11px; color: #666; display: block; margin-top: 2px; }
         .target-box { background: #f8f9fa; padding: 8px; border-radius: 6px; margin: 10px 0; border: 1px dashed #ddd; font-size: 13px; }
-        
+
         /* Specialized boxes */
         .tv-box { background: #f3e5f5; padding: 8px; border-radius: 6px; margin: 8px 0; border: 1px solid #e1bee7; font-size: 12px; color: #4a148c; }
         .pin-matrix-box { background: #fffde7; padding: 12px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; border: 1px solid #fff59d; color: #5d4037; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
         .matrix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
         .matrix-card { background: white; padding: 8px; border-radius: 6px; border: 1px solid #eee; text-align: center; box-shadow: inset 0 1px 3px rgba(0,0,0,0.02); }
-        
+
         .balance-audit-box { display: flex; justify-content: space-between; background: #f1f3f4; padding: 6px 10px; border-radius: 6px; font-size: 12px; color: #444; font-weight: 500; margin-bottom: 8px; border-left: 3px solid #666; }
         .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: #555; margin-top: 5px; }
         .uid-tag { font-family: monospace; font-size: 9px; color: #999; margin-top: 10px; display: block; border-top: 1px solid #eee; padding-top: 5px; word-break: break-all; }
@@ -66,7 +66,7 @@
     <div class="content">
         <div id="status" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px;">Loading forensic data...</div>
         <div id="summaryBox" style="background:white; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px; display:none;"></div>
-        
+
         <!-- Total Spent on PIN Networks Matrix Box -->
         <div id="pinMatrixBox" class="pin-matrix-box" style="display:none;"></div>
 
@@ -88,7 +88,7 @@
         firebase.initializeApp(config);
         const db = firebase.database();
         const auth = firebase.auth();
-        const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+        const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
         let currentLogs = [];
         let numberCount = {};
@@ -96,11 +96,36 @@
         let liveStats = { count: 0, revenue: 0 };
         let analytics = { total: 0, success: 0, failed: 0, pending: 0, revenue: 0 };
         let userCache = {};
-        let pinNetworkSales = {}; 
+        let pinNetworkSales = {};
 
-        auth.onAuthStateChanged(user => {
-            if (user && user.uid === MASTER_ADMIN_UID) {
-                loadData();
+        auth.onAuthStateChanged(async user => {
+            if (user) {
+                try {
+                    // Fetch identity token from Firebase Auth client
+                    const idToken = await user.getIdToken(true);
+                    
+                    // Route verification check to the Node backend environment container
+                    const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Bearer " + idToken
+                        }
+                    });
+
+                    const verifyData = await response.json();
+
+                    // Trigger data visualization population logic only if authenticated as admin
+                    if (response.ok && verifyData.isAdmin) {
+                        loadData();
+                    } else {
+                        console.warn("Unauthorized access attempt flagged.");
+                        window.location.href = "../login.html";
+                    }
+                } catch (err) {
+                    console.error("Security gateway communication error:", err);
+                    window.location.href = "../login.html";
+                }
             } else {
                 window.location.href = "../login.html";
             }
@@ -161,7 +186,7 @@
                 liveStats = { count: 0, revenue: 0 };
                 numberCount = {};
                 userCount = {};
-                pinNetworkSales = {}; 
+                pinNetworkSales = {};
 
                 const uniqueUids = new Set();
 
@@ -191,7 +216,7 @@
                 });
 
                 if (currentLogs.length > 5000) currentLogs = currentLogs.slice(0, 5000);
-                
+
                 renderLogs();
                 generateSummary(currentLogs);
                 updateLivePanel();
@@ -283,16 +308,14 @@
                     formattedAfter = `₦${balAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                 }
 
-                // --- AGGREGATE PIN NETWORKS IF TRANSACTION CONTAINS PIN DATA OR MATCHES PIN TYPES ---
                 const pinMatches = findFieldDeep(act, ['pin', 'token', 'pin_code', 'recharge_pin', 'pincode']);
                 const isPinTx = type.includes('PIN') || service.includes('PIN') || type.includes('VOUCHER') || pinMatches.length > 0;
-                
+
                 if (isPinTx && isSuccessful) {
                     let netName = (act.network || 'UNKNOWN').toUpperCase().trim();
                     pinNetworkSales[netName] = (pinNetworkSales[netName] || 0) + Number(act.amount || 0);
                 }
 
-                // --- CABLE TV DEEP SCANNING & DISPLAY ---
                 const tvMatches = findFieldDeep(act, ['cable', 'tv', 'decoder', 'smartcard', 'iuc', 'customer_name', 'package', 'subscription']);
                 let tvHtml = '';
                 let tvSearchString = '';
@@ -354,7 +377,7 @@
         function renderPinMatrix() {
             const matrixBox = document.getElementById('pinMatrixBox');
             const networks = Object.keys(pinNetworkSales);
-            
+
             if (networks.length === 0) {
                 matrixBox.style.display = 'none';
                 return;
@@ -369,7 +392,7 @@
                     </div>`;
             });
             html += `</div>`;
-            
+
             matrixBox.innerHTML = html;
             matrixBox.style.display = 'block';
         }

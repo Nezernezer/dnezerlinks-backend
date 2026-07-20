@@ -29,23 +29,23 @@
         .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; border: 1px solid #eee; transition: 0.2s; }
         .service-item:active { transform: scale(0.95); }
         .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
-        
+
         /* Updated Static Bottom Navigation Menu Layer */
-        .bottom-nav { 
-            position: fixed; 
-            bottom: 0; 
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
             left: 0;
             right: 0;
-            width: 100%; 
-            background: white; 
-            display: flex; 
-            justify-content: space-around; 
-            padding: 15px 0; 
-            border-top: 1px solid #ddd; 
-            z-index: 9999; 
+            width: 100%;
+            background: white;
+            display: flex;
+            justify-content: space-around;
+            padding: 15px 0;
+            border-top: 1px solid #ddd;
+            z-index: 9999;
             box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
         }
-        
+
         .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
         .nav-link.active { color: var(--primary); font-weight: bold; }
         .admin-switch { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 6px 12px; border-radius: 15px; font-size: 10px; cursor: pointer; }
@@ -66,7 +66,7 @@
 
 <div class="header">
     <div id="vtuApiContainer" class="vtu-api-container">
-        <span class="vtu-api-label">Master </span>
+        <span id="apiLabelText" class="vtu-api-label">Admin Control</span>
         <span id="vtuApiBalance" class="vtu-api-value">Loading...</span>
     </div>
 
@@ -141,40 +141,64 @@
             });
 
             try {
-                // Secure validation check via backend endpoint instead of a hardcoded frontend string
+                // Secure validation check via backend endpoint to confirm admin status
                 const idToken = await user.getIdToken(true);
                 const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
                     method: "GET",
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": "Bearer " + idToken
+                        "Authorization": "Bearer + idToken"
                     }
                 });
 
                 const verifyData = await response.json();
 
                 if (response.ok && verifyData.isAdmin) {
-                    document.getElementById('vtuApiContainer').style.display = 'block';
-                    fetchVtuNaijaBalance();
+                    // Fetch Dynamic Admin Role node matrix to evaluate granular settings
+                    db.ref(`admin_roles/${user.uid}`).on('value', rolesSnap => {
+                        const roles = rolesSnap.val() || {};
+                        
+                        // Update API UI header details based on master status vs sub-admin
+                        const labelEl = document.getElementById('apiLabelText');
+                        if (labelEl) {
+                            labelEl.innerText = roles.isMaster ? "MASTER API" : "SUB-ADMIN API";
+                        }
+                        
+                        document.getElementById('vtuApiContainer').style.display = 'block';
+                        fetchVtuNaijaBalance();
 
-                    db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
-                        const count = s.numChildren();
-                        const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
-                        document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button><div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
-                    });
-
-                    // Real-time sync calculation summing user balances
-                    db.ref('users').on('value', allUsersSnap => {
-                        let totalSum = 0;
-                        allUsersSnap.forEach(userChild => {
-                            const userData = userChild.val();
-                            if (userData && userData.balance) {
-                                totalSum += parseFloat(userData.balance || 0);
+                        // Listen to incoming verifications badge count metrics
+                        db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
+                            const count = s.numChildren();
+                            const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
+                            
+                            // Check privileges to build the contextual view components
+                            let extraViewsMarkup = '';
+                            if (roles.isMaster || roles.canManageWallets) {
+                                extraViewsMarkup = `<div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
                             }
+                            
+                            document.getElementById('adminContainer').innerHTML = `
+                                <button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>
+                                ${extraViewsMarkup}
+                            `;
                         });
-                        const sumElement = document.getElementById('usersBalSum');
-                        if (sumElement) {
-                            sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+                        // Calculate ecosystem balance sums strictly if administrative scope allows it
+                        if (roles.isMaster || roles.canManageWallets) {
+                            db.ref('users').on('value', allUsersSnap => {
+                                let totalSum = 0;
+                                allUsersSnap.forEach(userChild => {
+                                    const userData = userChild.val();
+                                    if (userData && userData.balance) {
+                                        totalSum += parseFloat(userData.balance || 0);
+                                    }
+                                });
+                                const sumElement = document.getElementById('usersBalSum');
+                                if (sumElement) {
+                                    sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+                                }
+                            });
                         }
                     });
                 }
@@ -357,7 +381,8 @@
         }
 
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'toggle-bal-btn';                                                 toggleBtn.id = 'toggleBalBtn';
+        toggleBtn.className = 'toggle-bal-btn';
+        toggleBtn.id = 'toggleBalBtn';
         toggleBtn.innerHTML = isHidden ? 'Show' : 'Hide';
         balEl.parentNode.appendChild(toggleBtn);
 

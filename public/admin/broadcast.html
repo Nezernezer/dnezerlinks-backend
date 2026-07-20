@@ -42,7 +42,7 @@
     </div>
     <div class="section">
         <h4>In-App Message Dispatcher</h4>
-        
+
         <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Target Audience</label>
         <select id="targetType" onchange="toggleTargetInput()">
             <option value="all">Send to All Accounts (Broadcast)</option>
@@ -69,16 +69,36 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+    const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
         if (user) {
-            if (user.uid === MASTER_ADMIN_UID) {
-                document.getElementById('authStatus').innerText = "Session Active ●";
-                initSync();
-            } else {
-                alert("ACCESS DENIED");
-                window.location.href = "../home.html";
+            try {
+                // Fetch cryptographically signed identity token from Firebase client
+                const idToken = await user.getIdToken(true);
+                
+                // Route verification request to Render Node backend
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const verifyData = await response.json();
+
+                // Trigger application sync layer only if validated as admin
+                if (response.ok && verifyData.isAdmin) {
+                    document.getElementById('authStatus').innerText = "Session Active ●";
+                    initSync();
+                } else {
+                    alert("ACCESS DENIED");
+                    window.location.href = "../home.html";
+                }
+            } catch (err) {
+                console.error("Security gateway communication error:", err);
+                window.location.href = "../login.html";
             }
         } else {
             window.location.href = "../login.html";
@@ -131,8 +151,8 @@
             return alert("Please enter the target user's UID.");
         }
 
-        const confirmMsg = targetType === 'all' 
-            ? "Send to all users regardless of registration time?" 
+        const confirmMsg = targetType === 'all'
+            ? "Send to all users regardless of registration time?"
             : `Send this direct notification to user UID: ${targetUid}?`;
 
         if(!confirm(confirmMsg)) return;

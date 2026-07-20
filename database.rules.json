@@ -1,30 +1,51 @@
 {
   "rules": {
-    // Master Admin Global Rules
+    // Master Admin Global Rules (Fallback)
     ".read": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
     ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
-    "users": {
-      ".indexOn": ["email"],
+    "admin_roles": {
+      // Users can read their own roles; Master Admin can read/write all
       "$uid": {
-        // Access granted if it's the specific account owner OR the Master Admin
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+      }
+    },
+
+    "users": {
+      ".indexOn": ["email", "kyc_status"],
+      // Allow reading the whole node if Master or if they are an authenticated admin with privileges
+      ".read": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canVerifyKyc').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
+      
+      "$uid": {
+        // Fallback for regular clients to see their own account profile data
+        ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
 
     "transactions": {
       "$uid": {
-        // Access granted if it's the specific transaction owner OR the Master Admin
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
         ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
 
     "settings": {
-      // Settings can be viewed by public/frontend, but edited only by Master Admin
       ".read": "true",
       ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+    },
+    
+    "system_settings": {
+      ".read": "true",
+      ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+    },
+
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
+      }
     }
   }
 }

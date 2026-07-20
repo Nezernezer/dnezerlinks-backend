@@ -40,7 +40,7 @@
         .btn-timer { background: var(--info); }
         .btn-pass { background: #673ab7; }
         .btn-revert { background: #607d8b; }
-        .btn-pin { background: #e91e63; } 
+        .btn-pin { background: #e91e63; }
         .doc-label { font-weight: bold; color: #666; font-size: 10px; text-transform: uppercase; margin-right: 4px; }
         .dob-val { color: var(--danger); font-weight: bold; }
     </style>
@@ -49,7 +49,7 @@
 <div class="header-top">
     <div class="nav-links">
         <a href="index.html">← ADMIN HUB</a>
-        <span id="stats">Checking Master Key...</span>
+        <span id="stats">Verifying Master Access...</span>
     </div>
     <h2>Customer Management</h2>
     <div class="filter-scroll">
@@ -84,18 +84,42 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+    const backendDomain = "https://dnezerlinks-backend.onrender.com";
     let currentFilter = 'ALL';
     let usersData = {};
+    
+    // Dynamic Global Role Matrix Object State Container
+    let currentAdminRoles = {};
 
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
         if (user) {
-            if (user.uid === MASTER_ADMIN_UID) {
-                document.getElementById('stats').innerText = "Session Active ●";
-                startSync();
-            } else {
-                alert("ACCESS DENIED");
-                window.location.href = "../home.html";
+            try {
+                const idToken = await user.getIdToken(true);
+
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const verifyData = await response.json();
+
+                if (response.ok && verifyData.isAdmin) {
+                    // Fetch granular capability records assigned from adminroles panel
+                    const rolesSnap = await db.ref(`admin_roles/${user.uid}`).once('value');
+                    currentAdminRoles = rolesSnap.val() || {};
+                    
+                    document.getElementById('stats').innerText = "Session Active ●";
+                    startSync();
+                } else {
+                    alert("ACCESS DENIED");
+                    window.location.href = "../home.html";
+                }
+            } catch (err) {
+                console.error("Security gateway communication error:", err);
+                window.location.href = "../login.html";
             }
         } else {
             window.location.href = "../login.html";
@@ -120,12 +144,46 @@
         const tbody = document.getElementById('userTable');
         tbody.innerHTML = "";
         let count = 0;
+        
         Object.keys(usersData).forEach(uid => {
             const u = usersData[uid];
             let status = u.kyc_status || 'NOT-SUBMITTED';
             if(currentFilter !== 'ALL' && status !== currentFilter) return;
             count++;
             const isBlocked = u.account_status === 'blocked';
+            
+            // Generate standard actions accessible by Master Admin or targeted permission vectors
+            let operationsButtons = "";
+
+            // 1. Enforce KYC Validation Operations Permissions Profile
+            if (currentAdminRoles.isMaster || currentAdminRoles.canVerifyKyc) {
+                operationsButtons += `
+                    <button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
+                    <button class="action-btn btn-d" onclick="decline('${uid}', this)">Decline</button>
+                    <button class="action-btn btn-revert" onclick="revertStatus('${uid}', this)">Revert Status</button>
+                `;
+            }
+
+            // 2. Enforce Messaging/Broadcast Communication Operations Permissions Profile
+            if (currentAdminRoles.isMaster || currentAdminRoles.canBroadcast) {
+                operationsButtons += `
+                    <button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>
+                `;
+            }
+
+            // 3. Enforce Strict Master Admin Controls (Sensitive Credentials Modifications & Deletion Profiles)
+            if (currentAdminRoles.isMaster) {
+                operationsButtons += `
+                    <button class="action-btn btn-pass" onclick="resetPass('${u.email}', this)">Pass Reset</button>
+                    <button class="action-btn btn-pin" onclick="resetPin('${uid}', this)">PIN Reset</button>
+                    <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Timer Reset</button>
+                    <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">
+                        ${isBlocked ? 'Unblock' : 'Block'}
+                    </button>
+                    <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>
+                `;
+            }
+
             tbody.innerHTML += `
                 <tr>
                     <td>
@@ -143,17 +201,7 @@
                     <td><span class="badge status-${status}">${status}</span></td>
                     <td>
                         <div class="btn-group">
-                            <button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
-                            <button class="action-btn btn-d" onclick="decline('${uid}', this)">Decline</button>
-                            <button class="action-btn btn-revert" onclick="revertStatus('${uid}', this)">Revert Status</button>
-                            <button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>
-                            <button class="action-btn btn-pass" onclick="resetPass('${u.email}', this)">Pass Reset</button>
-                            <button class="action-btn btn-pin" onclick="resetPin('${uid}', this)">PIN Reset</button>
-                            <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Timer Reset</button>
-                            <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">
-                                ${isBlocked ? 'Unblock' : 'Block'}
-                            </button>
-                            <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>
+                            ${operationsButtons || '<small style="color:#64748b; font-style:italic;">🔒 Read-Only View</small>'}
                         </div>
                     </td>
                 </tr>
@@ -166,10 +214,10 @@
         if(!confirm("Reset this user's transaction PIN to 0000?")) return;
         btn.disabled = true;
         try {
-            await db.ref('users/'+uid).update({ 
+            await db.ref('users/'+uid).update({
                 transaction_pin: "0000",
                 failed_attempts: 0,
-                status: "active" 
+                status: "active"
             });
             await db.ref('notifications/'+uid).push({
                 message: "🛡️ Your Transaction PIN has been reset to 0000 by admin. Please change it immediately.",

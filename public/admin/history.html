@@ -44,18 +44,49 @@
         firebase.initializeApp(config);
         const db = firebase.database();
         const auth = firebase.auth();
-        const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+        const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
-        // 1. MASTER SESSION GUARD
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                if (user.uid === MASTER_ADMIN_UID) {
+        // 1. MAIN VERIFICATION ROUTER LOGIC
+        async function verifyAdminSession(forceRefresh = false) {
+            const user = auth.currentUser;
+            if (!user) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            try {
+                // Fetch cryptographically signed identity token from Firebase client
+                const idToken = await user.getIdToken(forceRefresh);
+                
+                // Route verification request to Render Node backend
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const verifyData = await response.json();
+
+                // Trigger synchronization listener only if verified backend-side
+                if (response.ok && verifyData.isAdmin) {
                     document.getElementById('authStatus').innerText = "Session Active ●";
                     startAuditSync();
                 } else {
                     alert("UNAUTHORIZED ACCESS");
                     window.location.href = "../home.html";
                 }
+            } catch (err) {
+                console.error("Security gateway communication error:", err);
+                window.location.href = "../login.html";
+            }
+        }
+
+        // Secure Session Guard Hook
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                verifyAdminSession(false);
             } else {
                 window.location.href = "../login.html";
             }
@@ -64,7 +95,7 @@
         // 2. ANTI-TIMEOUT REFRESH (Every 10 minutes)
         setInterval(() => {
             if (auth.currentUser) {
-                auth.currentUser.getIdToken(true).then(() => console.log("Master Session Refreshed"));
+                verifyAdminSession(true);
             }
         }, 600000);
 

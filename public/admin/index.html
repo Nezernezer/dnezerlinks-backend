@@ -68,7 +68,6 @@
         .btn-wallet { background: var(--accent); color: black; }
         .btn-broadcast { background: #2e7d32; }
         .btn-history { background: #607d8b; }
-        <a href="audit.html" class="card btn-history" style="background: #e91e63;">Audit History</a>
         .btn-exit { background: #444; margin-top: 10px; }
 
         .footer-info {
@@ -87,11 +86,12 @@
     </div>
 
     <div class="grid">
-        <a href="users.html" class="card">Manage Verifications</a>
-        <a href="wallet.html" class="card btn-wallet">Wallet Manager</a>
-        <a href="broadcast.html" class="card btn-broadcast">Broadcast & Marquee</a>
-        <a href="history.html" class="card btn-history">Transaction History</a>
-        <a href="audit.html" class="card btn-history" style="background: #e91e63;">Audit History</a>
+        <a href="users.html" id="nav-verifications" class="card" style="display: none;">Manage Verifications</a>
+        <a href="wallet.html" id="nav-wallet" class="card btn-wallet" style="display: none;">Wallet Manager</a>
+        <a href="broadcast.html" id="nav-broadcast" class="card btn-broadcast" style="display: none;">Broadcast & Marquee</a>
+        <a href="history.html" id="nav-history" class="card btn-history" style="display: none;">Transaction History</a>
+        <a href="adminroles.html" id="nav-roles" class="card btn-wallet" style="display: none;">Admin Privileges</a>
+        <a href="audit.html" id="nav-audit" class="card btn-history" style="background: #e91e63; display: none;">Audit History</a>
         <a href="../home.html" class="card btn-exit">Exit Admin</a>
     </div>
 
@@ -107,38 +107,103 @@
             projectId: "dnezerlinks"
         };
         firebase.initializeApp(config);
-        
-        const auth = firebase.auth();
-        const MASTER_ADMIN_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
 
-        // Secure Session Guard
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                if (user.uid !== MASTER_ADMIN_UID) {
+        const db = firebase.database();
+        const auth = firebase.auth();
+        const backendDomain = "https://dnezerlinks-backend.onrender.com";
+
+        // Main verification router logic
+        async function verifyAdminSession(forceRefresh = false) {
+            const user = auth.currentUser;
+            if (!user) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            try {
+                // Fetch cryptographically signed identity token from Firebase client
+                const idToken = await user.getIdToken(forceRefresh);
+
+                // Route verification check to Node backend environment container
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const verifyData = await response.json();
+
+                if (response.ok && verifyData.isAdmin) {
+                    // Fetch dynamic permissions schema for this logged-in UID
+                    const rolesSnap = await db.ref(`admin_roles/${user.uid}`).once('value');
+                    const roles = rolesSnap.val() || {};
+
+                    document.getElementById('adminStatus').innerText = roles.isMaster ? "● MASTER SESSION ACTIVE" : "● ASSIGNED SESSION ACTIVE";
+                    
+                    // Enforce the Hub navigation filter rules
+                    applyRoleRestrictions(roles);
+                } else {
+                    console.warn("Access authorization failure flagged.");
                     alert("Unauthorized Access");
                     window.location.href = "../home.html";
-                } else {
-                    document.getElementById('adminStatus').innerText = "● MASTER SESSION ACTIVE";
                 }
+            } catch (err) {
+                console.error("Security gateway communication error:", err);
+                window.location.href = "../login.html";
+            }
+        }
+
+        // Dynamically configures visible management vectors based on database checkboxes
+        function applyRoleRestrictions(roles) {
+            // Master Admins see absolutely everything
+            if (roles.isMaster) {
+                document.getElementById('nav-verifications').style.display = 'flex';
+                document.getElementById('nav-wallet').style.display = 'flex';
+                document.getElementById('nav-broadcast').style.display = 'flex';
+                document.getElementById('nav-history').style.display = 'flex';
+                document.getElementById('nav-roles').style.display = 'flex';
+                document.getElementById('nav-audit').style.display = 'flex';
+                return;
+            }
+
+            // Sub-admins: Evaluate granular permission fields selectively
+            if (roles.canVerifyKyc) {
+                document.getElementById('nav-verifications').style.display = 'flex';
+            }
+            if (roles.canManageWallets) {
+                document.getElementById('nav-wallet').style.display = 'flex';
+            }
+            if (roles.canBroadcast) {
+                document.getElementById('nav-broadcast').style.display = 'flex';
+            }
+            
+            // Allow general transactional history visibility for sub-admins if desired, 
+            // or clamp it down strictly to Master Admins. Showing by default if sub-admin has any rights:
+            if (roles.canVerifyKyc || roles.canManageWallets || roles.canBroadcast) {
+                document.getElementById('nav-history').style.display = 'flex';
+            }
+        }
+
+        // Secure Session Guard Hook
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                verifyAdminSession(false);
             } else {
                 window.location.href = "../login.html";
             }
         });
 
-        // Anti-Timeout Token Refresh (Every 10 minutes)
+        // Anti-Timeout Token Refresh loop (Every 10 minutes)
         setInterval(() => {
-            const user = auth.currentUser;
-            if (user && user.uid === MASTER_ADMIN_UID) {
-                user.getIdToken(true).then(() => {
-                    console.log("Admin Token Refreshed Automatically");
-                }).catch(() => {
-                    window.location.reload(); // Reload if refresh fails to force new login
-                });
+            if (auth.currentUser) {
+                verifyAdminSession(true);
             }
         }, 600000);
 
         // Instant Error Handling for Permission Denied
-        firebase.database().ref('.info/connected').on('value', (snap) => {
+        db.ref('.info/connected').on('value', (snap) => {
             if (snap.val() === false) {
                 console.log("Database Disconnected");
             }
