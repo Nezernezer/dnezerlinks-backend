@@ -1,12 +1,12 @@
 {
   "rules": {
-    // Master Admin Global Rules (Fallback)
+    // 1. MASTER ADMIN GLOBAL FALLBACKS (Absolute control at root)
     ".read": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
     ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
     "admin_roles": {
-      // Users can read their own roles; Master Admin can read/write all
       "$uid": {
+        // Users read their own assignments; Master Admin writes/reads all
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
         ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
       }
@@ -14,37 +14,37 @@
 
     "users": {
       ".indexOn": ["email", "kyc_status"],
-      // Allow reading the whole node if Master or if they are an authenticated admin with privileges
+      // Allow structural reads if Master or any valid operational Sub-Admin
       ".read": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canVerifyKyc').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
       
       "$uid": {
-        // Fallback for regular clients to see their own account profile data
+        // Individual profiles: Owner, Master Admin, or authorized Sub-Admins can read/write
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canVerifyKyc').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
       }
     },
 
     "transactions": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
       }
     },
 
     "settings": {
       ".read": "true",
-      ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+      ".write": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true)"
     },
     
     "system_settings": {
       ".read": "true",
-      ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
+      ".write": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canBroadcast').val() === true)"
     },
 
     "notifications": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
       }
     }
   }
