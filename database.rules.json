@@ -1,51 +1,25 @@
-{
-  "rules": {
-    // 1. MASTER ADMIN GLOBAL FALLBACKS (Absolute control at root)
-    ".read": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
+  "rules": {                                                                                             // Master Admin Global Rules                                                                         ".read": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
     ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'",
 
-    "admin_roles": {
-      "$uid": {
-        // Users read their own assignments; Master Admin writes/reads all
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
-        ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
-      }
-    },
-
     "users": {
-      ".indexOn": ["email", "kyc_status"],
-      // Allow structural reads if Master or any valid operational Sub-Admin
-      ".read": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canVerifyKyc').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
-      
-      "$uid": {
-        // Individual profiles: Owner, Master Admin, or authorized Sub-Admins can read/write
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canVerifyKyc').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
+      ".indexOn": ["email"],
+      "$uid": {                                                                                              // Access granted if it's the specific account owner OR the Master Admin
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
 
     "transactions": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
+        // Access granted if it's the specific transaction owner OR the Master Admin                         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2')"
       }
     },
 
     "settings": {
+      // Settings can be viewed by public/frontend, but edited only by Master Admin
       ".read": "true",
-      ".write": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true)"
-    },
-    
-    "system_settings": {
-      ".read": "true",
-      ".write": "auth != null && (auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canBroadcast').val() === true)"
-    },
-
-    "notifications": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2' || root.child('admin_roles').child(auth.uid).child('isMaster').val() === true || root.child('admin_roles').child(auth.uid).child('canManageWallets').val() === true)"
-      }
+      ".write": "auth != null && auth.uid === 'VCSNLSzYV2WsNG93mPE2ZtwdTna2'"
     }
-  }
-}
+  }                                                                                                  }
+
