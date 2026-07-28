@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin Activity & Audit | Dnezerlinks</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f4f7f6; --success: #2e7d32; --dark: #1e293b; --danger: #d32f2f; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--dark); height: 100vh; overflow: hidden; }
+        .wrapper { display: flex; flex-direction: column; height: 100vh; }
+
+        /* Header Styling (Fixed) */
+        .brand-header { background: linear-gradient(135deg, var(--primary) 0%, #1565c0 100%); color: white; padding: 14px 20px; box-shadow: 0 4px 12px rgba(13, 71, 161, 0.25); flex-shrink: 0; }
+        .back-hub-btn { color: rgba(255, 255, 255, 0.9); text-decoration: none; font-weight: 600; font-size: 13px; background: rgba(255, 255, 255, 0.15); padding: 4px 12px; border-radius: 20px; }
+
+        /* Fixed Top Container (Non-scrolling) */
+        .fixed-top-section { flex-shrink: 0; background: var(--bg); padding: 12px 15px 0 15px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+
+        .section-box { background: white; border-radius: 10px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; }
+        .section-title { font-size: 0.9rem; font-weight: 700; margin: 0 0 8px 0; color: var(--primary); display: flex; justify-content: space-between; align-items: center; }
+
+        /* Very Small Admin Name List (Pills) */
+        .admin-pills { display: flex; flex-wrap: wrap; gap: 6px; max-height: 70px; overflow-y: auto; }
+        .admin-pill { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 3px 8px; font-size: 10px; font-weight: 600; cursor: pointer; color: #334155; transition: 0.15s; }
+        .admin-pill:hover { background: #e2e8f0; }
+
+        /* Expanded Admin Card Modal / Box overlay */
+        .admin-detail-card { display: none; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 11px; }
+        .admin-detail-card.active { display: block; }
+        .role-badge { display: inline-block; background: #e0f2fe; color: #0369a1; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; margin: 2px; }
+
+        /* Master Controls Inline Box */
+        .master-action-row { display: none; justify-content: space-between; align-items: center; background: #fffbeb; border: 1px solid #f59e0b; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; font-size: 11px; }
+        .btn-master-danger { background: var(--danger); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 10px; cursor: pointer; }
+
+        /* Scrollable Activity Feed Section */
+        .scrollable-content { flex-grow: 1; overflow-y: auto; overflow-x: auto; padding: 0 15px 15px 15px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+
+        .table-wrapper { background: white; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.03); min-width: 600px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; text-align: left; }
+        th { background: #f8fafc; color: #475569; padding: 10px; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 5; box-shadow: 0 1px 0 #e2e8f0; }
+        td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        .time-col { white-space: nowrap; color: #64748b; font-size: 10px; }
+        .action-tag { font-weight: 700; text-transform: uppercase; font-size: 9px; padding: 2px 5px; border-radius: 3px; background: #f1f5f9; display: inline-block; }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <!-- Header -->
+    <div class="brand-header">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <a href="index.html" class="back-hub-btn">← Admin Hub</a>
+            <span id="authStatus" style="font-size:10px; font-weight:700;">Verifying...</span>
+        </div>
+        <h1 style="margin:0; font-size:1.2rem;">Activity & Audit Log</h1>
+    </div>
+
+    <!-- NON-SCROLLABLE FIXED TOP SECTION -->
+    <div class="fixed-top-section">
+        <!-- Master Control Bar (Only for Master) -->
+        <div class="master-action-row" id="masterActionPanel">
+            <span style="color:#78350f; font-weight:600;">Master Controls: Clear full historical audit records from the live database.</span>
+            <button class="btn-master-danger" onclick="clearAuditLogs()">Clear logs</button>
+        </div>
+
+        <!-- Privileged Accounts Micro-List -->
+        <div class="section-box">
+            <div class="section-title">
+                <span>Active Privileged Accounts</span>
+                <span id="adminCount" style="font-size: 10px; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 10px;">0 Admins</span>
+            </div>
+            <div class="admin-pills" id="adminPillsContainer">
+                <span style="color:#64748b; font-size:11px; font-style:italic;">Loading accounts...</span>
+            </div>
+            <!-- Expanded Individual Details Card Container -->
+            <div id="adminDetailCard" class="admin-detail-card">
+                <span style="color:#94a3b8; font-size:10px; float:right; cursor:pointer;" onclick="closeDetails()">✕ Close</span>
+                <div id="adminDetailContent">Select an admin name above to view credentials.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCROLLABLE ACTIVITY FEED SECTION -->
+    <div class="scrollable-content">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Admin Operator</th>
+                        <th>Action Performed</th>
+                        <th>Target User</th>
+                    </tr>
+                </thead>
+                <tbody id="activityTable">
+                    <tr><td colspan="4" style="text-align:center; color:#64748b; font-style:italic;">Loading audit events...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const config = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks"
+    };
+    if (!firebase.apps.length) {
+        firebase.initializeApp(config);
+    }
+    const db = firebase.database();
+    const auth = firebase.auth();
+    const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+    let cachedUsers = {};
+    let cachedRoles = {};
+
+    auth.onAuthStateChanged(user => {
+        if (!user) { window.location.href = "../login.html"; return; }
+
+        db.ref(`admin_roles/${user.uid}`).once('value').then(snap => {
+            const adminRoles = snap.val() || {};
+            const isMaster = (user.uid === MASTER_UID);
+            const hasAccess = (isMaster || adminRoles.canViewHistory === true || adminRoles.canManageWallets === true || adminRoles.canVerifyKyc === true || adminRoles.canBroadcast === true);                      
+            if (hasAccess) {
+                document.getElementById('authStatus').innerText = "Session Active ●";
+
+                if (isMaster) {
+                    document.getElementById('masterActionPanel').style.display = 'flex';
+                }                                                                                    
+                startLiveSync();
+            } else {
+                window.location.href = "index.html";
+            }
+        }).catch(() => {                                                                                         
+            window.location.href = "index.html";
+        });                                                                                              
+    });
+
+    function startLiveSync() {
+        db.ref('users').on('value', uSnap => {                                                                   
+            cachedUsers = uSnap.val() || {};
+            db.ref('admin_roles').on('value', rSnap => {
+                cachedRoles = rSnap.val() || {};
+                db.ref('admin_activity_logs').limitToLast(100).on('value', lSnap => {                                    
+                    renderAdmins(cachedUsers, cachedRoles);
+                    renderLogs(cachedUsers, lSnap.val() || {});                                                      
+                });                                                                                              
+            });
+        });                                                                                              
+    }
+
+    function renderAdmins(users, allRoles) {
+        const container = document.getElementById('adminPillsContainer');                            
+        const validAdminUids = Object.keys(allRoles).filter(uid => {
+            if (uid === MASTER_UID) return true;
+            const roles = allRoles[uid] || {};
+            return Object.values(roles).some(val => val === true);
+        });
+        
+        if (!validAdminUids.includes(MASTER_UID) && users[MASTER_UID]) {
+            validAdminUids.unshift(MASTER_UID);
+        }
+
+        document.getElementById('adminCount').innerText = validAdminUids.length + " Active";
+
+        if (validAdminUids.length === 0) {
+            container.innerHTML = `<span style="color:#64748b; font-size:11px;">No active privileged accounts.</span>`;                                                                                               
+            return;
+        }                                                                                            
+        container.innerHTML = "";
+        validAdminUids.forEach(uid => {
+            const u = users[uid] || {};
+            const name = u.fullName || u.name || (uid === MASTER_UID ? 'Master Administrator' : 'Unknown Admin');
+
+            container.innerHTML += `
+                <div class="admin-pill" onclick="showAdminDetails('${uid}')">${name}</div>`;
+        });
+    }
+
+    function showAdminDetails(uid) {
+        const u = cachedUsers[uid] || {};
+        const roles = cachedRoles[uid] || {};
+        const card = document.getElementById('adminDetailCard');
+        const content = document.getElementById('adminDetailContent');
+
+        const name = u.fullName || u.name || (uid === MASTER_UID ? 'Master Administrator' : 'Unknown');
+        const email = u.email || 'N/A';
+        const phone = u.phone || u.phoneNumber || 'N/A';
+        const grantedDate = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
+
+        let roleBadges = Object.keys(roles)
+            .filter(rKey => roles[rKey] === true)
+            .map(rKey => `<span class="role-badge">${rKey.replace('can', '')}</span>`)
+            .join('');
+
+        if (uid === MASTER_UID && !roleBadges) {
+            roleBadges = `<span class="role-badge">Master Access</span>`;
+        }
+
+        content.innerHTML = `
+            <div style="font-weight:700; color:var(--primary); margin-bottom:4px; font-size:12px;">${name}</div>
+            <div><b>UID:</b> <span style="font-family:monospace; font-size:10px;">${uid}</span></div>
+            <div><b>Email:</b> ${email} | <b>Phone:</b> ${phone}</div>
+            <div><b>Granted Date:</b> ${grantedDate}</div>
+            <div style="margin-top:4px;"><b>Roles:</b> ${roleBadges || '<span style="color:#999;">None</span>'}</div>
+        `;
+        card.classList.add('active');
+    }
+
+    function closeDetails() {
+        document.getElementById('adminDetailCard').classList.remove('active');
+    }
+
+    function renderLogs(users, logs) {
+        const tbody = document.getElementById('activityTable');
+        if (!logs) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#64748b; font-style:italic;">No audit records found yet.</td></tr>`;
+            return;                                                                                          
+        }
+
+        const logKeys = Object.keys(logs);
+        if (logKeys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#64748b; font-style:italic;">No audit records found yet.</td></tr>`;
+            return;
+        }                                                                                            
+        tbody.innerHTML = "";
+        logKeys.reverse().forEach(key => {                                                                       
+            const log = logs[key];
+            const adminUser = users[log.adminUid] || {};
+            const targetUser = users[log.targetUid] || {};
+
+            const timeFormatted = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A';
+            const adminName = adminUser.fullName || adminUser.name || (log.adminUid === MASTER_UID ? 'Master Administrator' : (log.adminUid || 'System'));
+            const targetName = targetUser.fullName || targetUser.name || log.targetUid || 'N/A';                            
+            
+            tbody.innerHTML += `
+                <tr>
+                    <td class="time-col">${timeFormatted}</td>
+                    <td><b>${adminName}</b><br><small style="color:#999;font-size:9px;">${log.adminUid}</small></td>
+                    <td><span class="action-tag">${log.action || 'Performed Action'}</span><br><small>${log.details || ''}</small></td>
+                    <td><b>${targetName}</b><br><small style="color:#999;font-size:9px;">${log.targetUid || ''}</small></td>
+                </tr>`;
+        });
+    }
+
+    async function clearAuditLogs() {
+        if (confirm("CRITICAL: Are you sure you want to permanently clear all audit history logs?")) {                                                                                                                
+            try {
+                await db.ref('admin_activity_logs').remove();
+                alert("Audit logs successfully wiped.");
+            } catch (err) {
+                alert("Error clearing logs: " + err.message);
+            }
+        }                                                                                                
+    }
+
+    window.logAdminAction = async function(adminuid, actionType, targetuid, details) {
+        try {
+            await db.ref('admin_activity_logs').push({                                                               
+                adminUid: adminuid,
+                action: actionType,
+                targetUid: targetuid || '',                                                                          
+                details: details || '',
+                timestamp: firebase.database.ServerValue.TIMESTAMP                                               
+            });                                                                                              
+        } catch (err) {
+            console.error("Failed to log audit activity:", err);
+        }
+    };
+</script>
+</body>
+</html>

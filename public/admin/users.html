@@ -49,7 +49,7 @@
 <div class="header-top">
     <div class="nav-links">
         <a href="index.html">← ADMIN HUB</a>
-        <span id="stats">Verifying Master Access...</span>
+        <span id="stats">Verifying Access...</span>
     </div>
     <h2>Customer Management</h2>
     <div class="filter-scroll">
@@ -84,46 +84,30 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const backendDomain = "https://dnezerlinks-backend.onrender.com";
+    const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
     let currentFilter = 'ALL';
     let usersData = {};
-    
-    // Dynamic Global Role Matrix Object State Container
     let currentAdminRoles = {};
+    let currentAdminUid = null;
 
-    auth.onAuthStateChanged(async user => {
-        if (user) {
-            try {
-                const idToken = await user.getIdToken(true);
+    auth.onAuthStateChanged(user => {
+        if (!user) { window.location.href = "../login.html"; return; }
+        currentAdminUid = user.uid;
 
-                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer " + idToken
-                    }
-                });
+        db.ref(`admin_roles/${user.uid}`).once('value').then(snap => {
+            currentAdminRoles = snap.val() || {};
+            const isMaster = (user.uid === MASTER_UID);
+            const hasAccess = (isMaster || currentAdminRoles.canVerifyKyc === true);
 
-                const verifyData = await response.json();
-
-                if (response.ok && verifyData.isAdmin) {
-                    // Fetch granular capability records assigned from adminroles panel
-                    const rolesSnap = await db.ref(`admin_roles/${user.uid}`).once('value');
-                    currentAdminRoles = rolesSnap.val() || {};
-                    
-                    document.getElementById('stats').innerText = "Session Active ●";
-                    startSync();
-                } else {
-                    alert("ACCESS DENIED");
-                    window.location.href = "../home.html";
-                }
-            } catch (err) {
-                console.error("Security gateway communication error:", err);
-                window.location.href = "../login.html";
+            if (hasAccess) {
+                document.getElementById('stats').innerText = "Session Active ●";
+                startSync();
+            } else {
+                window.location.href = "index.html";
             }
-        } else {
-            window.location.href = "../login.html";
-        }
+        }).catch(() => {
+            window.location.href = "index.html";
+        });
     });
 
     function startSync() {
@@ -140,179 +124,178 @@
         render();
     }
 
+    async function logAdminAction(actionType, targetUid, details) {
+        try {
+            await db.ref('admin_activity_logs').push({
+                adminUid: currentAdminUid,
+                action: actionType,
+                targetUid: targetUid || '',
+                details: details || '',
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
+        } catch (err) {
+            console.error("Failed to log activity:", err);
+        }
+    }
+
     function render() {
         const tbody = document.getElementById('userTable');
         tbody.innerHTML = "";
         let count = 0;
-        
         Object.keys(usersData).forEach(uid => {
             const u = usersData[uid];
             let status = u.kyc_status || 'NOT-SUBMITTED';
             if(currentFilter !== 'ALL' && status !== currentFilter) return;
             count++;
             const isBlocked = u.account_status === 'blocked';
-            
-            // Generate standard actions accessible by Master Admin or targeted permission vectors
+            const isMaster = (currentAdminUid === MASTER_UID);
+
             let operationsButtons = "";
-
-            // 1. Enforce KYC Validation Operations Permissions Profile
-            if (currentAdminRoles.isMaster || currentAdminRoles.canVerifyKyc) {
-                operationsButtons += `
-                    <button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
+            if (isMaster || currentAdminRoles.canVerifyKyc) {
+                operationsButtons += `<button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
                     <button class="action-btn btn-d" onclick="decline('${uid}', this)">Decline</button>
-                    <button class="action-btn btn-revert" onclick="revertStatus('${uid}', this)">Revert Status</button>
-                `;
+                    <button class="action-btn btn-revert" onclick="revertStatus('${uid}', this)">Revert</button>`;
             }
-
-            // 2. Enforce Messaging/Broadcast Communication Operations Permissions Profile
-            if (currentAdminRoles.isMaster || currentAdminRoles.canBroadcast) {
-                operationsButtons += `
-                    <button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>
-                `;
+            if (isMaster || currentAdminRoles.canBroadcast) {
+                operationsButtons += `<button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>`;
             }
-
-            // 3. Enforce Strict Master Admin Controls (Sensitive Credentials Modifications & Deletion Profiles)
-            if (currentAdminRoles.isMaster) {
+            if (isMaster) {
                 operationsButtons += `
-                    <button class="action-btn btn-pass" onclick="resetPass('${u.email}', this)">Pass Reset</button>
+                    <button class="action-btn btn-pass" onclick="resetPass('${u.email}', '${uid}', this)">Pass Reset</button>
                     <button class="action-btn btn-pin" onclick="resetPin('${uid}', this)">PIN Reset</button>
-                    <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Timer Reset</button>
-                    <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">
-                        ${isBlocked ? 'Unblock' : 'Block'}
-                    </button>
-                    <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>
-                `;
+                    <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Timer</button>
+                    <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">${isBlocked ? 'Unblock' : 'Block'}</button>
+                    <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>`;
             }
 
-            tbody.innerHTML += `
-                <tr>
-                    <td>
-                        <b>${u.name || 'Unknown'}</b><br><small>${u.email || ''}</small>
-                        <span class="uid">${uid}</span>
-                    </td>
-                    <td>
-                        <span class="doc-label">ID:</span> ${u.id_type || "N/A"}<br>
-                        <span class="doc-label">NO:</span> ${u.id_number || "N/A"}<br>
-                        <span class="doc-label">DOB:</span> <span class="dob-val">${u.dob || "N/A"}</span>
-                    </td>
-                    <td>
-                        <b>Bal: ₦${Number(u.balance || 0).toLocaleString()}</b>
-                    </td>
-                    <td><span class="badge status-${status}">${status}</span></td>
-                    <td>
-                        <div class="btn-group">
-                            ${operationsButtons || '<small style="color:#64748b; font-style:italic;">🔒 Read-Only View</small>'}
-                        </div>
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML += `<tr><td><b>${u.name || 'Unknown'}</b><br><small>${u.email || ''}</small><span class="uid">${uid}</span></td><td><span class="doc-label">ID:</span> ${u.id_type || "N/A"}<br><span class="doc-label">NO:</span> ${u.id_number || "N/A"}<br><span class="doc-label">DOB:</span> <span class="dob-val">${u.dob || "N/A"}</span></td><td><b>Bal: ₦${Number(u.balance || 0).toLocaleString()}</b></td><td><span class="badge status-${status}">${status}</span></td><td><div class="btn-group">${operationsButtons || '<small style="color:#64748b; font-style:italic;">Read-Only</small>'}</div></td></tr>`;
         });
         document.getElementById('stats').innerText = count + " Users Active";
     }
 
-    async function resetPin(uid, btn) {
-        if(!confirm("Reset this user's transaction PIN to 0000?")) return;
-        btn.disabled = true;
-        try {
-            await db.ref('users/'+uid).update({
-                transaction_pin: "0000",
-                failed_attempts: 0,
-                status: "active"
-            });
-            await db.ref('notifications/'+uid).push({
-                message: "🛡️ Your Transaction PIN has been reset to 0000 by admin. Please change it immediately.",
-                timestamp: Date.now(),
-                read: false
-            });
-            alert("PIN Reset to 0000 successfully.");
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
-    }
-
     async function approve(uid, btn) {
+        if (!confirm("Approve KYC for this user?")) return;
         btn.disabled = true;
         try {
-            await db.ref('users/'+uid).update({ kyc_status: 'VERIFIED' });
-            await db.ref('notifications/'+uid).push({
-                message: "✅ KYC Verified! Your account is now fully active.",
-                timestamp: Date.now(),
-                read: false
-            });
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
+            await db.ref(`users/${uid}`).update({ kyc_status: 'VERIFIED' });
+            await logAdminAction('VERIFY KYC', uid, `Approved KYC for user ${uid}`);
+        } catch (e) {
+            alert("Error: " + e.message);
+            btn.disabled = false;
+        }
     }
 
     async function decline(uid, btn) {
-        const reason = prompt("Enter reason for declining KYC:");
-        if(!reason) return;
+        const reason = prompt("Reason for declining KYC:");
+        if (reason === null) return;
         btn.disabled = true;
         try {
-            await db.ref('users/'+uid).update({ kyc_status: 'DECLINED' });
-            await db.ref('notifications/'+uid).push({
-                message: "❌ KYC Declined: " + reason,
-                timestamp: Date.now(),
-                read: false
-            });
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
+            await db.ref(`users/${uid}`).update({ kyc_status: 'DECLINED', kyc_decline_reason: reason });
+            await logAdminAction('DECLINE KYC', uid, `Declined KYC for user ${uid}. Reason: ${reason}`);
+        } catch (e) {
+            alert("Error: " + e.message);
+            btn.disabled = false;
+        }
     }
 
     async function revertStatus(uid, btn) {
-        if(!confirm("Revert this user to NOT-SUBMITTED?")) return;
+        if (!confirm("Revert KYC status to NOT-SUBMITTED?")) return;
         btn.disabled = true;
         try {
-            await db.ref('users/'+uid).update({ kyc_status: 'NOT-SUBMITTED' });
-            alert("Status reverted.");
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
-    }
-
-    async function resetPass(email, btn) {
-        if(!email) return alert("No email found for this user");
-        btn.disabled = true;
-        try {
-            await auth.sendPasswordResetEmail(email);
-            alert("Reset link sent to " + email);
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
-    }
-
-    async function resetTimer(uid, btn) {
-        btn.disabled = true;
-        try {
-            await db.ref('users/'+uid).update({ last_login: Date.now() });
-            alert("Session timer refreshed for user.");
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
-    }
-
-    async function toggleB(uid, newStatus, btn) {
-        btn.disabled = true;
-        try {
-            await db.ref('users/'+uid).update({ account_status: newStatus });
-            alert("Account is now " + newStatus);
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
-    }
-
-    async function delAccount(uid, btn) {
-        if(!confirm("Flag down and delete this user?")) return;
-        btn.disabled = true;
-        try {
-            await db.ref('users/'+uid).remove();
-            await db.ref('notifications/'+uid).remove();
-            alert("User account flagged and purged.");
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; }
+            await db.ref(`users/${uid}`).update({ kyc_status: 'NOT-SUBMITTED' });
+            await logAdminAction('REVERT KYC', uid, `Reverted KYC status to NOT-SUBMITTED for user ${uid}`);
+        } catch (e) {
+            alert("Error: " + e.message);
+            btn.disabled = false;
+        }
     }
 
     async function sendMsg(uid, btn) {
-        const m = prompt("Enter message for user:");
-        if(!m) return;
+        const message = prompt("Enter direct notice message for user:");
+        if (!message) return;
+        btn.disabled = true;
         try {
-            await db.ref('notifications/'+uid).push({ message: m, timestamp: Date.now(), read: false });
-            alert("Sent!");
-        } catch (e) { alert(e.message); }
+            const notifRef = db.ref(`notifications/${uid}`).push();
+            await notifRef.set({
+                message: message,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                read: false
+            });
+            await logAdminAction('SEND USER MESSAGE', uid, `Dispatched direct notice to user ${uid}: "${message}"`);
+            alert("Message dispatched successfully.");
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function resetPass(email, uid, btn) {
+        if (!email) { alert("User has no email address."); return; }
+        if (!confirm(`Send password reset email to ${email}?`)) return;
+        btn.disabled = true;
+        try {
+            await auth.sendPasswordResetEmail(email);
+            await logAdminAction('RESET PASSWORD', uid, `Sent password reset email to ${email}`);
+            alert("Password reset link sent successfully.");
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function resetPin(uid, btn) {
+        if (!confirm("Reset transaction PIN for this user?")) return;
+        btn.disabled = true;
+        try {
+            await db.ref(`users/${uid}/transaction_pin`).remove();
+            await logAdminAction('RESET PIN', uid, `Cleared transaction PIN for user ${uid}`);
+            alert("Transaction PIN cleared/reset.");
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function resetTimer(uid, btn) {
+        if (!confirm("Reset user session/lockout timer?")) return;
+        btn.disabled = true;
+        try {
+            await db.ref(`users/${uid}`).update({ lockout_until: null, login_attempts: 0 });
+            await logAdminAction('RESET TIMER', uid, `Reset session lockout constraints for user ${uid}`);
+            alert("Timer constraints reset.");
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function toggleB(uid, targetState, btn) {
+        if (!confirm(`Are you sure you want to set account status to: ${targetState}?`)) return;
+        btn.disabled = true;
+        try {
+            await db.ref(`users/${uid}`).update({ account_status: targetState });
+            await logAdminAction('TOGGLE ACCOUNT STATUS', uid, `Changed account status to ${targetState} for user ${uid}`);
+        } catch (e) {
+            alert("Error: " + e.message);
+            btn.disabled = false;
+        }
+    }
+
+    async function delAccount(uid, btn) {
+        if (!confirm("CRITICAL WARNING: Permanent deletion removes the user record from the database node. Proceed?")) return;
+        btn.disabled = true;
+        try {
+            await db.ref(`users/${uid}`).remove();
+            await db.ref(`admin_roles/${uid}`).remove();
+            await logAdminAction('DELETE ACCOUNT', uid, `Permanently deleted user record and roles for ${uid}`);
+        } catch (e) {
+            alert("Error: " + e.message);
+            btn.disabled = false;
+        }
     }
 </script>
 </body>

@@ -103,7 +103,7 @@
                 try {
                     // Fetch identity token from Firebase Auth client
                     const idToken = await user.getIdToken(true);
-                    
+
                     // Route verification check to the Node backend environment container
                     const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
                         method: "GET",
@@ -284,36 +284,45 @@
                 }
 
                 const userInfo = userCache[act.uid] || {};
+                const amount = Number(act.amount || 0);
 
-                let targetBalance = null;
-                if (act.balance !== undefined && act.balance !== null) targetBalance = Number(act.balance);
-                else if (userInfo.balance !== undefined && userInfo.balance !== null) targetBalance = Number(userInfo.balance);
+                let balBefore = null;
+                let balAfter = null;
 
-                let formattedBefore = 'N/A';
-                let formattedAfter = 'N/A';
+                // Priority 1: Read pre-recorded permanent logs snapshot if available (Ensures it stays static/unchanged)
+                if (act.balanceBefore !== undefined && act.balanceAfter !== undefined) {
+                    balBefore = Number(act.balanceBefore);
+                    balAfter = Number(act.balanceAfter);
+                } 
+                // Priority 2: Fallback derivation if log properties weren't explicitly saved
+                else {
+                    let targetBalance = null;
+                    if (act.balance !== undefined && act.balance !== null) targetBalance = Number(act.balance);
+                    else if (userInfo.balance !== undefined && userInfo.balance !== null) targetBalance = Number(userInfo.balance);
 
-                if (targetBalance !== null) {
-                    const amount = Number(act.amount || 0);
-                    let balBefore = targetBalance;
-                    let balAfter = targetBalance;
+                    if (targetBalance !== null) {
+                        balAfter = targetBalance;
+                        balBefore = targetBalance;
 
-                    if (isSuccessful) {
-                        if (type === 'CREDIT' || type === 'REFUND' || type === 'TOPUP') {
-                            balBefore = targetBalance - amount;
-                        } else {
-                            balBefore = targetBalance + amount;
+                        if (isSuccessful) {
+                            if (type === 'CREDIT' || type === 'REFUND' || type === 'TOPUP') {
+                                balBefore = targetBalance - amount;
+                            } else {
+                                balBefore = targetBalance + amount;
+                            }
                         }
                     }
-                    formattedBefore = `₦${balBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                    formattedAfter = `₦${balAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                 }
+
+                let formattedBefore = balBefore !== null ? `₦${balBefore.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A';
+                let formattedAfter = balAfter !== null ? `₦${balAfter.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A';
 
                 const pinMatches = findFieldDeep(act, ['pin', 'token', 'pin_code', 'recharge_pin', 'pincode']);
                 const isPinTx = type.includes('PIN') || service.includes('PIN') || type.includes('VOUCHER') || pinMatches.length > 0;
 
                 if (isPinTx && isSuccessful) {
                     let netName = (act.network || 'UNKNOWN').toUpperCase().trim();
-                    pinNetworkSales[netName] = (pinNetworkSales[netName] || 0) + Number(act.amount || 0);
+                    pinNetworkSales[netName] = (pinNetworkSales[netName] || 0) + amount;
                 }
 
                 const tvMatches = findFieldDeep(act, ['cable', 'tv', 'decoder', 'smartcard', 'iuc', 'customer_name', 'package', 'subscription']);
@@ -345,7 +354,7 @@
                                 <span>${name}</span>
                                 <span class="email-text">${email}</span>
                             </div>
-                            <div style="font-size:1.1rem; font-weight:800; color:${borderColor}">₦${act.amount || 0}</div>
+                            <div style="font-size:1.1rem; font-weight:800; color:${borderColor}">₦${amount}</div>
                         </div>
                         <div class="target-box">
                             <b>Target:</b> ${target} <br>

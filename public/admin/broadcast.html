@@ -30,7 +30,7 @@
 <div class="header-top">
     <div class="nav-links">
         <a href="index.html">← ADMIN HUB</a>
-        <span id="authStatus" class="status-bar">Verifying Master Access...</span>
+        <span id="authStatus" class="status-bar">Verifying Access...</span>
     </div>
     <h2>Broadcast Center</h2>
 </div>
@@ -42,18 +42,15 @@
     </div>
     <div class="section">
         <h4>In-App Message Dispatcher</h4>
-
         <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Target Audience</label>
         <select id="targetType" onchange="toggleTargetInput()">
             <option value="all">Send to All Accounts (Broadcast)</option>
             <option value="single">Send to a Specific User (UID)</option>
         </select>
-
         <div id="singleUserContainer" style="display: none;">
             <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Target User UID</label>
             <input type="text" id="targetUid" placeholder="Paste user identity key (UID) here...">
         </div>
-
         <label style="font-size:12px; font-weight:bold; color:#666; display:block; margin-bottom:5px;">Message Content</label>
         <textarea id="globalMsg" rows="3" placeholder="Type your message details here..."></textarea>
         <button class="btn btn-global" id="globalBtn" onclick="sendMessage()">Dispatch Message</button>
@@ -69,74 +66,71 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const backendDomain = "https://dnezerlinks-backend.onrender.com";
+    const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+    let currentAdminUid = null;
 
-    auth.onAuthStateChanged(async user => {
-        if (user) {
-            try {
-                // Fetch cryptographically signed identity token from Firebase client
-                const idToken = await user.getIdToken(true);
-                
-                // Route verification request to Render Node backend
-                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer " + idToken
-                    }
-                });
+    auth.onAuthStateChanged(user => {
+        if (!user) { window.location.href = "../login.html"; return; }
+        currentAdminUid = user.uid;
 
-                const verifyData = await response.json();
+        db.ref(`admin_roles/${user.uid}`).once('value').then(snap => {
+            const roles = snap.val() || {};
+            const isMaster = (user.uid === MASTER_UID);
 
-                // Trigger application sync layer only if validated as admin
-                if (response.ok && verifyData.isAdmin) {
-                    document.getElementById('authStatus').innerText = "Session Active ●";
-                    initSync();
-                } else {
-                    alert("ACCESS DENIED");
-                    window.location.href = "../home.html";
-                }
-            } catch (err) {
-                console.error("Security gateway communication error:", err);
-                window.location.href = "../login.html";
+            if (isMaster || roles.canBroadcast === true) {
+                document.getElementById('authStatus').innerText = "Session Active ●";
+                initSync();
+            } else {
+                window.location.href = "index.html";
             }
-        } else {
-            window.location.href = "../login.html";
-        }
+        }).catch(() => {
+            window.location.href = "index.html";
+        });
     });
 
     function initSync() {
         db.ref('system_settings/global_update').once('value').then(s => {
             document.getElementById('marqueeText').value = s.val() || "";
-        }).catch(error => {
-            console.error("Sync error:", error);
         });
     }
 
     function toggleTargetInput() {
         const type = document.getElementById('targetType').value;
-        const inputContainer = document.getElementById('singleUserContainer');
-        if (type === 'single') {
-            inputContainer.style.display = 'block';
-        } else {
-            inputContainer.style.display = 'none';
+        document.getElementById('singleUserContainer').style.display = (type === 'single') ? 'block' : 'none';
+    }
+
+    async function logAdminAction(actionType, targetUid, details) {
+        try {
+            await db.ref('admin_activity_logs').push({
+                adminUid: currentAdminUid,
+                action: actionType,
+                targetUid: targetUid || '',
+                details: details || '',
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
+        } catch (err) {
+            console.error("Failed to log activity:", err);
         }
     }
 
-    function updateMarquee() {
+    async function updateMarquee() {
         const text = document.getElementById('marqueeText').value;
         const btn = document.getElementById('marqueeBtn');
-        if(!text.trim()) return alert("Please enter text for marquee.");
+        if(!text.trim()) return alert("Please enter text.");
         btn.disabled = true;
-
-        db.ref('system_settings').update({
-            global_update: text,
-            global_broadcast_message: text,
-            broadcast_timestamp: Date.now()
-        })
-        .then(() => alert("✅ Marquee updated successfully across all configurations!"))
-        .catch(error => alert("❌ FAILED: " + error.message))
-        .finally(() => btn.disabled = false);
+        try {
+            await db.ref('system_settings').update({
+                global_update: text,
+                global_broadcast_message: text,
+                broadcast_timestamp: Date.now()
+            });
+            await logAdminAction('UPDATE MARQUEE', '', `Updated marquee text to: "${text}"`);
+            alert("✅ Marquee updated!");
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     async function sendMessage() {
@@ -145,46 +139,26 @@
         const targetUid = document.getElementById('targetUid').value.trim();
         const btn = document.getElementById('globalBtn');
 
-        if(!msg) return alert("Please enter a message.");
-
-        if (targetType === 'single' && !targetUid) {
-            return alert("Please enter the target user's UID.");
-        }
-
-        const confirmMsg = targetType === 'all'
-            ? "Send to all users regardless of registration time?"
-            : `Send this direct notification to user UID: ${targetUid}?`;
-
-        if(!confirm(confirmMsg)) return;
+        if(!msg) return alert("Enter message.");
+        if (targetType === 'single' && !targetUid) return alert("Enter target UID.");
+        if(!confirm("Proceed with dispatch?")) return;
 
         btn.disabled = true;
-        btn.innerText = "DISPATCHING MESSAGE...";
-
         try {
             if (targetType === 'all') {
-                await db.ref('system_settings').update({
-                    global_broadcast_message: msg,
-                    broadcast_timestamp: Date.now()
-                });
-                alert("✅ Global broadcast message delivered to all users!");
+                await db.ref('system_settings').update({ global_broadcast_message: msg, broadcast_timestamp: Date.now() });
+                await logAdminAction('GLOBAL BROADCAST', '', `Sent global notice: "${msg}"`);
+                alert("✅ Broadcast sent to all!");
             } else {
-                const timestamp = Date.now();
-                const newNotifRef = db.ref(`notifications/${targetUid}`).push();
-                await newNotifRef.set({
-                    id: newNotifRef.key,
-                    message: msg,
-                    read: false,
-                    timestamp: timestamp
-                });
-                alert(`✅ Message successfully delivered directly to user: ${targetUid}`);
-                document.getElementById('targetUid').value = "";
+                await db.ref(`notifications/${targetUid}`).push({ message: msg, read: false, timestamp: Date.now() });
+                await logAdminAction('TARGETED MESSAGE', targetUid, `Sent targeted user notification: "${msg}"`);
+                alert("✅ Message sent to user!");
             }
             document.getElementById('globalMsg').value = "";
-        } catch (error) {
-            alert("❌ FAILED: " + error.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "Dispatch Message";
+        } catch (e) { 
+            alert("❌ FAILED: " + e.message); 
+        } finally { 
+            btn.disabled = false; 
         }
     }
 </script>

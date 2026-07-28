@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dnezerlinks Webhook Relay</title>
+</head>
+<body>
+    <h3>Processing Webhook...</h3>
+    <script>
+        (async function() {
+            try {
+                // Read incoming data parameters if sent via URL or capture the incoming request body
+                const rawBody = document.body.innerText || "{}";
+                
+                // Forward the payload straight to your Render backend webhook route
+                const response = await fetch("https://dnezerlinks-backend.onrender.com/api/webhook/billstack", {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        // Forward signature headers if present in the browser context
+                        "x-billstack-signature": window.location.search 
+                    },
+                    body: JSON.stringify({
+                        source: "firebase-static-relay",
+                        urlParams: window.location.search,
+                        timestamp: Date.now()
+                    })
+                });
+
+                if (response.ok) {
+                    document.body.innerHTML = "<h3>Webhook Processed Successfully</h3>";
+                } else {
+                    document.body.innerHTML = "<h3>Webhook Forwarding Failed</h3>";
+                }
+            } catch (err) {
+                document.body.innerHTML = "<h3>Relay Error: " + err.message + "</h3>";
+            }
+        })();
+    </script>
+</body>
+</html>

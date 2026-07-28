@@ -15,12 +15,8 @@
         .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
         .header-top h2 { margin: 0; font-size: 1.4rem; }
-        .api-balance-box { background: rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 10px 12px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255, 255, 255, 0.1); }
-        .api-balance-box span { font-size: 12px; color: rgba(255,255,255,0.8); }
-        .api-balance-box strong { font-size: 16px; color: var(--accent); }
         .search-container { margin-top: 15px; }
         .search-box { width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; background: rgba(255,255,255,0.1); color: white; outline: none; font-size: 14px; box-sizing: border-box; }
-        .search-box::placeholder { color: rgba(255,255,255,0.7); }
         .content-area { padding: 15px; flex-grow: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .user-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
         .user-info b { color: #333; font-size: 15px; display: block; margin-bottom: 2px; }
@@ -32,18 +28,13 @@
     </style>
 </head>
 <body>
-
 <div class="wrapper">
     <div class="header-top">
         <div class="nav-links">
             <a href="index.html">← ADMIN HUB</a>
-            <span id="authStatus">Verifying Master Access...</span>
+            <span id="authStatus">Verifying...</span>
         </div>
         <h2>Funding Center</h2>
-        <div class="api-balance-box">
-            <span>VTU NAIJA API Balance:</span>
-            <strong id="vtuApiBalance">Loading...</strong>
-        </div>
         <div class="search-container">
             <input type="text" id="searchInput" class="search-box" placeholder="Search users..." onkeyup="filterUsers()">
         </div>
@@ -63,74 +54,29 @@
     firebase.initializeApp(config);
     const db = firebase.database();
     const auth = firebase.auth();
-    const backendDomain = "https://dnezerlinks-backend.onrender.com";
+    const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
     let allUsers = {};
-    
-    // Dynamic Privilege Object Container State
     let currentAdminRoles = {};
+    let currentAdminUid = null;
 
-    auth.onAuthStateChanged(async user => {
-        if (user) {
-            try {
-                const idToken = await user.getIdToken(true);
+    auth.onAuthStateChanged(user => {
+        if (!user) { window.location.href = "../login.html"; return; }
+        currentAdminUid = user.uid;
 
-                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer " + idToken
-                    }
-                });
+        db.ref(`admin_roles/${user.uid}`).once('value').then(snap => {
+            currentAdminRoles = snap.val() || {};
+            const isMaster = (user.uid === MASTER_UID);
 
-                const verifyData = await response.json();
-
-                if (response.ok && verifyData.isAdmin) {
-                    // Fetch dynamic permission node states
-                    const rolesSnap = await db.ref(`admin_roles/${user.uid}`).once('value');
-                    currentAdminRoles = rolesSnap.val() || {};
-
-                    document.getElementById('authStatus').innerText = "Session Active ●";
-                    startLiveSync();
-                    fetchVtuNaijaBalance();
-                } else {
-                    alert("ACCESS DENIED");
-                    window.location.href = "../home.html";
-                }
-            } catch (err) {
-                console.error("Security gateway communication error:", err);
-                window.location.href = "../login.html";
+            if (isMaster || currentAdminRoles.canManageWallets === true) {
+                document.getElementById('authStatus').innerText = "Session Active ●";
+                startLiveSync();
+            } else {
+                window.location.href = "index.html";
             }
-        } else {
-            window.location.href = "../login.html";
-        }
+        }).catch(() => {
+            window.location.href = "index.html";
+        });
     });
-
-    async function fetchVtuNaijaBalance() {
-        const balanceElement = document.getElementById('vtuApiBalance');
-        try {
-            if (!auth.currentUser) return;
-            const idToken = await auth.currentUser.getIdToken(true);
-
-            const response = await fetch(`${backendDomain}/api/admin/user`, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + idToken
-                }
-            });
-
-            if (!response.ok) throw new Error("HTTP Status: " + response.status);
-            const data = await response.json();
-            const balance = data.balance || (data.user && data.user.balance) || "0.00";
-
-            balanceElement.innerText = "₦" + Number(balance).toLocaleString(undefined, {minimumFractionDigits: 2});
-            balanceElement.style.color = "var(--accent)";
-        } catch (error) {
-            console.error(error);
-            balanceElement.innerText = "Error Loading";
-            balanceElement.style.color = "#ff5252";
-        }
-    }
 
     function startLiveSync() {
         db.ref('users').on('value', snap => {
@@ -139,20 +85,33 @@
         });
     }
 
+    async function logAdminAction(actionType, targetUid, details) {
+        try {
+            await db.ref('admin_activity_logs').push({
+                adminUid: currentAdminUid,
+                action: actionType,
+                targetUid: targetUid || '',
+                details: details || '',
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
+        } catch (err) {
+            console.error("Failed to log activity:", err);
+        }
+    }
+
     function render() {
         const container = document.getElementById('walletList');
         container.innerHTML = "";
-        
         Object.keys(allUsers).forEach(uid => {
             const u = allUsers[uid];
             const name = u.fullName || u.name || 'Unknown User';
-            
-            // Render explicit operations action configuration maps
+            const isMaster = (currentAdminUid === MASTER_UID);
+
             let actionMarkup = '';
-            if (currentAdminRoles.isMaster || currentAdminRoles.canManageWallets) {
+            if (isMaster || currentAdminRoles.canManageWallets) {
                 actionMarkup = `<button class="fund-btn" onclick="fund('${uid}', '${name.replace(/'/g, "\\'")}', this)">MANAGE</button>`;
             } else {
-                actionMarkup = `<span style="color:#64748b; font-size:11px; font-weight:600; padding:10px; background:#f1f5f9; border-radius:6px;">🔒 Read-Only</span>`;
+                actionMarkup = `<span style="color:#64748b; font-size:11px; padding:10px; background:#f1f5f9; border-radius:6px;">🔒 Read-Only</span>`;
             }
 
             container.innerHTML += `
@@ -169,11 +128,6 @@
     }
 
     async function fund(uid, name, btn) {
-        // Redundant explicit runtime validation fallback sequence
-        if (!currentAdminRoles.isMaster && !currentAdminRoles.canManageWallets) {
-            return alert("Security Exception: Operation rejected. Access Denied.");
-        }
-
         const amt = prompt(`Adjust balance for ${name}:`);
         if (!amt) return;
         const val = parseFloat(amt);
@@ -182,14 +136,12 @@
         btn.disabled = true;
         try {
             await db.ref('users/' + uid + '/balance').transaction(b => (Number(b) || 0) + val);
-            
-            // Append transaction adjustments telemetry to the user's operational message thread
             await db.ref('notifications/' + uid).push({
-                message: `💼 Your wallet balance was modified by ${val >= 0 ? 'adding ₦' + val.toLocaleString() : 'deducting ₦' + Math.abs(val).toLocaleString()} via systemic administrator adjustments.`,
+                message: `💼 Your wallet balance was modified by ${val >= 0 ? 'adding ₦' + val.toLocaleString() : 'deducting ₦' + Math.abs(val).toLocaleString()} via administrator.`,
                 timestamp: Date.now(),
                 read: false
             });
-
+            await logAdminAction('WALLET ADJUSTMENT', uid, `Adjusted wallet balance for ${name} (${uid}) by ₦${val.toLocaleString()}`);
             alert("Updated successfully.");
         } catch (e) {
             alert("Error: " + e.message);

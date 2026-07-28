@@ -13,11 +13,9 @@
         .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
         .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
 
-        /* Repositioned Notification Button down slightly to clear room for API Container */
         .notif-btn { position: absolute; top: 38px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
         .notif-badge { position: absolute; top: -5px; right: -5px; background: red; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; font-weight: bold; display: none; }
 
-        /* New Style Rules for Top Left Corner API Display Dashboard */
         .vtu-api-container { position: absolute; top: 12px; left: 15px; text-align: left; font-family: 'Segoe UI', sans-serif; display: none; }
         .vtu-api-label { font-size: 9px; color: rgba(255, 255, 255, 0.7); display: block; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
         .vtu-api-value { font-size: 12px; color: var(--accent); font-weight: bold; }
@@ -30,7 +28,6 @@
         .service-item:active { transform: scale(0.95); }
         .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
 
-        /* Updated Static Bottom Navigation Menu Layer */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -58,7 +55,6 @@
         .notif-item.unread { background: #fff9e6; border-left: 4px solid var(--accent); }
         .notif-time { font-size: 10px; color: #999; display: block; margin-top: 5px; }
 
-        /* New Style Rule for Users Balance Sum Container */
         .users-bal-sum { position: absolute; top: 40px; right: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.8); text-align: right; font-weight: 600; }
     </style>
 </head>
@@ -66,7 +62,7 @@
 
 <div class="header">
     <div id="vtuApiContainer" class="vtu-api-container">
-        <span id="apiLabelText" class="vtu-api-label">Admin Control</span>
+        <span id="apiLabelText" class="vtu-api-label">Checking Account...</span>
         <span id="vtuApiBalance" class="vtu-api-value">Loading...</span>
     </div>
 
@@ -90,7 +86,7 @@
     <div class="service-item" onclick="location.href='recharge-pin/'">🎫<span>Recharge PIN</span></div>
     <div class="service-item" onclick="location.href='electricity/'"> 💡<span>Electricity</span></div>
     <div class="service-item" onclick="location.href='airtime-to-cash/'">♻️<span>Swap</span></div>
-    <div class="service-item" onclick="location.href='fund-wallet.html'">💰<span>Fund Wallet</span></div>
+    <div class="service-item" onclick="location.href='404.html'">💰<span>Fund Wallet</span></div>
     <div class="service-item" onclick="location.href='history.html'"> 📜<span>History</span></div>
     <div class="service-item" onclick="location.href='send-money.html'">💸<span>Send Money</span></div>
 </div>
@@ -127,7 +123,6 @@
     let currentUser = null;
     const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
-    // Data Engine States for Merging Channels
     let userNotifications = [];
     let globalBroadcast = null;
 
@@ -140,85 +135,73 @@
                 document.getElementById('userName').innerText = "Welcome, " + (d.name || "User");
             });
 
-            try {
-                // Secure validation check via backend endpoint to confirm admin status
-                const idToken = await user.getIdToken(true);
-                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer + idToken"
+            // --- REALTIME DATABASE HYBRID ACCESS CONTROL SYSTEM ---
+            db.ref(`admin_roles/${user.uid}`).on('value', rolesSnap => {
+                const roles = rolesSnap.val() || {};
+                const isMasterAdmin = (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2");
+
+                if (isMasterAdmin) {
+                    roles.isMaster = true;
+                }
+
+                // Check if the current user has any administration privilege toggled
+                const internalPrivilege = roles.isMaster || roles.canVerifyKyc || roles.canManageWallets || roles.canBroadcast;
+
+                if (internalPrivilege) {
+                    const labelEl = document.getElementById('apiLabelText');
+                    if (labelEl) {
+                        labelEl.innerText = roles.isMaster ? "MASTER API" : "SUB-ADMIN API";
                     }
-                });
+                    document.getElementById('vtuApiContainer').style.display = 'block';
+                    fetchVtuNaijaBalance();
 
-                const verifyData = await response.json();
-
-                if (response.ok && verifyData.isAdmin) {
-                    // Fetch Dynamic Admin Role node matrix to evaluate granular settings
-                    db.ref(`admin_roles/${user.uid}`).on('value', rolesSnap => {
-                        const roles = rolesSnap.val() || {};
+                    db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
+                        const count = s.numChildren();
+                        const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
                         
-                        // Update API UI header details based on master status vs sub-admin
-                        const labelEl = document.getElementById('apiLabelText');
-                        if (labelEl) {
-                            labelEl.innerText = roles.isMaster ? "MASTER API" : "SUB-ADMIN API";
-                        }
-                        
-                        document.getElementById('vtuApiContainer').style.display = 'block';
-                        fetchVtuNaijaBalance();
-
-                        // Listen to incoming verifications badge count metrics
-                        db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
-                            const count = s.numChildren();
-                            const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
-                            
-                            // Check privileges to build the contextual view components
-                            let extraViewsMarkup = '';
-                            if (roles.isMaster || roles.canManageWallets) {
-                                extraViewsMarkup = `<div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
-                            }
-                            
-                            document.getElementById('adminContainer').innerHTML = `
-                                <button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>
-                                ${extraViewsMarkup}
-                            `;
-                        });
-
-                        // Calculate ecosystem balance sums strictly if administrative scope allows it
+                        let extraViewsMarkup = '';
                         if (roles.isMaster || roles.canManageWallets) {
-                            db.ref('users').on('value', allUsersSnap => {
-                                let totalSum = 0;
-                                allUsersSnap.forEach(userChild => {
-                                    const userData = userChild.val();
-                                    if (userData && userData.balance) {
-                                        totalSum += parseFloat(userData.balance || 0);
-                                    }
-                                });
-                                const sumElement = document.getElementById('usersBalSum');
-                                if (sumElement) {
-                                    sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+                            extraViewsMarkup = `<div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
+                        }
+
+                        document.getElementById('adminContainer').innerHTML = `
+                            <button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>
+                            ${extraViewsMarkup}
+                        `;
+                    });
+
+                    if (roles.isMaster || roles.canManageWallets) {
+                        db.ref('users').on('value', allUsersSnap => {
+                            let totalSum = 0;
+                            allUsersSnap.forEach(userChild => {
+                                const userData = userChild.val();
+                                if (userData && userData.balance) {
+                                    totalSum += parseFloat(userData.balance || 0);
                                 }
                             });
-                        }
-                    });
+                            const sumElement = document.getElementById('usersBalSum');
+                            if (sumElement) {
+                                sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+                            }
+                        });
+                    }
+                } else {
+                    // Turn components completely blank if permissions are dropped live
+                    document.getElementById('adminContainer').innerHTML = '';
+                    document.getElementById('vtuApiContainer').style.display = 'none';
                 }
-            } catch (err) {
-                console.error("Identity clearance failed via API route:", err);
-            }
+            });
 
-            // Sync Stream A: User Personal Notifications Realtime Listener
+            // Sync Personal Notifications
             db.ref('notifications/' + user.uid).on('value', snap => {
                 userNotifications = [];
                 snap.forEach(child => {
-                    userNotifications.push({
-                        key: child.key,
-                        ...child.val()
-                    });
+                    userNotifications.push({ key: child.key, ...child.val() });
                 });
                 renderCombinedNotifications();
             });
 
-            // Sync Stream B: Global Broadcast Settings Realtime Listener
+            // Sync Broadcast Messaging Channel
             db.ref('system_settings').on('value', snap => {
                 const settings = snap.val() || {};
                 if (settings.global_broadcast_message && settings.global_broadcast_message.trim() !== "") {
@@ -237,7 +220,6 @@
         } else { window.location.href = 'login.html'; }
     });
 
-    // Combined Array UI Renderer Function
     function renderCombinedNotifications() {
         if (!currentUser) return;
         const badge = document.getElementById('notifBadge');
