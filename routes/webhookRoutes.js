@@ -3,13 +3,134 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../config/firebase');
 
-// Use express.json() since we no longer need the raw buffer stream for HMAC body calculations!
-router.post('/billstack', express.json(), async (req, res) => {
-    const signature = req.headers['x-wiaxy-signature'] ||
-                      req.headers['x-billstack-signature'] ||
-                      req.headers['signature'];
+// Supports POST requests to /api/webhook AND /api/webhook/billstack
+router.post(['/', '/billstack'], express.json(), async (req, res) => {
+    const headers = req.headers;
+    const body = req.body;
 
-    const secret = process.env.BILLSTACK_SECRET_KEY;
+    // =========================================================================
+    // 1. DETECT PROVIDER & HANDLE MONNIFY WEBHOOK
+    // =========================================================================
+    // Monnify sends 'monnify-signature' and has an 'eventType' property
+    const monnifySignature = headers['monnify-signature'];
+    if (monnifySignature || body.eventType) {
+        try {
+            const secretKey = process.env.MONNIFY_SECRET_KEY;
+
+            // Validate Monnify Signature (HMAC-SHA512 of the stringified raw/parsed body)
+            if (secretKey) {
+                const dataString = JSON.stringify(body);
+                const computedSignature = crypto
+                    .createHmac('sha512', secretKey)
+                    .update(dataString)
+                    .digest('hex');
+
+                if (monnifySignature && monnifySignature.trim().toLowerCase() !== computedSignature.trim().toLowerCase()) {
+                    console.error("❌ Monnify Signature authentication failed!");
+                    return res.status(401).send('Invalid Monnify signature');
+                }
+            }
+
+            console.log("✅ Monnify Webhook received. Event type:", body.eventType);
+
+            if (body.eventType === 'SUCCESSFUL_TRANSACTION') {
+                const eventData = body.eventData;
+                const { amountPaid, paymentReference, transactionReference, customer, product } = eventData;
+
+                const uniqueTxIdentifier = transactionReference || paymentReference;
+                const customerEmail = customer ? customer.email : null;
+                const merchantRef = product ? product.reference : null; // Can be user UID or reference
+
+                if (!uniqueTxIdentifier) {
+                    console.error("❌ Monnify webhook missing unique reference.");
+                    return res.status(400).send("Missing transaction reference.");
+                }
+
+                // =============================================================
+                // 🔒 MONNIFY IDEMPOTENCY CHECK
+                // =============================================================
+                const processedRef = db.ref(`processed_webhooks/${uniqueTxIdentifier}`);
+                let isDuplicate = false;
+
+                await processedRef.transaction((currentValue) => {
+                    if (currentValue === null) {
+                        return { processed: true, timestamp: Date.now() };
+                    } else {
+                        isDuplicate = true;
+                        return;
+                    }
+                });
+
+                if (isDuplicate) {
+                    console.log(`⚠️ Duplicate Monnify Webhook Ignored: ${uniqueTxIdentifier}`);
+                    return res.status(200).send("Already Processed");
+                }
+
+                let targetUid = merchantRef;
+
+                // Fallback: If merchantRef isn't the direct UID, search user collection by email
+                if (!targetUid || !(await db.ref(`users/${targetUid}`).once('value')).exists()) {
+                    if (customerEmail) {
+                        const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
+                        if (usersSnap.exists()) {
+                            targetUid = Object.keys(usersSnap.val())[0];
+                        }
+                    }
+                }
+
+                if (!targetUid) {
+                    console.error(`❌ Monnify Mapping Failure: Could not map user for email ${customerEmail}`);
+                    return res.status(404).send("User reference mapping failed");
+                }
+
+                // Monnify Fee Calculations / Net Amount
+                const rawAmount = parseFloat(amountPaid);
+                const feeCharged = rawAmount * 0.015; // Adjust your fee structure if needed
+                const netAmountToCredit = rawAmount - feeCharged;
+
+                // Atomic Balance Update
+                await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
+                    return (parseFloat(currentBalance) || 0) + netAmountToCredit;
+                });
+
+                const txRef = db.ref(`transactions/${targetUid}`).push();
+                const timestamp = Date.now();
+
+                await txRef.set({
+                    id: txRef.key,
+                    amount: netAmountToCredit,
+                    reference: paymentReference || 'Monnify Direct',
+                    transaction_reference: uniqueTxIdentifier,
+                    type: 'credit',
+                    status: 'success',
+                    timestamp: timestamp
+                });
+
+                await db.ref(`notifications/${targetUid}/${uniqueTxIdentifier}`).set({
+                    message: `Your account has been successfully credited via Monnify with ₦${netAmountToCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
+                    read: false,
+                    timestamp: timestamp
+                });
+
+                return res.status(200).send("Processed");
+            }
+
+            return res.status(200).send("Event acknowledged");
+
+        } catch (err) {
+            console.error("🔥 Monnify Webhook processing crash:", err.message);
+            return res.status(400).send("Parsing error");
+        }
+    }
+
+    // =========================================================================
+    // 2. BILLSTACK WEBHOOK LOGIC
+    // =========================================================================
+    const signature = headers['x-wiaxy-signature'] ||
+                      headers['x-billstack-signature'] ||
+                      headers['signature'];
+
+    const secret = process.process.env.BILLSTACK_SECRET_KEY || process.env.BILLSTACK_SECRET_KEY;
 
     if (!signature || !secret) {
         console.error("❌ Missing signature or secret key from incoming webhook header.");
@@ -17,26 +138,21 @@ router.post('/billstack', express.json(), async (req, res) => {
     }
 
     try {
-        // 1. Compute the MD5 equivalent of your secret key
         const expectedSignature = crypto.createHash('md5').update(secret).digest('hex');
 
         const incomingSigClean = signature.trim().toLowerCase();
         const expectedSigClean = expectedSignature.trim().toLowerCase();
 
-        // 2. Strict Security Enforcement
         if (incomingSigClean !== expectedSigClean) {
-            console.error("❌ Signature authentication failed!");
+            console.error("❌ Billstack Signature authentication failed!");
             return res.status(401).send('Invalid signature');
         }
 
-        const eventData = req.body;
-        console.log("✅ Webhook verified successfully. Event type:", eventData.event);
+        const eventData = body;
+        console.log("✅ Billstack Webhook verified successfully. Event type:", eventData.event);
 
         if (eventData.event === 'PAYMENT_NOTIFICATION') {
-            // Extract transaction_ref alongside amount and merchant_reference
             const { amount, merchant_reference, transaction_ref, wiaxy_ref } = eventData.data;
-
-            // Extract unique transaction identifier across Billstack/Wiaxy platforms
             const uniqueTxIdentifier = transaction_ref || wiaxy_ref;
 
             if (!uniqueTxIdentifier) {
@@ -44,35 +160,24 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return res.status(400).send("Missing transaction identity reference.");
             }
 
-            // Extract the nested account_number
             const account_number = eventData.data.account ? eventData.data.account.account_number : null;
-
             let targetUid = null;
 
-            console.log(`🔍 Mapping Reference: ${merchant_reference} | Acc No: ${account_number}`);
-
-            // Method A: Native Prefix check
             if (merchant_reference && merchant_reference.startsWith('VA_')) {
                 const parts = merchant_reference.split('_');
                 targetUid = parts[1];
             }
 
-            // Method B: Database Fallback indexing check
             if (!targetUid) {
-                console.log(`🕵️ Reference is generic (${merchant_reference}). Searching user base profile trees...`);
                 const usersSnapshot = await db.ref('users').once('value');
                 const usersData = usersSnapshot.val() || {};
 
                 for (const uid in usersData) {
                     const user = usersData[uid];
-
-                    // Match by account number inside the assigned index
                     if (user.assigned_accounts && account_number && user.assigned_accounts[account_number]) {
                         targetUid = uid;
                         break;
                     }
-
-                    // Look inside virtual accounts collection histories
                     if (user.virtual_accounts) {
                         const matchFound = Object.values(user.virtual_accounts).some(acc =>
                             acc.account_number === account_number ||
@@ -92,9 +197,6 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return res.status(404).send("User reference mapping failed");
             }
 
-            // =================================================================
-            // 🔒 FIXED IDEMPOTENCY CHECK (Locks on Unique Transaction Reference)
-            // =================================================================
             const processedRef = db.ref(`processed_webhooks/${uniqueTxIdentifier}`);
             let isDuplicate = false;
 
@@ -103,7 +205,7 @@ router.post('/billstack', express.json(), async (req, res) => {
                     return { processed: true, timestamp: Date.now() };
                 } else {
                     isDuplicate = true;
-                    return; // Aborts transaction modification if reference exists
+                    return;
                 }
             });
 
@@ -112,14 +214,10 @@ router.post('/billstack', express.json(), async (req, res) => {
                 return res.status(200).send("Already Processed");
             }
 
-            // =================================================================
-            // 📊 FEE CALCULATION (1.5% Fee Deduction Setup)
-            // =================================================================
             const rawAmount = parseFloat(amount);
-            const feeCharged = rawAmount * 0.015; 
+            const feeCharged = rawAmount * 0.015;
             const netAmountToCredit = rawAmount - feeCharged;
 
-            // Update balance atomically once using the net calculated amount
             await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
                 return (parseFloat(currentBalance) || 0) + netAmountToCredit;
             });
@@ -127,7 +225,6 @@ router.post('/billstack', express.json(), async (req, res) => {
             const txRef = db.ref(`transactions/${targetUid}`).push();
             const timestamp = Date.now();
 
-            // Stores only the net credit layout cleanly for history pages
             await txRef.set({
                 id: txRef.key,
                 amount: netAmountToCredit,
@@ -139,7 +236,6 @@ router.post('/billstack', express.json(), async (req, res) => {
                 timestamp: timestamp
             });
 
-            // TARGET PATH: notifications -> uid -> transaction_ref
             await db.ref(`notifications/${targetUid}/${uniqueTxIdentifier}`).set({
                 message: `Your account has been successfully credited with ₦${netAmountToCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
                 read: false,

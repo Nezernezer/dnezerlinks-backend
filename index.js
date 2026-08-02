@@ -1,16 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const path = require('path'); // Added to locate the secret file safely
+const path = require('path');
 
-// Read the Secret File natively from Render's root folder
 const serviceAccountPath = path.join(__dirname, 'firebase-credentials.json');
 
 try {
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccountPath),
-            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com" // Matches your database
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com"
         });
         console.log("✅ Firebase Admin Initialized perfectly via Secret File!");
     }
@@ -23,15 +22,14 @@ const app = express();
 // CORS
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
 
-// Public webhook route (before JSON parser)
-app.use('/api/webhook', require('./routes/webhookRoutes'));
-
-// JSON parser
+// 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
 app.use(express.json());
+
+// 2. Public webhook route
+app.use('/api/webhook', require('./routes/webhookRoutes'));
 
 // Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {
-    // GET requests, home route, data/cable validations, webhooks, and virtual account generation (/fund) bypass this check
     if (
         req.method === 'GET' ||
         req.path === '/' ||
@@ -42,7 +40,6 @@ const securityGatekeeper = async (req, res, next) => {
         req.path.includes('/fund')
     ) return next();
 
-    // UPDATED: Destructure both uid and userId to avoid key mismatches from different frontends
     const { uid, userId, pin } = req.body;
     const activeUid = uid || userId;
 
@@ -51,7 +48,6 @@ const securityGatekeeper = async (req, res, next) => {
     }
 
     try {
-        // Querying transaction_pin or fallback pin from the user node using the resolved activeUid
         const pinSnapshot = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
         const altPinSnapshot = await admin.database().ref(`users/${activeUid}/pin`).once('value');
         const storedPin = pinSnapshot.val() || altPinSnapshot.val();
