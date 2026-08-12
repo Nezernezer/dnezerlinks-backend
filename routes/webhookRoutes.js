@@ -35,11 +35,12 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
 
             if (body.eventType === 'SUCCESSFUL_TRANSACTION') {
                 const eventData = body.eventData;
-                const { amountPaid, paymentReference, transactionReference, customer, product } = eventData;
+                const { amountPaid, paymentReference, transactionReference, customer, product, destinationAccountDetails } = eventData;
 
                 const uniqueTxIdentifier = transactionReference || paymentReference;
                 const customerEmail = customer ? customer.email : null;
                 const merchantRef = product ? product.reference : null; // Can be user UID or reference
+                const accountNumber = destinationAccountDetails ? destinationAccountDetails.accountNumber : null;
 
                 if (!uniqueTxIdentifier) {
                     console.error("❌ Monnify webhook missing unique reference.");
@@ -66,21 +67,63 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                     return res.status(200).send("Already Processed");
                 }
 
-                let targetUid = merchantRef;
+                let targetUid = null;
 
-                // Fallback: If merchantRef isn't the direct UID, search user collection by email
-                if (!targetUid || !(await db.ref(`users/${targetUid}`).once('value')).exists()) {
-                    if (customerEmail) {
-                        const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
-                        if (usersSnap.exists()) {
-                            targetUid = Object.keys(usersSnap.val())[0];
+                // 1. Check if merchantRef is a direct valid user UID
+                if (merchantRef) {
+                    const userCheckSnap = await db.ref(`users/${merchantRef}`).once('value');
+                    if (userCheckSnap.exists()) {
+                        targetUid = merchantRef;
+                    }
+                }
+
+                // 2. Scan root-level profile properties & nested collections across all users
+                if (!targetUid) {
+                    const usersSnapshot = await db.ref('users').once('value');
+                    const usersData = usersSnapshot.val() || {};
+
+                    for (const uid in usersData) {
+                        const user = usersData[uid];
+
+                        // Check root-level database fields (e.g., account_number)
+                        if (
+                            (accountNumber && user.account_number === accountNumber) ||
+                            (merchantRef && (user.account_number === merchantRef || user.reference === merchantRef))
+                        ) {
+                            targetUid = uid;
+                            break;
+                        }
+
+                        // Check fallback collections if they exist
+                        if (user.assigned_accounts && accountNumber && user.assigned_accounts[accountNumber]) {
+                            targetUid = uid;
+                            break;
+                        }
+                        if (user.virtual_accounts) {
+                            const matchFound = Object.values(user.virtual_accounts).some(acc =>
+                                acc.account_number === accountNumber ||
+                                acc.reference === merchantRef ||
+                                acc.account_number === merchantRef
+                            );
+                            if (matchFound) {
+                                targetUid = uid;
+                                break;
+                            }
                         }
                     }
                 }
 
+                // 3. Fallback: Search user collection by customer email
+                if (!targetUid && customerEmail) {
+                    const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
+                    if (usersSnap.exists()) {
+                        targetUid = Object.keys(usersSnap.val())[0];
+                    }
+                }
+
                 if (!targetUid) {
-                    console.error(`❌ Monnify Mapping Failure: Could not map user for email ${customerEmail}`);
-                    return res.status(404).send("User reference mapping failed");
+                    console.error(`❌ Monnify Mapping Failure: Could not map user for account ${accountNumber} or email ${customerEmail}`);
+                    return res.status(200).send("Event acknowledged - Unmapped user");
                 }
 
                 // Monnify Fee Calculations / Net Amount
@@ -101,6 +144,7 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                     amount: netAmountToCredit,
                     reference: paymentReference || 'Monnify Direct',
                     transaction_reference: uniqueTxIdentifier,
+                    account_number: accountNumber,
                     type: 'credit',
                     status: 'success',
                     timestamp: timestamp
@@ -152,6 +196,11 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
         console.log("✅ Billstack Webhook verified successfully. Event type:", eventData.event);
 
         if (eventData.event === 'PAYMENT_NOTIFICATION') {
+            if (!eventData.data) {
+                console.error("❌ Billstack payload missing 'data' object.");
+                return res.status(400).send("Malformed payload");
+            }
+
             const { amount, merchant_reference, transaction_ref, wiaxy_ref } = eventData.data;
             const uniqueTxIdentifier = transaction_ref || wiaxy_ref;
 
@@ -174,6 +223,17 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
 
                 for (const uid in usersData) {
                     const user = usersData[uid];
+
+                    // Check root-level database fields matching user schema
+                    if (
+                        (account_number && user.account_number === account_number) ||
+                        (merchant_reference && (user.account_number === merchant_reference || user.reference === merchant_reference))
+                    ) {
+                        targetUid = uid;
+                        break;
+                    }
+
+                    // Check nested collections as fallback
                     if (user.assigned_accounts && account_number && user.assigned_accounts[account_number]) {
                         targetUid = uid;
                         break;
@@ -192,9 +252,18 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                 }
             }
 
+            // Fallback: Check user profile by customer email if present
+            if (!targetUid && eventData.data.customer && eventData.data.customer.email) {
+                const customerEmail = eventData.data.customer.email;
+                const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
+                if (usersSnap.exists()) {
+                    targetUid = Object.keys(usersSnap.val())[0];
+                }
+            }
+
             if (!targetUid) {
-                console.error(`❌ Data Mapping Failure: No account matches reference data entries.`);
-                return res.status(404).send("User reference mapping failed");
+                console.error(`❌ Data Mapping Failure: No user matches account_number: ${account_number} or reference: ${merchant_reference}`);
+                return res.status(200).send("Event acknowledged - Unmapped user");
             }
 
             const processedRef = db.ref(`processed_webhooks/${uniqueTxIdentifier}`);
