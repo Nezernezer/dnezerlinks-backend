@@ -3,21 +3,19 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../config/firebase');
 
-// Supports POST requests to /api/webhook AND /api/webhook/billstack
-router.post(['/', '/billstack'], express.json(), async (req, res) => {
+// Supports all incoming path variations from the Firebase proxy to prevent unhandled routing crashes
+router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, res) => {
     const headers = req.headers;
     const body = req.body;
 
     // =========================================================================
     // 1. DETECT PROVIDER & HANDLE MONNIFY WEBHOOK
     // =========================================================================
-    // Monnify sends 'monnify-signature' and has an 'eventType' property
     const monnifySignature = headers['monnify-signature'];
     if (monnifySignature || body.eventType) {
         try {
             const secretKey = process.env.MONNIFY_SECRET_KEY;
 
-            // Validate Monnify Signature (HMAC-SHA512 of the stringified raw/parsed body)
             if (secretKey) {
                 const dataString = JSON.stringify(body);
                 const computedSignature = crypto
@@ -39,7 +37,7 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
 
                 const uniqueTxIdentifier = transactionReference || paymentReference;
                 const customerEmail = customer ? customer.email : null;
-                const merchantRef = product ? product.reference : null; // Can be user UID or reference
+                const merchantRef = product ? product.reference : null;
                 const accountNumber = destinationAccountDetails ? destinationAccountDetails.accountNumber : null;
 
                 if (!uniqueTxIdentifier) {
@@ -47,9 +45,6 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                     return res.status(400).send("Missing transaction reference.");
                 }
 
-                // =============================================================
-                // 🔒 MONNIFY IDEMPOTENCY CHECK
-                // =============================================================
                 const processedRef = db.ref(`processed_webhooks/${uniqueTxIdentifier}`);
                 let isDuplicate = false;
 
@@ -69,7 +64,6 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
 
                 let targetUid = null;
 
-                // 1. Check if merchantRef is a direct valid user UID
                 if (merchantRef) {
                     const userCheckSnap = await db.ref(`users/${merchantRef}`).once('value');
                     if (userCheckSnap.exists()) {
@@ -77,15 +71,12 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                     }
                 }
 
-                // 2. Scan root-level profile properties & nested collections across all users
                 if (!targetUid) {
                     const usersSnapshot = await db.ref('users').once('value');
                     const usersData = usersSnapshot.val() || {};
 
                     for (const uid in usersData) {
                         const user = usersData[uid];
-
-                        // Check root-level database fields (e.g., account_number)
                         if (
                             (accountNumber && user.account_number === accountNumber) ||
                             (merchantRef && (user.account_number === merchantRef || user.reference === merchantRef))
@@ -93,27 +84,9 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                             targetUid = uid;
                             break;
                         }
-
-                        // Check fallback collections if they exist
-                        if (user.assigned_accounts && accountNumber && user.assigned_accounts[accountNumber]) {
-                            targetUid = uid;
-                            break;
-                        }
-                        if (user.virtual_accounts) {
-                            const matchFound = Object.values(user.virtual_accounts).some(acc =>
-                                acc.account_number === accountNumber ||
-                                acc.reference === merchantRef ||
-                                acc.account_number === merchantRef
-                            );
-                            if (matchFound) {
-                                targetUid = uid;
-                                break;
-                            }
-                        }
                     }
                 }
 
-                // 3. Fallback: Search user collection by customer email
                 if (!targetUid && customerEmail) {
                     const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
                     if (usersSnap.exists()) {
@@ -126,12 +99,10 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                     return res.status(200).send("Event acknowledged - Unmapped user");
                 }
 
-                // Monnify Fee Calculations / Net Amount
                 const rawAmount = parseFloat(amountPaid);
-                const feeCharged = rawAmount * 0.015; // Adjust your fee structure if needed
+                const feeCharged = rawAmount * 0.015;
                 const netAmountToCredit = rawAmount - feeCharged;
 
-                // Atomic Balance Update
                 await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
                     return (parseFloat(currentBalance) || 0) + netAmountToCredit;
                 });
@@ -224,7 +195,6 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                 for (const uid in usersData) {
                     const user = usersData[uid];
 
-                    // Check root-level database fields matching user schema
                     if (
                         (account_number && user.account_number === account_number) ||
                         (merchant_reference && (user.account_number === merchant_reference || user.reference === merchant_reference))
@@ -233,7 +203,6 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                         break;
                     }
 
-                    // Check nested collections as fallback
                     if (user.assigned_accounts && account_number && user.assigned_accounts[account_number]) {
                         targetUid = uid;
                         break;
@@ -252,7 +221,6 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                 }
             }
 
-            // Fallback: Check user profile by customer email if present
             if (!targetUid && eventData.data.customer && eventData.data.customer.email) {
                 const customerEmail = eventData.data.customer.email;
                 const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
