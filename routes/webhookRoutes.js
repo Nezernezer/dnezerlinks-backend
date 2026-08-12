@@ -130,7 +130,7 @@ router.post(['/', '/billstack'], express.json(), async (req, res) => {
                       headers['x-billstack-signature'] ||
                       headers['signature'];
 
-    const secret = process.process.env.BILLSTACK_SECRET_KEY || process.env.BILLSTACK_SECRET_KEY;
+    const secret = process.env.BILLSTACK_SECRET_KEY;
 
     if (!signature || !secret) {
         console.error("❌ Missing signature or secret key from incoming webhook header.");
