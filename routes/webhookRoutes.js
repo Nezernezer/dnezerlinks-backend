@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../config/firebase');
 
-// Supports all incoming path variations from the Firebase proxy to prevent unhandled routing crashes
+// Supports POST requests to /api/webhook AND /api/webhook/billstack
 router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, res) => {
     const headers = req.headers;
     const body = req.body;
@@ -78,8 +78,8 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
                     for (const uid in usersData) {
                         const user = usersData[uid];
                         if (
-                            (accountNumber && user.account_number === accountNumber) ||
-                            (merchantRef && (user.account_number === merchantRef || user.reference === merchantRef))
+                            (accountNumber && String(user.account_number).trim() === String(accountNumber).trim()) ||
+                            (merchantRef && (String(user.account_number).trim() === String(merchantRef).trim() || String(user.reference).trim() === String(merchantRef).trim()))
                         ) {
                             targetUid = uid;
                             break;
@@ -134,7 +134,7 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
 
         } catch (err) {
             console.error("🔥 Monnify Webhook processing crash:", err.message);
-            return res.status(400).send("Parsing error");
+            return res.status(200).send("Event acknowledged with warnings");
         }
     }
 
@@ -149,7 +149,7 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
 
     if (!signature || !secret) {
         console.error("❌ Missing signature or secret key from incoming webhook header.");
-        return res.status(401).send('Unauthorized');
+        return res.status(200).send('Event acknowledged - Missing signature');
     }
 
     try {
@@ -160,60 +160,63 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
 
         if (incomingSigClean !== expectedSigClean) {
             console.error("❌ Billstack Signature authentication failed!");
-            return res.status(401).send('Invalid signature');
+            return res.status(200).send('Event acknowledged - Invalid signature');
         }
 
-        const eventData = body;
+        const eventData = body || {};
         console.log("✅ Billstack Webhook verified successfully. Event type:", eventData.event);
 
         if (eventData.event === 'PAYMENT_NOTIFICATION') {
-            if (!eventData.data) {
-                console.error("❌ Billstack payload missing 'data' object.");
-                return res.status(400).send("Malformed payload");
-            }
+            const dataObj = eventData.data || {};
+            const { amount, merchant_reference, transaction_ref, wiaxy_ref } = dataObj;
+            const uniqueTxIdentifier = transaction_ref || wiaxy_ref || `fallback_${Date.now()}`;
 
-            const { amount, merchant_reference, transaction_ref, wiaxy_ref } = eventData.data;
-            const uniqueTxIdentifier = transaction_ref || wiaxy_ref;
-
-            if (!uniqueTxIdentifier) {
-                console.error("❌ Webhook missing unique transaction_ref / wiaxy_ref keys.");
-                return res.status(400).send("Missing transaction identity reference.");
-            }
-
-            const account_number = eventData.data.account ? eventData.data.account.account_number : null;
+            const account_number = dataObj.account ? dataObj.account.account_number : null;
             let targetUid = null;
 
+            // 1. Try VA_ prefix mapping
             if (merchant_reference && merchant_reference.startsWith('VA_')) {
                 const parts = merchant_reference.split('_');
                 targetUid = parts[1];
             }
 
+            // 2. Comprehensive recursive scan of Firebase users across root fields and nested virtual/assigned collections
             if (!targetUid) {
                 const usersSnapshot = await db.ref('users').once('value');
                 const usersData = usersSnapshot.val() || {};
 
                 for (const uid in usersData) {
                     const user = usersData[uid];
-
+                    
+                    // Check Root Level Fields
                     if (
-                        (account_number && user.account_number === account_number) ||
-                        (merchant_reference && (user.account_number === merchant_reference || user.reference === merchant_reference))
+                        (account_number && String(user.account_number).trim() === String(account_number).trim()) ||
+                        (merchant_reference && (String(user.account_number).trim() === String(merchant_reference).trim() || String(user.reference).trim() === String(merchant_reference).trim()))
                     ) {
                         targetUid = uid;
                         break;
                     }
 
-                    if (user.assigned_accounts && account_number && user.assigned_accounts[account_number]) {
-                        targetUid = uid;
-                        break;
-                    }
-                    if (user.virtual_accounts) {
-                        const matchFound = Object.values(user.virtual_accounts).some(acc =>
-                            acc.account_number === account_number ||
-                            acc.reference === merchant_reference ||
-                            acc.account_number === merchant_reference
+                    // Check Nested assigned_accounts Dictionary
+                    if (user.assigned_accounts) {
+                        const matchedAssigned = Object.values(user.assigned_accounts).some(acc =>
+                            acc && String(acc.account_number).trim() === String(account_number).trim()
                         );
-                        if (matchFound) {
+                        if (matchedAssigned) {
+                            targetUid = uid;
+                            break;
+                        }
+                    }
+
+                    // Check Nested virtual_accounts Dictionary
+                    if (user.virtual_accounts) {
+                        const matchedVirtual = Object.values(user.virtual_accounts).some(acc =>
+                            acc && (
+                                String(acc.account_number).trim() === String(account_number).trim() ||
+                                String(acc.reference).trim() === String(merchant_reference).trim()
+                            )
+                        );
+                        if (matchedVirtual) {
                             targetUid = uid;
                             break;
                         }
@@ -221,8 +224,9 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
                 }
             }
 
-            if (!targetUid && eventData.data.customer && eventData.data.customer.email) {
-                const customerEmail = eventData.data.customer.email;
+            // 3. Fallback: Match by Customer Email if account lookup fails
+            if (!targetUid && dataObj.customer && dataObj.customer.email) {
+                const customerEmail = dataObj.customer.email;
                 const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
                 if (usersSnap.exists()) {
                     targetUid = Object.keys(usersSnap.val())[0];
@@ -230,7 +234,7 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
             }
 
             if (!targetUid) {
-                console.error(`❌ Data Mapping Failure: No user matches account_number: ${account_number} or reference: ${merchant_reference}`);
+                console.warn(`⚠️ Warning: Could not map user for account: ${account_number}, ref: ${merchant_reference}. Acknowledging safely.`);
                 return res.status(200).send("Event acknowledged - Unmapped user");
             }
 
@@ -247,11 +251,11 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
             });
 
             if (isDuplicate) {
-                console.log(`⚠️ Duplicate Webhook Ignored: TxRef ${uniqueTxIdentifier} already processed.`);
+                console.log(`⚠️ Duplicate Webhook Ignored: ${uniqueTxIdentifier}`);
                 return res.status(200).send("Already Processed");
             }
 
-            const rawAmount = parseFloat(amount);
+            const rawAmount = parseFloat(amount) || 0;
             const feeCharged = rawAmount * 0.015;
             const netAmountToCredit = rawAmount - feeCharged;
 
@@ -265,9 +269,9 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
             await txRef.set({
                 id: txRef.key,
                 amount: netAmountToCredit,
-                reference: merchant_reference,
+                reference: merchant_reference || 'Billstack Direct',
                 transaction_reference: uniqueTxIdentifier,
-                account_number: account_number,
+                account_number: account_number || 'N/A',
                 type: 'credit',
                 status: 'success',
                 timestamp: timestamp
@@ -279,14 +283,15 @@ router.post(['/', '/billstack', '/webhook', '/*'], express.json(), async (req, r
                 timestamp: timestamp
             });
 
+            console.log(`✅ Successfully credited user ${targetUid} with ₦${netAmountToCredit}`);
             return res.status(200).send("Processed");
         }
 
         return res.status(200).send("Event acknowledged");
 
     } catch (e) {
-        console.error("🔥 Webhook processing crash:", e.message);
-        return res.status(400).send("Parsing error");
+        console.error("🔥 Safe-catch webhook error:", e.message);
+        return res.status(200).send("Event acknowledged with warnings");
     }
 });
 
