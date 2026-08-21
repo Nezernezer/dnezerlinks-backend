@@ -25,7 +25,7 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders:
 // 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
 app.use(express.json());
 
-// 2. Public webhook route & Billstack prefix bridge
+// 2. Public webhook routes (handling both paths securely)
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 
