@@ -25,8 +25,9 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders:
 // 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
 app.use(express.json());
 
-// 2. Public webhook route
+// 2. Public webhook route & Billstack prefix bridge
 app.use('/api/webhook', require('./routes/webhookRoutes'));
+app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 
 // Security gatekeeper
 const securityGatekeeper = async (req, res, next) => {

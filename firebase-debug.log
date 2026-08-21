@@ -1,0 +1,141 @@
+[debug] [2026-08-21T04:31:10.760Z] ----------------------------------------------------------------------
+[debug] [2026-08-21T04:31:10.862Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase init functions
+[debug] [2026-08-21T04:31:10.866Z] CLI Version:   15.7.0
+[debug] [2026-08-21T04:31:10.870Z] Platform:      android
+[debug] [2026-08-21T04:31:10.871Z] Node Version:  v25.8.2
+[debug] [2026-08-21T04:31:10.874Z] Time:          Fri Aug 21 2026 05:31:10 GMT+0100 (West Africa Time)
+[debug] [2026-08-21T04:31:10.877Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-21T04:31:10.909Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /data/data/com.termux/files/home/dnezerlinks
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-08-21T04:31:33.521Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-21T04:31:33.547Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-08-21T04:31:33.557Z] Checked if tokens are valid: false, expires at: 1786505136168
+[debug] [2026-08-21T04:31:33.560Z] Checked if tokens are valid: false, expires at: 1786505136168
+[debug] [2026-08-21T04:31:33.563Z] > refreshing access token with scopes: []
+[debug] [2026-08-21T04:31:33.628Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-08-21T04:31:33.632Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-21T04:31:33.915Z] *** [apiv2] error from fetch(https://firebase-public.firebaseio.com/cli.json, {"headers":{},"method":"GET"}): FetchError: request to https://firebase-public.firebaseio.com/cli.json failed, reason: 
+[warn] ⚠  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection. 
+[debug] [2026-08-21T04:31:33.938Z] Failed to fetch MOTD FirebaseError: Failed to make request to https://firebase-public.firebaseio.com/cli.json
+[debug] [2026-08-21T04:31:34.008Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------a302e8be17c2c44d408e0521","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: getaddrinfo ENOTFOUND www.googleapis.com
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-08-21T04:31:34.044Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-08-21T04:31:34.394Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+    at invalidCredentialError (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/auth.js:177:12)
+    at refreshTokens (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/auth.js:590:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async getAccessToken (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/apiv2.js:49:18)
+    at async Client.addAuthHeader (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/apiv2.js:179:21)
+    at async Client.request (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/apiv2.js:126:34)
+    at async getFirebaseProject (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/management/projects.js:361:21)
+    at async usingProject (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/init/features/project.js:77:16)
+    at async Object.doSetup (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/init/features/project.js:29:9)
+    at async init (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/init/index.js:92:13)
+[error] 
+[error] Error: Failed to get Firebase project dnezerlinks. Please make sure the project exists and your account has permission to access it.
+[debug] [2026-08-21T04:31:57.847Z] ----------------------------------------------------------------------
+[debug] [2026-08-21T04:31:57.933Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase init functions
+[debug] [2026-08-21T04:31:57.938Z] CLI Version:   15.7.0
+[debug] [2026-08-21T04:31:57.939Z] Platform:      android
+[debug] [2026-08-21T04:31:57.941Z] Node Version:  v25.8.2
+[debug] [2026-08-21T04:31:57.944Z] Time:          Fri Aug 21 2026 05:31:57 GMT+0100 (West Africa Time)
+[debug] [2026-08-21T04:31:57.946Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-21T04:31:57.973Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /data/data/com.termux/files/home/dnezerlinks
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-08-21T04:32:12.127Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-21T04:32:12.131Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-08-21T04:32:12.141Z] Checked if tokens are valid: false, expires at: 1786505136168
+[debug] [2026-08-21T04:32:12.143Z] Checked if tokens are valid: false, expires at: 1786505136168
+[debug] [2026-08-21T04:32:12.148Z] > refreshing access token with scopes: []
+[debug] [2026-08-21T04:32:12.165Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-08-21T04:32:12.166Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-21T04:32:12.908Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-08-21T04:32:12.911Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-21T04:32:12.939Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-08-21T04:32:13.117Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-08-21T04:32:13.119Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-08-21T04:32:13.600Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-08-21T04:32:13.602Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","labels":{"firebase":"enabled"},"etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[info] i  Using project dnezerlinks (Dnezerlinks) . 
+[info] 
+=== Functions Setup
+[debug] [2026-08-21T04:32:13.649Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-21T04:32:13.651Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-08-21T04:32:13.653Z] [iam] checking project dnezerlinks for permissions ["firebase.projects.get"]
+[debug] [2026-08-21T04:32:13.659Z] Checked if tokens are valid: true, expires at: 1787290331913
+[debug] [2026-08-21T04:32:13.660Z] Checked if tokens are valid: true, expires at: 1787290331913
+[debug] [2026-08-21T04:32:13.662Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions [none]
+[debug] [2026-08-21T04:32:13.663Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions  x-goog-user-project=dnezerlinks
+[debug] [2026-08-21T04:32:13.663Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-08-21T04:32:15.055Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions 200
+[debug] [2026-08-21T04:32:15.058Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] Let's create a new codebase for your functions.
+[info] A directory corresponding to the codebase will be created in your project
+[info] with sample code pre-configured.
+
+[info] See https://firebase.google.com/docs/functions/organize-functions for
+[info] more information on organizing your functions using codebases.
+
+[info] Functions can be deployed with firebase deploy.
+
+[debug] [2026-08-21T04:34:58.179Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/node_modules/@inquirer/core/dist/commonjs/lib/create-prompt.js:101:37)
+    at Interface.emit (node:events:508:20)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1327:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:284:20)
+    at ReadStream.emit (node:events:520:22)
+    at emitKeys (node:internal/readline/utils:371:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+    at ReadStream.emit (node:events:508:20)
+    at addChunk (node:internal/streams/readable:564:12)
+[error] 
+[error] Error: An unexpected error has occurred.

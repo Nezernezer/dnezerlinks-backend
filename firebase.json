@@ -12,6 +12,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/webhook/**",
+        "destination": "https://dnezerlinks-backend.onrender.com/api/webhook/**"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
