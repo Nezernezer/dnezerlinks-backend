@@ -1,3 +1,4 @@
+const { onRequest } = require("firebase-functions/v2/https");
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -72,5 +73,5 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, error: 'Internal Server Error' });
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));
+// Export as a Firebase Cloud Function (replaces app.listen)
+exports.api = onRequest(app);

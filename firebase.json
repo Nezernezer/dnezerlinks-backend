@@ -12,6 +12,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/billstack/webhook",
+        "destination": "https://dnezerlinks-backend.onrender.com/api/billstack/webhook"
+      },
+      {
         "source": "/api/webhook/**",
         "destination": "https://dnezerlinks-backend.onrender.com/api/webhook/**"
       },
