@@ -1,0 +1,104 @@
+[debug] [2026-08-23T17:06:47.817Z] ----------------------------------------------------------------------
+[debug] [2026-08-23T17:06:47.865Z] Command:       /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/bin/firebase deploy --only hosting
+[debug] [2026-08-23T17:06:47.868Z] CLI Version:   15.7.0
+[debug] [2026-08-23T17:06:47.870Z] Platform:      android
+[debug] [2026-08-23T17:06:47.871Z] Node Version:  v25.8.2
+[debug] [2026-08-23T17:06:47.873Z] Time:          Sun Aug 23 2026 18:06:47 GMT+0100 (West Africa Time)
+[debug] [2026-08-23T17:06:47.875Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-23T17:07:02.517Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-23T17:07:02.521Z] > authorizing via signed-in user (nezerapps@gmail.com)
+[debug] [2026-08-23T17:07:02.523Z] [iam] checking project dnezerlinks for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-08-23T17:07:02.534Z] Checked if tokens are valid: false, expires at: 1787503860334
+[debug] [2026-08-23T17:07:02.536Z] Checked if tokens are valid: false, expires at: 1787503860334
+[debug] [2026-08-23T17:07:02.538Z] > refreshing access token with scopes: []
+[debug] [2026-08-23T17:07:02.556Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-08-23T17:07:02.557Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-23T17:07:13.244Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-08-23T17:07:13.247Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-23T17:07:13.279Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions [none]
+[debug] [2026-08-23T17:07:13.280Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions  x-goog-user-project=dnezerlinks
+[debug] [2026-08-23T17:07:13.281Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-23T17:07:14.943Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions 200
+[debug] [2026-08-23T17:07:14.945Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dnezerlinks:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-23T17:07:14.952Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:14.954Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:14.958Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks [none]
+[debug] [2026-08-23T17:07:34.604Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks 200
+[debug] [2026-08-23T17:07:34.606Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/dnezerlinks {"projectId":"dnezerlinks","projectNumber":"1028450580168","displayName":"Dnezerlinks","name":"projects/dnezerlinks","resources":{"hostingSite":"dnezerlinks","realtimeDatabaseInstance":"dnezerlinks-default-rtdb"},"state":"ACTIVE","labels":{"firebase":"enabled"},"etag":"1_fa89774f-b4d1-4d7d-a6d1-5940b6b04d02"}
+[info] 
+[info] === Deploying to 'dnezerlinks'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-08-23T17:07:34.664Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:34.667Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:34.669Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions [none]
+[debug] [2026-08-23T17:07:34.670Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-08-23T17:07:37.259Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions 200
+[debug] [2026-08-23T17:07:37.261Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions {"name":"projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[dnezerlinks]: beginning deploy... 
+[info] i  hosting[dnezerlinks]: found 61 files in public 
+[debug] [2026-08-23T17:07:37.565Z] [hosting] uploading with 200 concurrency
+[debug] [2026-08-23T17:07:37.707Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:37.708Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:37.716Z] [hosting] hash cache [cHVibGlj] stored for 61 files
+[debug] [2026-08-23T17:07:37.718Z] [hosting][hash queue][FINAL] {"max":55,"min":1,"avg":4.7271296086242724,"active":0,"complete":61,"success":61,"errored":0,"retried":0,"total":61,"elapsed":110}
+[debug] [2026-08-23T17:07:37.721Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3:populateFiles [none]
+[debug] [2026-08-23T17:07:37.723Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3:populateFiles {"files":{"/webhook.html":"37a713879b3775603616787e8633898dcaeedba01b53bbdf5c146d0fde1fa650","/users.html":"c1aa0dc35b0274aa8314e50ad471488169bec00aec357d7f2e4275aa2cce5a28","/transfer.html":"1a02c134c93a3b18c4119c07498e9f516aa32c5b0ae1d17333ae81955181f3c2","/test-create.js":"307594d469b6ed0658c421b914c570089e19648a0543612e9d2fdc546c8250ed","/support.html":"36a2d467f0e60b3d6fbc079f1069494678327331d7c7639890375b66845b6b81","/security.html":"3ffbd22e4fdc893a5b31fe58667916ad0fffe53d69cc5b60f9c4af582a191119","/profile.html":"f7842c9f56df593c1a8e0ef97875b6aeb1c3d175dcfbba6c271f0fab6544df1e","/pinsetup.html":"642be2c1f70933d8776c9c027afce7ee0ceb56eff2a5820934f60a9838d37ae1","/paysuccess.html":"e2e7cfd829257a1c8d8d566d6d5f080fa080a7b5cb93934bc50e04c6a8f0c518","/payfailed.html":"b523dc6b53c15b3569d01249bfa6d32387030b79ccd95b0b60f781d680995d89","/package-lock.json":"b51f8753bf1ea8ee1bc1c8029b46fe92e14e83cf58ed3558a888b662af2207eb","/login.html":"54ec98516df325688b79a64c4964ffebe9f0219e5fd1526429b853fd3c04f3b8","/kyc_status.html":"27971c5f6911048662dbf89a065366a2b58234545dffdcd08d1b86aa3cc0eadb","/index.html":"2b023d83c37a2a97d321450177b6645a8982f3227bb466b2e68ee6af26976f4d","/home_backup.html":"8fb4e551580ffb6f80bf8b2a17059546f3aa8642edcec41aa2c4ade85c194128","/home.html":"64f709ccce928ba6cdb831722dfd80fcb618dec0ab9e297137294464f5858a01","/home.bak":"c8bf71ac525a5149e55feadce8e0d170d5537026ce06b6a74adfdf1507870d05","/history.html.save":"c5074c097598c3260713a585df6bd18f45aba339c9ce586d6db8881946868f6f","/history.html.bak":"f075e55b7122a8755568c66200cde98907c1bfb807f3c4cfc141fe7977251951","/history.html":"efbc6c12fa212919fc349f039f246b2e483d93b58219812a552ec1633da409bb","/fund.bak":"731e27604dfa935754a34dcadda09937b864369fece3b498e0b3d8d7ace3a092","/fund-walletmonnify.html":"4de3122d36b7fce707ad801652564b0de13fc2a35d5837a5b45f4b9760500b20","/fund-wallet.html":"4cbcb4b131c23296eb73c7447cc1d66a19a544aadeea2ab06fecad1c74eed093","/firebase_backup.json":"d7fbb68bff7ea6cf45d5b7efbc0623188278a5e23facb27b31dd33ffb0891b20","/firebase-config.js":"c76d0f1b9c074dc8c9c47b66e911b30591fc2bf8948f4d8d46ff96f7c9cc0405","/broadcast.html":"c3b7dd1f23732fe067245444e3345353aac66db7301ff0ef8c98cb9a7506eaf8","/auth-check.js":"ee28620d5dbc9e8ef818c77e50cee5721361b2ab4f43443dc488701747225c19","/airtime.js":"7f9324b2ce3f3ecf03a5dee3f03dd7bf2d328cd98ce95c5e1e216fc0f5e9cacf","/admin_patch.sh":"e330732c7c72c599806f35a513884fb7d08147a143a7fc71fe3ba9754d1c73f8","/account.html":"e471fa6f00c1cd5e0f639ff71b458fed9bbc2e8de8170477ae41505a1f50db2c","/404.html":"20f10be0329c34dfbccdf411c51487943c4f3baa21af007755c3381ad2392028","/recharge-pin/index.html":"5bee2997bc4c363a05b8fb243cf3a4448950e67f70511aa81f2a4c8eba8cf3ab","/public/kyc_status.html":"0d47a32851de6beae7e045956b34a7522fa3153f53134191a6f11a26a7d144e9","/public/home.html":"72ae0b10b618dc673e73d991087f839f30c3d062d6188dc05db0fed317adfe2f","/public/js/modals.js":"27e5c9da4740041d52ec62421acb4d0616bbba9067204c56d08c04f965721cad","/exampin/index.html":"f9365fbc85a0be65bd3d46fd512926c19b92bd0c154937c79b07288c0865c879","/electricity/index.html":"15cad80afbca7954d6fce43e0552fa82a3315ec075f48332850aa2a08d9b3fb3","/data/script.js":"0f37f4b0fa2c55ed9f58d279434f3d3c31d7db4fd6163885951bad3aee859315","/data/plans.js":"947274d76dfffa26ce05918f4fe8a4d324b81e480001033130cc59ba84a8550a","/data/index.html":"be17fe4fbecf13b298d36d45708fd10947d372e1fdac633af5b844cfe7b4fd21","/data/data_old/index.html":"86326b5b117c914b5b80e6d47e5fbbc0c1698f3a2014b4b3006c76d920c50f8c","/cable/index.js":"87a33bddd1e5f16d28afda1cac3b01a3b0f2042e8de8b560bacad986ba316595","/cable/index.html":"558fd318d7023b45b83742caa03639776581412100f33f67b16a3f03f9d21e77","/cable/handler.js":"f1d2a9b4acf2304c043746d7851977e45438612c507d6f2d755cbcf6bcc6536e","/cable/cable_plans.js":"bec4080af65aee82e16ca12d739dbe3af1ba305052151728f883ece2d07287dc","/bulksms/index.html":"e9377d615b5b2c99a4d3d781de5ed8c24bfe1f6aa4bac5c3e4ee8918cbd69e51","/airtime-to-cash/index.html":"e7179afdd5d596e4003e61268a721fa8d20c526885b36060851095b709e603d6","/airtime/script.js":"65cd2e0025035dd963c7a6cf0334a261b5072f577c887a6ff4ba520729d6dc74","/airtime/airtime_old/index.html":"f08c3a01c93f9a17032361d4773ea37d1e18fc8103ac0e7a5dcdbba3a6f77d63","/admin/wallet.html":"d2f0ae917a57bc1cf8292cd728b3e7dca1a10755ee73a391274603e8381d0228","/admin/users_fix.js":"381198a73a58f5d260fe7b2712cef30fe00cd40de9019283ece1f627a3bd776a","/admin/users.html":"570ee6c874dc64dcb1b5c57702587f9184b2c5e37d8faa1d0bb4b930024b775e","/admin/users.bak":"45797b09e3f85d3ea9b8dccc32653119c7b93b7e39ca255de83a8c7667dc5fe8","/admin/index.html":"ccfda9380e00678cc89e789ab51a7c9bade8a73ffc6010782efb706e83cd6b87","/admin/history.html":"0969c65af9766fa66f7072f055b6c5ff02092f30a1caf7171d15b9de4b6835c3","/admin/broadcast.html":"b9f96a97fa52386cd741f4027add4a1704f8731596f8a5500e89d7cef2b409ec","/admin/auth.js":"b3b22879077871da02f0e84c327c0621ba81a9ba844a7ac5784df30918c3954b","/admin/audit.html":"e3b78add1c009471d889004d543b039c0c52809e6ad6ce7af258c5f3a27cdb47","/admin/adminroles.html":"c1babec9deb8f1e525953f01b50ec59a5cfabeba102deb8385c6320b24198c97","/admin/adminactivity.html":"05671063107456f0b4514aefe19420704fa6f6236897bbdb8aba1971bb646f96","/airtime/index.html":"9252703c51e93e67779dec4d66480b766f7cafe44a521e89922cbd774564075a"}}
+[debug] [2026-08-23T17:07:45.011Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3:populateFiles 200
+[debug] [2026-08-23T17:07:45.012Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3:populateFiles {"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/dnezerlinks/versions/37585107156f23f3/files"}
+[debug] [2026-08-23T17:07:45.015Z] [hosting][populate queue][FINAL] {"max":7309,"min":7309,"avg":7309,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":7310}
+[debug] [2026-08-23T17:07:45.016Z] [hosting] uploads queued: 0
+[debug] [2026-08-23T17:07:45.017Z] [hosting][upload queue][FINAL] {"max":0,"min":9999999999,"avg":0,"active":0,"complete":0,"success":0,"errored":0,"retried":0,"total":0,"elapsed":1787504865017}
+[info] ✔  hosting[dnezerlinks]: file upload complete 
+[debug] [2026-08-23T17:07:45.031Z] [hosting] deploy completed after 7727ms
+[debug] [2026-08-23T17:07:45.034Z] [
+  {
+    "config": {
+      "target": "dnezerlinks",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "site": "dnezerlinks"
+    },
+    "version": "projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3"
+  }
+]
+[info] i  hosting[dnezerlinks]: finalizing version... 
+[debug] [2026-08-23T17:07:45.052Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:45.054Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:45.061Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions/37585107156f23f3 updateMask=status%2Cconfig
+[debug] [2026-08-23T17:07:45.062Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions/37585107156f23f3 {"status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]}}
+[debug] [2026-08-23T17:07:46.685Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions/37585107156f23f3 200
+[debug] [2026-08-23T17:07:46.687Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/versions/37585107156f23f3 {"name":"projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-08-23T17:07:36.977342Z","createUser":{"email":"nezerapps@gmail.com"},"finalizeTime":"2026-08-23T17:07:47.662738Z","finalizeUser":{"email":"nezerapps@gmail.com"}}
+[debug] [2026-08-23T17:07:46.688Z] [hosting] finalized version for dnezerlinks:[object Object]
+[info] ✔  hosting[dnezerlinks]: version finalized 
+[info] i  hosting[dnezerlinks]: releasing new version... 
+[debug] [2026-08-23T17:07:46.692Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:46.693Z] Checked if tokens are valid: true, expires at: 1787508432250
+[debug] [2026-08-23T17:07:46.694Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/channels/live/releases versionName=projects%2F1028450580168%2Fsites%2Fdnezerlinks%2Fversions%2F37585107156f23f3
+[debug] [2026-08-23T17:07:46.695Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/channels/live/releases {}
+[debug] [2026-08-23T17:07:50.500Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/channels/live/releases 200
+[debug] [2026-08-23T17:07:50.501Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/dnezerlinks/channels/live/releases {"name":"projects/1028450580168/sites/dnezerlinks/channels/live/releases/1787504870546000","version":{"name":"projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-08-23T17:07:36.977342Z","createUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"},"finalizeTime":"2026-08-23T17:07:47.662738Z","finalizeUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"}},"type":"DEPLOY","releaseTime":"2026-08-23T17:07:50.546Z","releaseUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"}}
+[debug] [2026-08-23T17:07:50.503Z] [hosting] release: {"name":"projects/1028450580168/sites/dnezerlinks/channels/live/releases/1787504870546000","version":{"name":"projects/1028450580168/sites/dnezerlinks/versions/37585107156f23f3","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-08-23T17:07:36.977342Z","createUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"},"finalizeTime":"2026-08-23T17:07:47.662738Z","finalizeUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"}},"type":"DEPLOY","releaseTime":"2026-08-23T17:07:50.546Z","releaseUser":{"email":"nezerapps@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLT8wWLW92j6FcrZMyeDmf3iG2n8Oh-FbokeEilbvu2A70lMA=mo"}}
+[info] ✔  hosting[dnezerlinks]: release complete 
+[info] 
+[info] ✔  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/dnezerlinks/overview
+[info] Hosting URL: https://dnezerlinks.web.app
+[debug] [2026-08-23T17:07:57.464Z] Error: Timed out.
+    at Timeout.<anonymous> (/data/data/com.termux/files/usr/lib/node_modules/firebase-tools/lib/utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

@@ -12,10 +12,10 @@
             padding: 0;
         }
 
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f4f7f6; 
-            padding: 20px; 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            padding: 20px;
             color: #333;
             display: flex;
             flex-direction: column;
@@ -23,17 +23,17 @@
             min-height: 100vh;
             gap: 40px;
         }
-        
+
         /* COMPONENT 1: CONSTANT FUND WALLET */
-        .container { 
+        .container {
             width: 100%;
-            max-width: 550px; 
-            background: white; 
-            padding: 25px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            max-width: 550px;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        
+
         h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
         .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 5px; }
 
@@ -139,7 +139,7 @@
 
     <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
         <div class="swipe-container">
-            
+
             <!-- Box 1: Palmpay -->
             <div class="card bg-palm" id="card-palmpay">
                 <div class="card-title">Palmpay</div>
@@ -234,7 +234,7 @@
 
         const BANK_KEYS = ["palmpay", "9psb", "safehaven", "bankly", "providus", "wema"];
         let cachedUserData = {};
-        let processingBanks = new Set(); // Tracks buttons currently awaiting server responses
+        let processingBanks = new Set();
 
         function setStatus(text, color = "#333") {
             const msgEl = document.getElementById("status-msg");
@@ -247,6 +247,8 @@
             msgEl.style.display = "block";
         }
 
+        // Modified: Now strictly checks newly generated virtual accounts under the active migration pathway
+        // and completely ignores old global user account entries.
         function updateStaticCards(virtualAccounts) {
             let valuesList = [];
             if (virtualAccounts && typeof virtualAccounts === 'object') {
@@ -261,22 +263,12 @@
 
                 if (!infoBox || !btn) return;
 
-                // Skip updating if this specific card button is currently processing an API fetch
                 if (processingBanks.has(key)) return;
 
-                let matched = valuesList.find(acc => 
+                // Only check newly created accounts inside virtual_accounts
+                let matched = valuesList.find(acc =>
                     acc && acc.bank_name && acc.bank_name.toLowerCase().includes(key)
                 );
-
-                if (!matched && cachedUserData.account_number && cachedUserData.bank_name) {
-                    if (cachedUserData.bank_name.toLowerCase().includes(key)) {
-                        matched = {
-                            account_number: cachedUserData.account_number,
-                            account_name: cachedUserData.account_name || cachedUserData.name,
-                            bank_name: cachedUserData.bank_name
-                        };
-                    }
-                }
 
                 if (matched) {
                     numEl.innerText = matched.account_number;
@@ -298,8 +290,7 @@
 
         async function triggerAccountGeneration(bankKey) {
             const targetBtn = document.getElementById(`btn-${bankKey}`);
-            
-            // Add to processing set so live synchronization doesn't fight the UI state
+
             processingBanks.add(bankKey);
             if (targetBtn) {
                 targetBtn.disabled = true;
@@ -314,7 +305,7 @@
                 return;
             }
 
-            const nameArray = (cachedUserData.name || "Customer User").trim().split(/\s+/);
+            const nameArray = (cachedUserData.name || cachedUserData.first_name || "Customer User").trim().split(/\s+/);
             const firstName = nameArray[0] || "Customer";
             const lastName = nameArray.length > 1 ? nameArray[nameArray.length - 1] : "Client";
 
@@ -328,22 +319,20 @@
                         first_name: firstName,
                         last_name: lastName,
                         phone: cachedUserData.phone || "08000000000",
-                        requested_bank: bankKey 
+                        requested_bank: bankKey
                     })
                 });
 
                 const result = await response.json();
 
-                // Delete tracker item so the dynamic visual data layout resets cleanly
                 processingBanks.delete(bankKey);
 
                 if (result.success) {
                     setStatus("Account allocated successfully!", "#27AE60");
                     setTimeout(() => setStatus(""), 3000);
-                    // Force clean evaluation check instantly to snap UI to its new visual components
                     updateStaticCards(cachedUserData.virtual_accounts);
                 } else {
-                    setStatus(result.error || "Generation error. Please retry.", "red");
+                    setStatus(result.error || result.message || "Generation error. Please retry.", "red");
                     if (targetBtn) {
                         targetBtn.disabled = false;
                         targetBtn.innerText = "Get Account Number";

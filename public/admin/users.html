@@ -8,28 +8,337 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     <style>
-        :root { --primary: #0d47a1; --danger: #d32f2f; --success: #2e7d32; --warning: #ffa000; --info: #00838f; }
-        body { font-family: 'Segoe UI', sans-serif; background: #fff; margin: 0; padding: 0; }
-        .header-top { background: var(--primary); color: white; padding: 20px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .header-top h2 { margin: 0; font-size: 1.4rem; }
-        .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
-        .filter-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
-        .f-btn { white-space: nowrap; padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); color: white; font-size: 12px; font-weight: bold; cursor: pointer; }
-        .f-btn.active { background: white; color: var(--primary); border-color: white; }
-        .content-area { background: white; padding: 10px; }
-        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
-        th { background: #f4f7f6; color: #555; padding: 12px; text-align: left; border-bottom: 2px solid #eee; }
-        td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
-        .uid { font-family: monospace; color: #999; font-size: 10px; display: block; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+        :root {
+            --primary: #0d47a1;
+            --primary-dark: #002171;
+            --danger: #d32f2f;
+            --success: #2e7d32;
+            --warning: #ffa000;
+            --info: #00838f;
+            --surface: #ffffff;
+            --bg: #f0f4f8;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --muted: #64748b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            margin: 0;
+            padding: 0;
+            color: var(--text);
+            line-height: 1.45;
+        }
+        .header-top {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 18px 20px 14px;
+            box-shadow: 0 4px 20px rgba(13, 71, 161, 0.25);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 13px;
+            opacity: 0.95;
+            transition: opacity 0.2s;
+        }
+        .nav-links a:hover { opacity: 1; text-decoration: underline; }
+        #stats {
+            font-size: 12px;
+            background: rgba(255,255,255,0.15);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        .header-top h2 {
+            margin: 0 0 14px;
+            font-size: 1.45rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .filter-scroll {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 0 2px;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .filter-scroll::-webkit-scrollbar { display: none; }
+        .f-btn {
+            white-space: nowrap;
+            padding: 8px 18px;
+            border-radius: 22px;
+            border: 1.5px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.08);
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .f-btn:hover { background: rgba(255,255,255,0.18); }
+        .f-btn.active {
+            background: white;
+            color: var(--primary);
+            border-color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+        .search-wrap {
+            margin-top: 12px;
+            position: relative;
+        }
+        .search-wrap input {
+            width: 100%;
+            padding: 11px 14px 11px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            background: rgba(255,255,255,0.95);
+            color: var(--text);
+            outline: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s;
+        }
+        .search-wrap input::placeholder {
+            color: #94a3b8;
+        }
+        .search-wrap input:focus {
+            box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+        }
+        .search-wrap .search-icon {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 15px;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+        .content-area {
+            padding: 16px 12px 40px;
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        /* ---- User list cards ---- */
+        .user-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .user-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            overflow: hidden;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .user-card:hover {
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        }
+        .user-card.expanded {
+            border-color: #bfdbfe;
+            box-shadow: 0 4px 20px rgba(13, 71, 161, 0.12);
+        }
+
+        /* Compact summary row (always visible) */
+        .user-summary {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s ease;
+        }
+        .user-summary:hover {
+            background: #f8fafc;
+        }
+        .user-card.expanded .user-summary {
+            background: #f0f7ff;
+            border-bottom: 1px solid #e0eefc;
+        }
+        .summary-main {
+            flex: 1;
+            min-width: 0;
+        }
+        .summary-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .summary-email {
+            font-size: 12px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .summary-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .summary-balance {
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--primary);
+            white-space: nowrap;
+        }
+        .badge {
+            padding: 4px 9px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+        }
         .status-VERIFIED { background: #e8f5e9; color: var(--success); }
         .status-PENDING { background: #fff3e0; color: var(--warning); }
         .status-DECLINED { background: #ffebee; color: var(--danger); }
-        .status-NOT-SUBMITTED { background: #f5f5f5; color: #777; }
-        .btn-group { display: flex; gap: 4px; flex-wrap: wrap; max-width: 180px; }
-        .action-btn { border: none; padding: 7px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 10px; cursor: pointer; transition: 0.2s; }
+        .status-NOT-SUBMITTED { background: #f1f5f9; color: #64748b; }
+        .expand-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--muted);
+            transition: transform 0.25s ease, background 0.2s;
+            flex-shrink: 0;
+        }
+        .user-card.expanded .expand-icon {
+            transform: rotate(180deg);
+            background: #dbeafe;
+            color: var(--primary);
+        }
+
+        /* Expanded details panel */
+        .user-details {
+            display: none;
+            padding: 16px 18px 18px;
+            background: #fafbfc;
+            animation: fadeIn 0.2s ease;
+        }
+        .user-card.expanded .user-details {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 20px;
+            margin-bottom: 18px;
+        }
+        @media (max-width: 560px) {
+            .details-grid { grid-template-columns: 1fr; }
+        }
+        .detail-block h4 {
+            margin: 0 0 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+        }
+        .detail-row {
+            display: flex;
+            gap: 8px;
+            font-size: 13px;
+            margin-bottom: 5px;
+            align-items: baseline;
+        }
+        .detail-row .label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 72px;
+            flex-shrink: 0;
+        }
+        .detail-row .value {
+            color: var(--text);
+            font-weight: 500;
+            word-break: break-word;
+        }
+        .dob-val { color: var(--danger); font-weight: 700; }
+        .uid-box {
+            font-family: ui-monospace, 'Cascadia Code', monospace;
+            font-size: 11px;
+            background: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: #64748b;
+            word-break: break-all;
+            display: inline-block;
+            margin-top: 2px;
+        }
+        .account-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .account-active { background: #e8f5e9; color: var(--success); }
+        .account-blocked { background: #ffebee; color: var(--danger); }
+
+        /* 3×3 Operations grid */
+        .ops-section h4 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+        }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            max-width: 360px;
+        }
+        .action-btn {
+            border: none;
+            padding: 10px 8px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            font-size: 11px;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.2s;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .action-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+        }
+        .action-btn:active:not(:disabled) { transform: translateY(0); }
         .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn-v { background: var(--success); }
         .btn-d { background: var(--danger); }
@@ -41,8 +350,26 @@
         .btn-pass { background: #673ab7; }
         .btn-revert { background: #607d8b; }
         .btn-pin { background: #e91e63; }
-        .doc-label { font-weight: bold; color: #666; font-size: 10px; text-transform: uppercase; margin-right: 4px; }
-        .dob-val { color: var(--danger); font-weight: bold; }
+        .readonly-note {
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 12px;
+            padding: 8px 0;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--muted);
+            font-size: 14px;
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        @media (max-width: 480px) {
+            .summary-balance { display: none; }
+            .btn-grid { max-width: 100%; }
+            .action-btn { font-size: 10px; padding: 9px 4px; }
+        }
     </style>
 </head>
 <body>
@@ -57,22 +384,13 @@
         <button class="f-btn" onclick="setFilter('PENDING', this)">Pending KYC</button>
         <button class="f-btn" onclick="setFilter('VERIFIED', this)">Verified</button>
     </div>
+    <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="searchInput" placeholder="Search by name, email, UID, ID number..." oninput="onSearch()" autocomplete="off">
+    </div>
 </div>
 <div class="content-area">
-    <div class="table-wrapper">
-        <table>
-            <thead>
-                <tr>
-                    <th>Customer / UID</th>
-                    <th>KYC Submission Details</th>
-                    <th>Wallet & Activity</th>
-                    <th>Status</th>
-                    <th>Operations</th>
-                </tr>
-            </thead>
-            <tbody id="userTable"></tbody>
-        </table>
-    </div>
+    <div class="user-list" id="userTable"></div>
 </div>
 <script>
     const config = {
@@ -86,9 +404,11 @@
     const auth = firebase.auth();
     const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
     let currentFilter = 'ALL';
+    let searchQuery = '';
     let usersData = {};
     let currentAdminRoles = {};
     let currentAdminUid = null;
+    let expandedUids = new Set();
 
     auth.onAuthStateChanged(user => {
         if (!user) { window.location.href = "../login.html"; return; }
@@ -124,6 +444,40 @@
         render();
     }
 
+    function onSearch() {
+        searchQuery = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+        render();
+    }
+
+    function matchesSearch(uid, u) {
+        if (!searchQuery) return true;
+        const haystack = [
+            uid,
+            u.name || '',
+            u.email || '',
+            u.id_type || '',
+            u.id_number || '',
+            u.dob || '',
+            u.kyc_status || '',
+            String(u.balance || '')
+        ].join(' ').toLowerCase();
+        return haystack.includes(searchQuery);
+    }
+
+    function toggleExpand(uid, event) {
+        // Don't toggle if clicking a button inside details
+        if (event && event.target.closest('.action-btn')) return;
+        if (expandedUids.has(uid)) {
+            expandedUids.delete(uid);
+        } else {
+            expandedUids.add(uid);
+        }
+        const card = document.getElementById('card-' + uid);
+        if (card) {
+            card.classList.toggle('expanded', expandedUids.has(uid));
+        }
+    }
+
     async function logAdminAction(actionType, targetUid, details) {
         try {
             await db.ref('admin_activity_logs').push({
@@ -138,38 +492,133 @@
         }
     }
 
+    function formatValue(val, fallback = 'N/A') {
+        if (val === null || val === undefined || val === '') return fallback;
+        return val;
+    }
+
     function render() {
-        const tbody = document.getElementById('userTable');
-        tbody.innerHTML = "";
+        const container = document.getElementById('userTable');
+        container.innerHTML = "";
         let count = 0;
-        Object.keys(usersData).forEach(uid => {
+        const uids = Object.keys(usersData);
+
+        if (uids.length === 0) {
+            container.innerHTML = `<div class="empty-state">No customers found.</div>`;
+            document.getElementById('stats').innerText = "0 Users Active";
+            return;
+        }
+
+        // Will set empty state after loop if count stays 0 (e.g. search/filter)
+
+        uids.forEach(uid => {
             const u = usersData[uid];
             let status = u.kyc_status || 'NOT-SUBMITTED';
-            if(currentFilter !== 'ALL' && status !== currentFilter) return;
+            if (currentFilter !== 'ALL' && status !== currentFilter) return;
+            if (!matchesSearch(uid, u)) return;
             count++;
             const isBlocked = u.account_status === 'blocked';
             const isMaster = (currentAdminUid === MASTER_UID);
+            const accountStatus = u.account_status || 'active';
+            const accountClass = isBlocked ? 'account-blocked' : 'account-active';
+            const isExpanded = expandedUids.has(uid);
 
-            let operationsButtons = "";
+            // Build operation buttons (same permissions as before)
+            let opsButtons = [];
             if (isMaster || currentAdminRoles.canVerifyKyc) {
-                operationsButtons += `<button class="action-btn btn-v" onclick="approve('${uid}', this)">Verify</button>
-                    <button class="action-btn btn-d" onclick="decline('${uid}', this)">Decline</button>
-                    <button class="action-btn btn-revert" onclick="revertStatus('${uid}', this)">Revert</button>`;
+                opsButtons.push(`<button class="action-btn btn-v" onclick="event.stopPropagation(); approve('${uid}', this)">Verify</button>`);
+                opsButtons.push(`<button class="action-btn btn-d" onclick="event.stopPropagation(); decline('${uid}', this)">Decline</button>`);
+                opsButtons.push(`<button class="action-btn btn-revert" onclick="event.stopPropagation(); revertStatus('${uid}', this)">Revert</button>`);
             }
             if (isMaster || currentAdminRoles.canBroadcast) {
-                operationsButtons += `<button class="action-btn btn-msg" onclick="sendMsg('${uid}', this)">Message</button>`;
+                opsButtons.push(`<button class="action-btn btn-msg" onclick="event.stopPropagation(); sendMsg('${uid}', this)">Message</button>`);
             }
             if (isMaster) {
-                operationsButtons += `
-                    <button class="action-btn btn-pass" onclick="resetPass('${u.email}', '${uid}', this)">Pass Reset</button>
-                    <button class="action-btn btn-pin" onclick="resetPin('${uid}', this)">PIN Reset</button>
-                    <button class="action-btn btn-timer" onclick="resetTimer('${uid}', this)">Timer</button>
-                    <button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">${isBlocked ? 'Unblock' : 'Block'}</button>
-                    <button class="action-btn btn-del" onclick="delAccount('${uid}', this)">Delete</button>`;
+                opsButtons.push(`<button class="action-btn btn-pass" onclick="event.stopPropagation(); resetPass('${u.email || ''}', '${uid}', this)">Pass Reset</button>`);
+                opsButtons.push(`<button class="action-btn btn-pin" onclick="event.stopPropagation(); resetPin('${uid}', this)">PIN Reset</button>`);
+                opsButtons.push(`<button class="action-btn btn-timer" onclick="event.stopPropagation(); resetTimer('${uid}', this)">Timer</button>`);
+                opsButtons.push(`<button class="action-btn ${isBlocked ? 'btn-u' : 'btn-b'}" onclick="event.stopPropagation(); toggleB('${uid}', '${isBlocked ? 'active' : 'blocked'}', this)">${isBlocked ? 'Unblock' : 'Block'}</button>`);
+                opsButtons.push(`<button class="action-btn btn-del" onclick="event.stopPropagation(); delAccount('${uid}', this)">Delete</button>`);
             }
 
-            tbody.innerHTML += `<tr><td><b>${u.name || 'Unknown'}</b><br><small>${u.email || ''}</small><span class="uid">${uid}</span></td><td><span class="doc-label">ID:</span> ${u.id_type || "N/A"}<br><span class="doc-label">NO:</span> ${u.id_number || "N/A"}<br><span class="doc-label">DOB:</span> <span class="dob-val">${u.dob || "N/A"}</span></td><td><b>Bal: ₦${Number(u.balance || 0).toLocaleString()}</b></td><td><span class="badge status-${status}">${status}</span></td><td><div class="btn-group">${operationsButtons || '<small style="color:#64748b; font-style:italic;">Read-Only</small>'}</div></td></tr>`;
+            // Pad to keep grid tidy if fewer than 9
+            while (opsButtons.length > 0 && opsButtons.length < 9 && opsButtons.length % 3 !== 0) {
+                // no padding needed – grid just fills what it has
+                break;
+            }
+
+            const opsHtml = opsButtons.length
+                ? `<div class="btn-grid">${opsButtons.join('')}</div>`
+                : `<span class="readonly-note">Read-Only</span>`;
+
+            const declineReason = u.kyc_decline_reason
+                ? `<div class="detail-row"><span class="label">Decline</span><span class="value" style="color:var(--danger)">${formatValue(u.kyc_decline_reason)}</span></div>`
+                : '';
+
+            const pinStatus = u.transaction_pin ? 'Set' : 'Not set';
+            const lockoutInfo = u.lockout_until
+                ? new Date(u.lockout_until).toLocaleString()
+                : 'None';
+            const loginAttempts = u.login_attempts != null ? u.login_attempts : 0;
+
+            // Extra unknown fields
+            const knownKeys = new Set([
+                'name', 'email', 'kyc_status', 'id_type', 'id_number', 'dob',
+                'balance', 'account_status', 'transaction_pin', 'lockout_until',
+                'login_attempts', 'kyc_decline_reason'
+            ]);
+            let extraRows = '';
+            Object.keys(u).forEach(key => {
+                if (!knownKeys.has(key) && u[key] !== null && u[key] !== undefined && u[key] !== '') {
+                    const displayVal = typeof u[key] === 'object' ? JSON.stringify(u[key]) : String(u[key]);
+                    extraRows += `<div class="detail-row"><span class="label">${key}</span><span class="value">${displayVal}</span></div>`;
+                }
+            });
+
+            container.innerHTML += `
+            <div class="user-card ${isExpanded ? 'expanded' : ''}" id="card-${uid}">
+                <div class="user-summary" onclick="toggleExpand('${uid}', event)">
+                    <div class="summary-main">
+                        <div class="summary-name">${formatValue(u.name, 'Unknown')}</div>
+                        <div class="summary-email">${formatValue(u.email, 'No email')}</div>
+                    </div>
+                    <div class="summary-meta">
+                        <span class="summary-balance">₦${Number(u.balance || 0).toLocaleString()}</span>
+                        <span class="badge status-${status}">${status}</span>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                </div>
+                <div class="user-details">
+                    <div class="details-grid">
+                        <div class="detail-block">
+                            <h4>Identity & KYC</h4>
+                            <div class="detail-row"><span class="label">ID Type</span><span class="value">${formatValue(u.id_type)}</span></div>
+                            <div class="detail-row"><span class="label">ID No.</span><span class="value">${formatValue(u.id_number)}</span></div>
+                            <div class="detail-row"><span class="label">DOB</span><span class="value dob-val">${formatValue(u.dob)}</span></div>
+                            ${declineReason}
+                            <div class="detail-row" style="margin-top:8px"><span class="label">UID</span></div>
+                            <span class="uid-box">${uid}</span>
+                        </div>
+                        <div class="detail-block">
+                            <h4>Wallet & Account</h4>
+                            <div class="detail-row"><span class="label">Balance</span><span class="value" style="font-weight:700;color:var(--primary)">₦${Number(u.balance || 0).toLocaleString()}</span></div>
+                            <div class="detail-row"><span class="label">Account</span><span class="value"><span class="account-badge ${accountClass}">${accountStatus}</span></span></div>
+                            <div class="detail-row"><span class="label">PIN</span><span class="value">${pinStatus}</span></div>
+                            <div class="detail-row"><span class="label">Attempts</span><span class="value">${loginAttempts}</span></div>
+                            <div class="detail-row"><span class="label">Lockout</span><span class="value">${lockoutInfo}</span></div>
+                            ${extraRows}
+                        </div>
+                    </div>
+                    <div class="ops-section">
+                        <h4>Operations</h4>
+                        ${opsHtml}
+                    </div>
+                </div>
+            </div>`;
         });
+        if (count === 0) {
+            container.innerHTML = `<div class="empty-state">${searchQuery ? 'No customers match your search.' : 'No customers found for this filter.'}</div>`;
+        }
         document.getElementById('stats').innerText = count + " Users Active";
     }
 

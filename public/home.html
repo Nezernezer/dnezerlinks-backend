@@ -13,9 +13,11 @@
         .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
         .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
 
+        /* Repositioned Notification Button down slightly to clear room for API Container */
         .notif-btn { position: absolute; top: 38px; left: 15px; font-size: 20px; cursor: pointer; text-decoration: none; color: white; border: none; background: none; outline: none; }
         .notif-badge { position: absolute; top: -5px; right: -5px; background: red; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; font-weight: bold; display: none; }
 
+        /* New Style Rules for Top Left Corner API Display Dashboard */
         .vtu-api-container { position: absolute; top: 12px; left: 15px; text-align: left; font-family: 'Segoe UI', sans-serif; display: none; }
         .vtu-api-label { font-size: 9px; color: rgba(255, 255, 255, 0.7); display: block; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
         .vtu-api-value { font-size: 12px; color: var(--accent); font-weight: bold; }
@@ -27,22 +29,7 @@
         .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; border: 1px solid #eee; transition: 0.2s; }
         .service-item:active { transform: scale(0.95); }
         .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
-
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            width: 100%;
-            background: white;
-            display: flex;
-            justify-content: space-around;
-            padding: 15px 0;
-            border-top: 1px solid #ddd;
-            z-index: 9999;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-        }
-
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #ddd; z-index: 1000; }
         .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
         .nav-link.active { color: var(--primary); font-weight: bold; }
         .admin-switch { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 6px 12px; border-radius: 15px; font-size: 10px; cursor: pointer; }
@@ -55,14 +42,20 @@
         .notif-item.unread { background: #fff9e6; border-left: 4px solid var(--accent); }
         .notif-time { font-size: 10px; color: #999; display: block; margin-top: 5px; }
 
+        /* New Style Rule for Users Balance Sum Container */
         .users-bal-sum { position: absolute; top: 40px; right: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.8); text-align: right; font-weight: 600; }
+
+        /* Pin Prompt Modal Custom Actions */
+        .pin-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .pin-btn-cancel { flex: 1; background: #e0e0e0; color: #333; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .pin-btn-setup { flex: 1; background: var(--primary); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="header">
     <div id="vtuApiContainer" class="vtu-api-container">
-        <span id="apiLabelText" class="vtu-api-label">Checking Account...</span>
+        <span class="vtu-api-label">Master </span>
         <span id="vtuApiBalance" class="vtu-api-value">Loading...</span>
     </div>
 
@@ -110,6 +103,20 @@
     </div>
 </div>
 
+<!-- Transaction PIN Prompt Modal -->
+<div id="pinPromptModal" class="modal">
+    <div class="modal-content" style="text-align: center;">
+        <h3 style="color: var(--primary); margin-top: 0;">Transaction PIN Required</h3>
+        <p style="font-size: 14px; color: #555; line-height: 1.5;">
+            Dear user, you haven't set up your transaction PIN yet. A transaction PIN is required to safely complete transfers and purchases on your account.
+        </p>
+        <div class="pin-modal-actions">
+            <button class="pin-btn-cancel" onclick="closePinModal()">Cancel</button>
+            <button class="pin-btn-setup" onclick="location.href='pinsetup.html'">Setup Pin</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
@@ -123,6 +130,7 @@
     let currentUser = null;
     const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
+    // Data Engine States for Merging Channels
     let userNotifications = [];
     let globalBroadcast = null;
 
@@ -133,75 +141,78 @@
                 const d = snap.val() || {};
                 document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
                 document.getElementById('userName').innerText = "Welcome, " + (d.name || "User");
+
+                // Check if transaction PIN is set up (checking common schema keys: 'pin' or 'transaction_pin')
+                const hasPin = d.pin || d.transaction_pin;
+                if (!hasPin) {
+                    // Trigger popup after 3 seconds if not already dismissed in this browsing session
+                    if (!sessionStorage.getItem('pin_prompt_dismissed')) {
+                        setTimeout(() => {
+                            // Double check modal isn't already visible
+                            const modal = document.getElementById('pinPromptModal');
+                            if (modal && modal.style.display !== "block") {
+                                modal.style.display = "block";
+                            }
+                        }, 3000);
+                    }
+                }
             });
 
-            // --- REALTIME DATABASE HYBRID ACCESS CONTROL SYSTEM ---
-            db.ref(`admin_roles/${user.uid}`).on('value', rolesSnap => {
-                const roles = rolesSnap.val() || {};
-                const isMasterAdmin = (user.uid === "VCSNLSzYV2WsNG93mPE2ZtwdTna2");
-
-                if (isMasterAdmin) {
-                    roles.isMaster = true;
-                }
-
-                // Check if the current user has any administration privilege toggled
-                const internalPrivilege = roles.isMaster || roles.canVerifyKyc || roles.canManageWallets || roles.canBroadcast;
-
-                if (internalPrivilege) {
-                    const labelEl = document.getElementById('apiLabelText');
-                    if (labelEl) {
-                        labelEl.innerText = roles.isMaster ? "MASTER API" : "SUB-ADMIN API";
+            try {
+                // Secure validation check via backend endpoint instead of a hardcoded frontend string
+                const idToken = await user.getIdToken(true);
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
                     }
+                });
+
+                const verifyData = await response.json();
+
+                if (response.ok && verifyData.isAdmin) {
                     document.getElementById('vtuApiContainer').style.display = 'block';
                     fetchVtuNaijaBalance();
 
                     db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
                         const count = s.numChildren();
                         const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
-                        
-                        let extraViewsMarkup = '';
-                        if (roles.isMaster || roles.canManageWallets) {
-                            extraViewsMarkup = `<div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
-                        }
-
-                        document.getElementById('adminContainer').innerHTML = `
-                            <button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>
-                            ${extraViewsMarkup}
-                        `;
+                        document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button><div id="usersBalSum" class="users-bal-sum">Users Bal: Loading...</div>`;
                     });
 
-                    if (roles.isMaster || roles.canManageWallets) {
-                        db.ref('users').on('value', allUsersSnap => {
-                            let totalSum = 0;
-                            allUsersSnap.forEach(userChild => {
-                                const userData = userChild.val();
-                                if (userData && userData.balance) {
-                                    totalSum += parseFloat(userData.balance || 0);
-                                }
-                            });
-                            const sumElement = document.getElementById('usersBalSum');
-                            if (sumElement) {
-                                sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    // Real-time sync calculation summing user balances
+                    db.ref('users').on('value', allUsersSnap => {
+                        let totalSum = 0;
+                        allUsersSnap.forEach(userChild => {
+                            const userData = userChild.val();
+                            if (userData && userData.balance) {
+                                totalSum += parseFloat(userData.balance || 0);
                             }
                         });
-                    }
-                } else {
-                    // Turn components completely blank if permissions are dropped live
-                    document.getElementById('adminContainer').innerHTML = '';
-                    document.getElementById('vtuApiContainer').style.display = 'none';
+                        const sumElement = document.getElementById('usersBalSum');
+                        if (sumElement) {
+                            sumElement.innerText = "Users Bal: ₦" + totalSum.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        }
+                    });
                 }
-            });
+            } catch (err) {
+                console.error("Identity clearance failed via API route:", err);
+            }
 
-            // Sync Personal Notifications
+            // Sync Stream A: User Personal Notifications Realtime Listener
             db.ref('notifications/' + user.uid).on('value', snap => {
                 userNotifications = [];
                 snap.forEach(child => {
-                    userNotifications.push({ key: child.key, ...child.val() });
+                    userNotifications.push({
+                        key: child.key,
+                        ...child.val()
+                    });
                 });
                 renderCombinedNotifications();
             });
 
-            // Sync Broadcast Messaging Channel
+            // Sync Stream B: Global Broadcast Settings Realtime Listener
             db.ref('system_settings').on('value', snap => {
                 const settings = snap.val() || {};
                 if (settings.global_broadcast_message && settings.global_broadcast_message.trim() !== "") {
@@ -220,6 +231,7 @@
         } else { window.location.href = 'login.html'; }
     });
 
+    // Combined Array UI Renderer Function (Sorted newest first)
     function renderCombinedNotifications() {
         if (!currentUser) return;
         const badge = document.getElementById('notifBadge');
@@ -260,7 +272,8 @@
                 });
             }
 
-            combinedItems.sort((a, b) => b.timestamp - a.timestamp);
+            // Sort items by timestamp in descending order (newest at the top)
+            combinedItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
             if (combinedItems.length === 0) {
                 container.innerHTML = '<p style="text-align:center; color:#888;">No messages yet</p>';
@@ -270,7 +283,7 @@
             combinedItems.forEach(n => {
                 const item = document.createElement('div');
                 item.className = `notif-item ${n.read ? '' : 'unread'}`;
-                item.innerHTML = `<div>${n.message}</div><span class="notif-time">${new Date(n.timestamp).toLocaleString()}</span>`;
+                item.innerHTML = `<div>${n.message}</div><span class="notif-time">${n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>`;
 
                 if (!n.read && !n.isGlobal) {
                     db.ref(`notifications/${currentUser.uid}/${n.key}`).update({ read: true });
@@ -324,7 +337,17 @@
         renderCombinedNotifications();
     }
     function closeNotif() { document.getElementById('notifModal').style.display = "none"; }
-    window.onclick = function(event) { if (event.target == document.getElementById('notifModal')) closeNotif(); }
+    
+    // Close Pin Modal & Remember dismissal for the session
+    function closePinModal() {
+        document.getElementById('pinPromptModal').style.display = "none";
+        sessionStorage.setItem('pin_prompt_dismissed', 'true');
+    }
+
+    window.onclick = function(event) { 
+        if (event.target == document.getElementById('notifModal')) closeNotif(); 
+        if (event.target == document.getElementById('pinPromptModal')) closePinModal();
+    }
 </script>
 
 <style>
@@ -363,7 +386,7 @@
         }
 
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'toggle-bal-btn';
+        toggleBtn.className = 'toggle-bal-btn';                                                 
         toggleBtn.id = 'toggleBalBtn';
         toggleBtn.innerHTML = isHidden ? 'Show' : 'Hide';
         balEl.parentNode.appendChild(toggleBtn);
