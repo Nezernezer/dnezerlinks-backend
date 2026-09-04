@@ -265,7 +265,7 @@
 
                 if (processingBanks.has(key)) return;
 
-                // Only check newly created accounts inside virtual_accounts
+                // Only check newly created accounts inside virtual_accounts_new
                 let matched = valuesList.find(acc =>
                     acc && acc.bank_name && acc.bank_name.toLowerCase().includes(key)
                 );
@@ -328,11 +328,11 @@
                 processingBanks.delete(bankKey);
 
                 if (result.success) {
-                    setStatus("Account allocated successfully!", "#27AE60");
+                    setStatus("Your virtual account has been created  successfully! You can now fund your wallet by sending money into it and get credited automatically", "#27AE60");
                     setTimeout(() => setStatus(""), 3000);
-                    updateStaticCards(cachedUserData.virtual_accounts);
+                    updateStaticCards(cachedUserData.virtual_accounts_new);
                 } else {
-                    setStatus(result.error || result.message || "Generation error. Please retry.", "red");
+                    setStatus(result.error || result.message || "Error encoutered while processing your request. Please retry.", "red");
                     if (targetBtn) {
                         targetBtn.disabled = false;
                         targetBtn.innerText = "Get Account Number";
@@ -364,7 +364,7 @@
                 document.getElementById("wallet-balance").innerText =
                     "₦" + parseFloat(cachedUserData.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
 
-                updateStaticCards(cachedUserData.virtual_accounts);
+                updateStaticCards(cachedUserData.virtual_accounts_new);
             });
         });
     </script>
