@@ -58,7 +58,7 @@ router.post('/fund', async (req, res) => {
             };
 
             // Save structured data to Firebase realtime database node
-            await db.ref(`users/${uid}/virtual_accounts`).push(accountToSave);
+            await db.ref(`users/${uid}/virtual_accounts_new`).push(accountToSave);
 
             return res.json({ success: true, account: accountToSave });
         } else {

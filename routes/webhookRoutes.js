@@ -6,7 +6,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const db = require('../config/firebase');
 
-router.post('/webhook', async (req, res) => {
+router.post('/', async (req, res) => {
     // ALWAYS return 200 OK immediately or at the end to prevent Billstack retry loops
     try {
         const headers = req.headers || {};
@@ -19,8 +19,8 @@ router.post('/webhook', async (req, res) => {
         const eventType = eventData.event || eventData.event_type || dataObj.type || 'PAYMENT_NOTIFICATION';
 
         // Check if this is a charge/payment event
-        const isPayment = String(eventType).toUpperCase().includes('PAYMENT') || 
-                          String(eventType).toUpperCase().includes('CHARGE') || 
+        const isPayment = String(eventType).toUpperCase().includes('PAYMENT') ||
+                          String(eventType).toUpperCase().includes('CHARGE') ||
                           String(eventType).toUpperCase().includes('RESERVED_ACCOUNT') ||
                           dataObj.amount !== undefined;
 
@@ -35,8 +35,8 @@ router.post('/webhook', async (req, res) => {
         const uniqueTxIdentifier = String(transaction_ref);
 
         // Safe account number extraction using optional chaining
-        const account_number = dataObj.account?.account_number || 
-                               dataObj.account_number || 
+        const account_number = dataObj.account?.account_number ||
+                               dataObj.account_number ||
                                dataObj.destinationAccountDetails?.accountNumber || '';
 
         console.log(`🔍 Parsed Data -> Amount: ${amount}, Account: ${account_number}, Ref: ${merchant_reference}, TxRef: ${uniqueTxIdentifier}`);
@@ -166,7 +166,7 @@ router.post('/webhook', async (req, res) => {
         return res.status(200).send("Processed");
 
     } catch (e) {
-        // Crucial: Catch any runtime parsing or Firebase failure and still send 200 
+        // Crucial: Catch any runtime parsing or Firebase failure and still send 200
         // to prevent Billstack from marking your endpoint down with a 500 error.
         console.error("🔥 Safe-catch webhook internal error:", e.message, e.stack);
         return res.status(200).send("Event acknowledged with internal fallback");
