@@ -35,79 +35,74 @@ router.post('/', async (req, res) => {
         const uniqueTxIdentifier = String(transaction_ref);
 
         // Safe account number extraction using optional chaining
-        const account_number = dataObj.account?.account_number ||
-                               dataObj.account_number ||
-                               dataObj.destinationAccountDetails?.accountNumber || '';
+        const accountObj = dataObj.account || (Array.isArray(dataObj.payer) && dataObj.payer[0]) || {};
+        const account_number = String(accountObj.account_number || dataObj.account_number || dataObj.destinationAccountDetails?.accountNumber || '');
 
         console.log(`🔍 Parsed Data -> Amount: ${amount}, Account: ${account_number}, Ref: ${merchant_reference}, TxRef: ${uniqueTxIdentifier}`);
 
         let targetUid = null;
 
-        // 1. Check reference format VA_UID
-        if (merchant_reference && String(merchant_reference).startsWith('VA_')) {
-            const parts = merchant_reference.split('_');
-            if (parts.length > 1) {
-                targetUid = parts[1];
+        // 1. Scan Firebase users to match by merchant_reference, account number, or customer email
+        const usersSnapshot = await db.ref('users').once('value');
+        const usersData = usersSnapshot.val() || {};
+
+        for (const uid in usersData) {
+            const user = usersData[uid] || {};
+
+            const dbAccNum = user.account_number ? String(user.account_number).trim() : '';
+            const incomingAccNum = account_number ? String(account_number).trim() : '';
+            const dbRef = user.reference ? String(user.reference).trim() : '';
+            const incomingRef = merchant_reference ? String(merchant_reference).trim() : '';
+
+            // Match via merchant reference or core account reference
+            if (incomingRef && (dbRef === incomingRef || dbRef === incomingRef.split('_')[0])) {
+                targetUid = uid;
+                console.log(`🎯 Matched User UID ${targetUid} via Merchant Reference`);
+                break;
             }
-        }
 
-        // 2. Scan Firebase users if targetUid not found yet
-        if (!targetUid) {
-            const usersSnapshot = await db.ref('users').once('value');
-            const usersData = usersSnapshot.val() || {};
+            if (incomingAccNum && dbAccNum === incomingAccNum) {
+                targetUid = uid;
+                console.log(`🎯 Matched User UID ${targetUid} via Root Account Number`);
+                break;
+            }
 
-            for (const uid in usersData) {
-                const user = usersData[uid] || {};
-
-                const dbAccNum = user.account_number ? String(user.account_number).trim() : '';
-                const incomingAccNum = account_number ? String(account_number).trim() : '';
-                const dbRef = user.reference ? String(user.reference).trim() : '';
-                const incomingRef = merchant_reference ? String(merchant_reference).trim() : '';
-
-                if (
-                    (incomingAccNum && dbAccNum === incomingAccNum) ||
-                    (incomingRef && (dbAccNum === incomingRef || dbRef === incomingRef))
-                ) {
+            if (user.assigned_accounts && incomingAccNum) {
+                const matchedAssigned = Object.values(user.assigned_accounts).some(acc =>
+                    acc && String(acc.account_number || '').trim() === incomingAccNum
+                );
+                if (matchedAssigned) {
                     targetUid = uid;
-                    console.log(`🎯 Matched User UID ${targetUid} via Root Account/Reference`);
+                    console.log(`🎯 Matched User UID ${targetUid} via assigned_accounts`);
                     break;
                 }
+            }
 
-                if (user.assigned_accounts && incomingAccNum) {
-                    const matchedAssigned = Object.values(user.assigned_accounts).some(acc =>
-                        acc && String(acc.account_number || '').trim() === incomingAccNum
-                    );
-                    if (matchedAssigned) {
-                        targetUid = uid;
-                        console.log(`🎯 Matched User UID ${targetUid} via assigned_accounts`);
-                        break;
-                    }
-                }
-
-                if (user.virtual_accounts) {
-                    const matchedVirtual = Object.values(user.virtual_accounts).some(acc =>
-                        acc && (
-                            (incomingAccNum && String(acc.account_number || '').trim() === incomingAccNum) ||
-                            (incomingRef && String(acc.reference || '').trim() === incomingRef)
-                        )
-                    );
-                    if (matchedVirtual) {
-                        targetUid = uid;
-                        console.log(`🎯 Matched User UID ${targetUid} via virtual_accounts`);
-                        break;
-                    }
+            if (user.virtual_accounts) {
+                const matchedVirtual = Object.values(user.virtual_accounts).some(acc =>
+                    acc && (
+                        (incomingAccNum && String(acc.account_number || '').trim() === incomingAccNum) ||
+                        (incomingRef && String(acc.reference || '').trim() === incomingRef)
+                    )
+                );
+                if (matchedVirtual) {
+                    targetUid = uid;
+                    console.log(`🎯 Matched User UID ${targetUid} via virtual_accounts`);
+                    break;
                 }
             }
         }
 
-        // 3. Fallback to Customer Email
+        // 2. Fallback to Customer Email if not found yet
         if (!targetUid && dataObj.customer && dataObj.customer.email) {
-            const customerEmail = dataObj.customer.email;
-            const usersSnap = await db.ref('users').orderByChild('email').equalTo(customerEmail).once('value');
-            if (usersSnap.exists()) {
-                const val = usersSnap.val();
-                targetUid = Object.keys(val)[0];
-                console.log(`🎯 Matched User UID ${targetUid} via Email: ${customerEmail}`);
+            const customerEmail = dataObj.customer.email.toLowerCase().trim();
+            for (const uid in usersData) {
+                const user = usersData[uid] || {};
+                if (user.email && String(user.email).toLowerCase().trim() === customerEmail) {
+                    targetUid = uid;
+                    console.log(`🎯 Matched User UID ${targetUid} via Email: ${customerEmail}`);
+                    break;
+                }
             }
         }
 
@@ -166,8 +161,6 @@ router.post('/', async (req, res) => {
         return res.status(200).send("Processed");
 
     } catch (e) {
-        // Crucial: Catch any runtime parsing or Firebase failure and still send 200
-        // to prevent Billstack from marking your endpoint down with a 500 error.
         console.error("🔥 Safe-catch webhook internal error:", e.message, e.stack);
         return res.status(200).send("Event acknowledged with internal fallback");
     }
