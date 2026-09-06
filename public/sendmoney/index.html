@@ -9,186 +9,34 @@
 
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        background: #f5f7fa;
-        color: #333;
-        min-height: 100vh;
-    }
-
-    .header {
-        background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%);
-        color: white;
-        text-align: center;
-        padding: 28px 20px 24px;
-    }
-    .header h1 {
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin-bottom: 4px;
-    }
-    .header p {
-        font-size: 0.95rem;
-        opacity: 0.9;
-    }
-
-    .container {
-        max-width: 420px;
-        margin: -20px auto 40px;
-        padding: 0 16px;
-        position: relative;
-        z-index: 10;
-    }
-
-    .card {
-        background: white;
-        border-radius: 16px;
-        padding: 28px 22px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-        border: 1px solid #f0f0f0;
-    }
-
-    .card h2 {
-        text-align: center;
-        color: #0D47A1;
-        font-size: 1.35rem;
-        margin-bottom: 24px;
-        font-weight: 700;
-    }
-
-    label {
-        display: block;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #555;
-        margin-bottom: 6px;
-        margin-top: 14px;
-    }
-
-    input {
-        width: 100%;
-        padding: 14px 16px;
-        border-radius: 12px;
-        border: 1.5px solid #e0e0e0;
-        font-size: 1rem;
-        transition: border-color 0.2s;
-        background: #fafafa;
-    }
-    input:focus {
-        outline: none;
-        border-color: #1565C0;
-        background: white;
-    }
-
-    .btn {
-        width: 100%;
-        padding: 15px;
-        border: none;
-        border-radius: 40px;
-        font-weight: 700;
-        font-size: 1.05rem;
-        cursor: pointer;
-        transition: all 0.25s;
-        margin-top: 18px;
-    }
-
-    .btn-primary {
-        background: #FFB300;
-        color: white;
-        box-shadow: 0 4px 15px rgba(255, 179, 0, 0.35);
-    }
-    .btn-primary:hover:not(:disabled) {
-        background: #ffa000;
-        transform: translateY(-1px);
-    }
-    .btn-primary:disabled {
-        background: #ccc;
-        box-shadow: none;
-        cursor: not-allowed;
-    }
-
-    .btn-secondary {
-        background: #0D47A1;
-        color: white;
-    }
-    .btn-secondary:hover:not(:disabled) {
-        background: #1565C0;
-    }
-    .btn-secondary:disabled {
-        background: #90a4ae;
-        cursor: not-allowed;
-    }
-
-    .name-box {
-        margin-top: 14px;
-        padding: 14px;
-        border-radius: 12px;
-        background: #e3f2fd;
-        color: #0D47A1;
-        font-weight: 600;
-        font-size: 0.95rem;
-        display: none;
-        text-align: center;
-    }
-    .name-box.error {
-        background: #ffebee;
-        color: #c62828;
-    }
-    .name-box.show {
-        display: block;
-    }
-
-    .msg {
-        margin-top: 18px;
-        padding: 14px;
-        border-radius: 12px;
-        text-align: center;
-        font-weight: 600;
-        font-size: 0.95rem;
-        display: none;
-    }
-    .msg.success {
-        background: #e8f5e9;
-        color: #2e7d32;
-        display: block;
-    }
-    .msg.error {
-        background: #ffebee;
-        color: #c62828;
-        display: block;
-    }
-
-    .balance-info {
-        text-align: center;
-        margin-bottom: 18px;
-        font-size: 0.9rem;
-        color: #666;
-    }
-    .balance-info span {
-        font-weight: 700;
-        color: #0D47A1;
-    }
-
-    .loading {
-        display: inline-block;
-        width: 18px;
-        height: 18px;
-        border: 2px solid rgba(255,255,255,0.3);
-        border-radius: 50%;
-        border-top-color: white;
-        animation: spin 0.8s linear infinite;
-        vertical-align: middle;
-        margin-right: 8px;
-    }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #333; min-height: 100vh; }
+    .header { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; text-align: center; padding: 28px 20px 24px; }
+    .header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
+    .header p { font-size: 0.95rem; opacity: 0.9; }
+    .container { max-width: 420px; margin: -20px auto 40px; padding: 0 16px; position: relative; z-index: 10; }
+    .card { background: white; border-radius: 16px; padding: 28px 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); border: 1px solid #f0f0f0; }
+    .card h2 { text-align: center; color: #0D47A1; font-size: 1.35rem; margin-bottom: 24px; font-weight: 700; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 6px; margin-top: 14px; }
+    input { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1.5px solid #e0e0e0; font-size: 1rem; transition: border-color 0.2s; background: #fafafa; }
+    input:focus { outline: none; border-color: #1565C0; background: white; }
+    .btn { width: 100%; padding: 15px; border: none; border-radius: 40px; font-weight: 700; font-size: 1.05rem; cursor: pointer; transition: all 0.25s; margin-top: 18px; }
+    .btn-primary { background: #FFB300; color: white; box-shadow: 0 4px 15px rgba(255, 179, 0, 0.35); }
+    .btn-primary:hover:not(:disabled) { background: #ffa000; transform: translateY(-1px); }
+    .btn-primary:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+    .btn-secondary { background: #0D47A1; color: white; }
+    .btn-secondary:hover:not(:disabled) { background: #1565C0; }
+    .btn-secondary:disabled { background: #90a4ae; cursor: not-allowed; }
+    .name-box { margin-top: 14px; padding: 14px; border-radius: 12px; background: #e3f2fd; color: #0D47A1; font-weight: 600; font-size: 0.95rem; display: none; text-align: center; }
+    .name-box.error { background: #ffebee; color: #c62828; }
+    .name-box.show { display: block; }
+    .msg { margin-top: 18px; padding: 14px; border-radius: 12px; text-align: center; font-weight: 600; font-size: 0.95rem; display: none; }
+    .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+    .msg.error { background: #ffebee; color: #c62828; display: block; }
+    .balance-info { text-align: center; margin-bottom: 18px; font-size: 0.9rem; color: #666; }
+    .balance-info span { font-weight: 700; color: #0D47A1; }
+    .loading { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    .footer-note {
-        text-align: center;
-        margin-top: 20px;
-        font-size: 0.8rem;
-        color: #888;
-    }
+    .footer-note { text-align: center; margin-top: 20px; font-size: 0.8rem; color: #888; }
 </style>
 </head>
 <body>
@@ -245,12 +93,11 @@ const auth = firebase.auth();
 
 const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
 
-let recipientUID = null;
+let verifiedPhone = null;          // we only store the phone, never a UID
 let currentUser = null;
 
-// Clear recipient whenever phone number changes
 document.getElementById("phone").addEventListener("input", () => {
-    recipientUID = null;
+    verifiedPhone = null;
     document.getElementById("sendBtn").disabled = true;
     const nameBox = document.getElementById("nameResult");
     nameBox.className = "name-box";
@@ -270,7 +117,7 @@ auth.onAuthStateChanged(async (user) => {
 async function loadBalance() {
     try {
         const token = await currentUser.getIdToken();
-        const res = await fetch(`${BACKEND_URL}/api/account/balance`, {
+        const res = await fetch(`${BACKEND_URL}/api/balance`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json().catch(() => ({}));
@@ -294,7 +141,7 @@ async function searchUser() {
     if (!phone || phone.replace(/\D/g, "").length < 10) {
         nameBox.className = "name-box show error";
         nameBox.textContent = "Enter a valid phone number";
-        recipientUID = null;
+        verifiedPhone = null;
         sendBtn.disabled = true;
         return;
     }
@@ -303,7 +150,7 @@ async function searchUser() {
     searchBtn.innerHTML = '<span class="loading"></span> Checking...';
     nameBox.className = "name-box";
     nameBox.style.display = "none";
-    recipientUID = null;
+    verifiedPhone = null;
     sendBtn.disabled = true;
 
     try {
@@ -314,29 +161,26 @@ async function searchUser() {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${token}`
             },
-            body: JSON.stringify({
-                phone: phone,
-                uid: currentUser.uid          // required by your existing gatekeeper
-            })
+            body: JSON.stringify({ phone })
         });
 
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.success) {
-            recipientUID = data.uid;
+            verifiedPhone = data.phone || phone;   // store the normalized phone
             nameBox.className = "name-box show";
             nameBox.textContent = "✓ " + data.name;
             sendBtn.disabled = false;
         } else {
             nameBox.className = "name-box show error";
             nameBox.textContent = data.message || data.error || "User not found";
-            recipientUID = null;
+            verifiedPhone = null;
             sendBtn.disabled = true;
         }
     } catch (err) {
         nameBox.className = "name-box show error";
         nameBox.textContent = "Network error. Try again.";
-        recipientUID = null;
+        verifiedPhone = null;
         sendBtn.disabled = true;
     }
 
@@ -350,7 +194,7 @@ async function sendMoney() {
     const msg = document.getElementById("msg");
     const sendBtn = document.getElementById("sendBtn");
 
-    if (!recipientUID) {
+    if (!verifiedPhone) {
         msg.className = "msg error";
         msg.textContent = "Please verify recipient first";
         return;
@@ -384,10 +228,10 @@ async function sendMoney() {
                 "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
-                recipientUid: recipientUID,
+                phone: verifiedPhone,   // only the phone is sent
                 amount: amount,
-                uid: currentUser.uid,   // required by securityGatekeeper
-                pin: pin                // required by securityGatekeeper
+                uid: currentUser.uid,
+                pin: pin
             })
         });
 
@@ -398,7 +242,7 @@ async function sendMoney() {
             msg.textContent = `✓ ₦${amount.toLocaleString()} sent successfully to ${data.recipientName}`;
             document.getElementById("amount").value = "";
             document.getElementById("pin").value = "";
-            recipientUID = null;
+            verifiedPhone = null;
             document.getElementById("sendBtn").disabled = true;
             document.getElementById("nameResult").className = "name-box";
             loadBalance();
