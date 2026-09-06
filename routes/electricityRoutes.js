@@ -4,24 +4,22 @@ const router = express.Router();
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-// VTU Naija DISCO IDs (from their official docs)
-// Confirm any extra discos on your VTU Naija dashboard if needed
+// Official VTU Naija DISCO IDs
 const discoIdMap = {
-    'IKEDC': 1,   // Ikeja
-    'EKEDC': 2,   // Eko
-    'KEDCO': 3,   // Kano
-    'PHEDC': 4,   // Port Harcourt (PHED)
-    'JEDC': 5,    // Jos
-    'IBEDC': 6,   // Ibadan
-    'KAEDCO': 7,  // Kaduna (if enabled on your account)
-    // Keep these only if VTU Naija lists them for your account:
-    'AEDC': 8,
-    'BEDC': 9,
-    'EEDC': 10,
-    'YEDC': 11
+    'IKEDC': '1',
+    'EKEDC': '2',
+    'KEDCO': '3',
+    'PHEDC': '4',
+    'JEDC': '5',
+    'IBEDC': '6',
+    'KAEDCO': '7',
+    'AEDC': '8',
+    'BEDC': '9',
+    'EEDC': '10',
+    'YEDC': '11'
 };
 
-// 🔌 METER VALIDATION
+// 🔌 VALIDATE METER
 router.post('/validate-meter', async (req, res) => {
     try {
         const { meterNumber, disco } = req.body;
@@ -40,6 +38,8 @@ router.post('/validate-meter', async (req, res) => {
             return res.status(500).json({ status: 'error', error: 'Gateway configuration missing' });
         }
 
+        console.log(`[METER VALIDATE] disco=\( {disco} id= \){discoId} meter=${meterNumber}`);
+
         const response = await axios.post(
             'https://vtunaija.com.ng/api/billpayment/verify/',
             {
@@ -51,36 +51,57 @@ router.post('/validate-meter', async (req, res) => {
                     'Authorization': `Token ${vtuKey}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 20000
+                timeout: 20000,
+                validateStatus: () => true
             }
         );
 
-        const apiStatus = String(response.data?.status || response.data?.Status || '').toLowerCase();
+        console.log('[METER VALIDATE RESPONSE]', response.status, JSON.stringify(response.data));
 
-        if (apiStatus === 'success' || apiStatus === 'successful') {
+        const data = response.data || {};
+        const apiStatus = String(data.status || data.Status || '').toLowerCase();
+
+        const customerName =
+            data.Customer_Name ||
+            data.customer_Name ||
+            data.customer_name ||
+            data.name ||
+            data.Name ||
+            data.customer ||
+            data.Customer ||
+            null;
+
+        if (
+            response.status >= 200 &&
+            response.status < 300 &&
+            (apiStatus === 'success' || apiStatus === 'successful') &&
+            customerName &&
+            String(customerName).trim() !== ''
+        ) {
             return res.status(200).json({
                 status: 'success',
-                customer: response.data.Customer_Name
-                    || response.data.customer_name
-                    || response.data.name
-                    || 'Verified Customer'
+                customer: String(customerName).trim(),
+                address: data.Customer_Address || data.address || ''
             });
         }
 
         return res.status(400).json({
             status: 'error',
-            error: response.data?.api_response || response.data?.message || 'Meter validation failed'
+            error: data.api_response || data.message || data.msg || 'Meter validation failed'
         });
     } catch (err) {
-        console.error("Meter Validation Error:", err.response?.data || err.message);
-        return res.status(500).json({
+        console.error('Meter Validation Error:', err.response?.data || err.message);
+        return res.status(err.response?.status || 500).json({
             status: 'error',
-            error: 'Verification service unavailable. Please try again later.'
+            error: err.response?.data?.api_response ||
+                err.response?.data?.message ||
+                err.message ||
+                'Verification service unavailable'
         });
     }
 });
 
-// 💳 ELECTRICITY PAYMENT
+// 💳 PAY ELECTRICITY
 router.post('/pay', async (req, res) => {
     const { uid, meterNumber, amount, tokenType, disco } = req.body;
 
@@ -104,12 +125,10 @@ router.post('/pay', async (req, res) => {
     }
 
     const db = admin.database();
-    const userRef = db.ref(`users/${uid}`);
-    const balanceRef = userRef.child('balance');
+    const balanceRef = db.ref(`users/${uid}/balance`);
     const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
     try {
-        // 1. Lock wallet
         let balanceUpdateSuccess = false;
         await balanceRef.transaction((currentBal) => {
             if (currentBal === null || Number(currentBal) < payAmount) return;
@@ -121,36 +140,38 @@ router.post('/pay', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Insufficient Wallet Balance' });
         }
 
-        // 2. Call VTU Naija
         try {
-            const vtuPayload = {
-                disco_name: String(discoId),
-                meter_number: String(meterNumber).trim(),
-                MeterType: String(tokenType).toLowerCase(), // prepaid | postpaid
-                amount: String(payAmount),
-                "request-id": requestId
-            };
-
             const vtuRes = await axios.post(
                 'https://vtunaija.com.ng/api/billpayment/',
-                vtuPayload,
+                {
+                    disco_name: String(discoId),
+                    meter_number: String(meterNumber).trim(),
+                    MeterType: String(tokenType).toLowerCase(),
+                    amount: String(payAmount),
+                    'request-id': requestId
+                },
                 {
                     headers: {
                         'Authorization': `Token ${vtuKey}`,
                         'Content-Type': 'application/json'
                     },
-                    timeout: 60000
+                    timeout: 60000,
+                    validateStatus: () => true
                 }
             );
 
-            const apiStatus = String(vtuRes.data?.status || vtuRes.data?.Status || '').toLowerCase();
+            console.log('[ELECTRICITY PAY RESPONSE]', vtuRes.status, JSON.stringify(vtuRes.data));
 
-            if (apiStatus === 'success' || apiStatus === 'successful') {
-                const tokenValue = vtuRes.data.electricitytoken
-                    || vtuRes.data.token
-                    || null;
+            const data = vtuRes.data || {};
+            const apiStatus = String(data.status || data.Status || '').toLowerCase();
 
-                // Log transaction
+            if (
+                vtuRes.status >= 200 &&
+                vtuRes.status < 300 &&
+                (apiStatus === 'success' || apiStatus === 'successful')
+            ) {
+                const tokenValue = data.electricitytoken || data.token || data.Token || null;
+
                 const txRef = db.ref(`transactions/${uid}`).push();
                 await txRef.set({
                     type: 'debit',
@@ -168,48 +189,41 @@ router.post('/pay', async (req, res) => {
 
                 return res.status(200).json({
                     success: true,
-                    token: tokenValue
+                    token: tokenValue,
+                    reference: requestId,
+                    amount: payAmount,
+                    disco: disco,
+                    meterNumber: String(meterNumber).trim(),
+                    meterType: tokenType,
+                    date: new Date().toLocaleString()
                 });
             }
 
-            // Provider rejected — refund
+            // Refund on provider reject
             await balanceRef.transaction(currentBal =>
                 Math.round((Number(currentBal || 0) + payAmount) * 100) / 100
             );
 
             return res.status(400).json({
                 success: false,
-                error: vtuRes.data?.api_response
-                    || vtuRes.data?.message
-                    || vtuRes.data?.msg
-                    || 'Provider rejected processing request'
+                error: data.api_response || data.message || data.msg || 'Provider rejected request'
             });
-
         } catch (apiErr) {
-            // Refund on API error
             await balanceRef.transaction(currentBal =>
                 Math.round((Number(currentBal || 0) + payAmount) * 100) / 100
             );
 
-            console.error("VTUNAIJA Payment Error:", apiErr.response?.data || apiErr.message);
-
-            if (apiErr.response) {
-                console.error("VTU Naija status:", apiErr.response.status);
-                console.error("VTU Naija response:", apiErr.response.data);
-            }
-
-            const providerError = apiErr.response?.data?.api_response
-                || apiErr.response?.data?.message
-                || apiErr.response?.data?.msg
-                || 'External billing gateway error. Funds refunded.';
+            console.error('VTUNAIJA Payment Error:', apiErr.response?.data || apiErr.message);
 
             return res.status(apiErr.response?.status || 500).json({
                 success: false,
-                error: providerError
+                error: apiErr.response?.data?.api_response ||
+                    apiErr.response?.data?.message ||
+                    'External billing gateway error. Funds refunded.'
             });
         }
     } catch (err) {
-        console.error("Electricity pay error:", err.message);
+        console.error('Electricity pay error:', err.message);
         return res.status(500).json({ success: false, error: 'Internal system routing anomaly' });
     }
 });
