@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Send Money | Dnezerlinks</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: #f5f7fa;
+        color: #333;
+        min-height: 100vh;
+    }
+
+    .header {
+        background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%);
+        color: white;
+        text-align: center;
+        padding: 28px 20px 24px;
+    }
+    .header h1 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .header p {
+        font-size: 0.95rem;
+        opacity: 0.9;
+    }
+
+    .container {
+        max-width: 420px;
+        margin: -20px auto 40px;
+        padding: 0 16px;
+        position: relative;
+        z-index: 10;
+    }
+
+    .card {
+        background: white;
+        border-radius: 16px;
+        padding: 28px 22px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+        border: 1px solid #f0f0f0;
+    }
+
+    .card h2 {
+        text-align: center;
+        color: #0D47A1;
+        font-size: 1.35rem;
+        margin-bottom: 24px;
+        font-weight: 700;
+    }
+
+    label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 6px;
+        margin-top: 14px;
+    }
+
+    input {
+        width: 100%;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1.5px solid #e0e0e0;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+        background: #fafafa;
+    }
+    input:focus {
+        outline: none;
+        border-color: #1565C0;
+        background: white;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 15px;
+        border: none;
+        border-radius: 40px;
+        font-weight: 700;
+        font-size: 1.05rem;
+        cursor: pointer;
+        transition: all 0.25s;
+        margin-top: 18px;
+    }
+
+    .btn-primary {
+        background: #FFB300;
+        color: white;
+        box-shadow: 0 4px 15px rgba(255, 179, 0, 0.35);
+    }
+    .btn-primary:hover:not(:disabled) {
+        background: #ffa000;
+        transform: translateY(-1px);
+    }
+    .btn-primary:disabled {
+        background: #ccc;
+        box-shadow: none;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: #0D47A1;
+        color: white;
+    }
+    .btn-secondary:hover:not(:disabled) {
+        background: #1565C0;
+    }
+    .btn-secondary:disabled {
+        background: #90a4ae;
+        cursor: not-allowed;
+    }
+
+    .name-box {
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 12px;
+        background: #e3f2fd;
+        color: #0D47A1;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: none;
+        text-align: center;
+    }
+    .name-box.error {
+        background: #ffebee;
+        color: #c62828;
+    }
+    .name-box.show {
+        display: block;
+    }
+
+    .msg {
+        margin-top: 18px;
+        padding: 14px;
+        border-radius: 12px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: none;
+    }
+    .msg.success {
+        background: #e8f5e9;
+        color: #2e7d32;
+        display: block;
+    }
+    .msg.error {
+        background: #ffebee;
+        color: #c62828;
+        display: block;
+    }
+
+    .balance-info {
+        text-align: center;
+        margin-bottom: 18px;
+        font-size: 0.9rem;
+        color: #666;
+    }
+    .balance-info span {
+        font-weight: 700;
+        color: #0D47A1;
+    }
+
+    .loading {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer-note {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 0.8rem;
+        color: #888;
+    }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Dnezerlinks</h1>
+    <p>Send Money to any Dlinks user</p>
+</div>
+
+<div class="container">
+    <div class="card">
+        <h2>Transfer Funds</h2>
+
+        <div class="balance-info" id="balanceInfo">
+            Your balance: <span id="userBalance">Loading...</span>
+        </div>
+
+        <label for="phone">Recipient Phone Number</label>
+        <input type="tel" id="phone" placeholder="e.g. 08123456789" maxlength="15">
+
+        <button class="btn btn-secondary" id="searchBtn" onclick="searchUser()">
+            Verify Recipient
+        </button>
+
+        <div id="nameResult" class="name-box"></div>
+
+        <label for="amount">Amount (₦)</label>
+        <input type="number" id="amount" placeholder="Enter amount" min="1" step="1">
+
+        <label for="pin">Transaction PIN</label>
+        <input type="password" id="pin" placeholder="Enter 4-digit PIN" maxlength="6">
+
+        <button class="btn btn-primary" id="sendBtn" onclick="sendMoney()" disabled>
+            Send Money
+        </button>
+
+        <div id="msg" class="msg"></div>
+
+        <p class="footer-note">Transfers are instant & secure via Dlinks</p>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+    authDomain: "dnezerlinks.firebaseapp.com",
+    databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+    projectId: "dnezerlinks",
+    appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+// ⚠️ Update with your Render backend URL
+const BACKEND_URL = "https://your-backend-name.onrender.com";
+
+let recipientUID = null;
+let currentUser = null;
+
+auth.onAuthStateChanged(async (user) => {
+    if (!user) {
+        document.getElementById("balanceInfo").innerHTML = 
+            '<span style="color:#c62828">Please login first</span>';
+        return;
+    }
+    currentUser = user;
+    loadBalance();
+});
+
+async function loadBalance() {
+    try {
+        const token = await currentUser.getIdToken();
+        const res = await fetch(`${BACKEND_URL}/api/account/balance`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success || data.balance !== undefined) {
+            document.getElementById("userBalance").textContent = 
+                "₦" + Number(data.balance || 0).toLocaleString();
+        }
+    } catch (e) {
+        document.getElementById("userBalance").textContent = "—";
+    }
+}
+
+async function searchUser() {
+    const phone = document.getElementById("phone").value.trim().replace(/\s+/g, "");
+    const pin = document.getElementById("pin").value.trim();
+    const nameBox = document.getElementById("nameResult");
+    const searchBtn = document.getElementById("searchBtn");
+    const sendBtn = document.getElementById("sendBtn");
+
+    if (!phone || phone.length < 10) {
+        nameBox.className = "name-box show error";
+        nameBox.textContent = "Enter a valid phone number";
+        recipientUID = null;
+        sendBtn.disabled = true;
+        return;
+    }
+
+    searchBtn.disabled = true;
+    searchBtn.innerHTML = '<span class="loading"></span> Checking...';
+    nameBox.className = "name-box";
+    nameBox.style.display = "none";
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/sendmoney/search-user`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ 
+                phone, 
+                uid: currentUser.uid,
+                pin: pin || "" 
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            recipientUID = data.uid;
+            nameBox.className = "name-box show";
+            nameBox.textContent = "✓ " + data.name;
+            sendBtn.disabled = false;
+        } else {
+            recipientUID = null;
+            nameBox.className = "name-box show error";
+            nameBox.textContent = data.message || data.error || "User not found";
+            sendBtn.disabled = true;
+        }
+    } catch (err) {
+        nameBox.className = "name-box show error";
+        nameBox.textContent = "Network error. Try again.";
+        recipientUID = null;
+        sendBtn.disabled = true;
+    }
+
+    searchBtn.disabled = false;
+    searchBtn.textContent = "Verify Recipient";
+}
+
+async function sendMoney() {
+    const amount = parseFloat(document.getElementById("amount").value);
+    const pin = document.getElementById("pin").value.trim();
+    const msg = document.getElementById("msg");
+    const sendBtn = document.getElementById("sendBtn");
+
+    if (!recipientUID) {
+        msg.className = "msg error";
+        msg.textContent = "Please verify recipient first";
+        return;
+    }
+    if (!amount || amount <= 0) {
+        msg.className = "msg error";
+        msg.textContent = "Enter a valid amount";
+        return;
+    }
+    if (!pin) {
+        msg.className = "msg error";
+        msg.textContent = "Transaction PIN is required";
+        return;
+    }
+
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span class="loading"></span> Processing...';
+    msg.className = "msg";
+    msg.style.display = "none";
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                recipientUid: recipientUID,
+                amount: amount,
+                uid: currentUser.uid,
+                pin: pin
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            msg.className = "msg success";
+            msg.textContent = `✓ ₦${amount.toLocaleString()} sent successfully to ${data.recipientName}`;
+            document.getElementById("amount").value = "";
+            document.getElementById("pin").value = "";
+            loadBalance();
+        } else {
+            msg.className = "msg error";
+            msg.textContent = data.message || data.error || "Transfer failed";
+        }
+    } catch (err) {
+        msg.className = "msg error";
+        msg.textContent = "Network error. Please try again.";
+    }
+
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send Money";
+}
+</script>
+</body>
+</html>
