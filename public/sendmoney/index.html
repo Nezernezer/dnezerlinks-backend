@@ -4,13 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Send Money | Dnezerlinks</title>
-
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
+
     body {
         font-family: 'Segoe UI', system-ui, sans-serif;
         background: #f5f7fa;
@@ -244,15 +243,23 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
-// ⚠️ Update with your Render backend URL
-const BACKEND_URL = "https://your-backend-name.onrender.com";
+const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
 
 let recipientUID = null;
 let currentUser = null;
 
+// Clear recipient whenever phone number changes
+document.getElementById("phone").addEventListener("input", () => {
+    recipientUID = null;
+    document.getElementById("sendBtn").disabled = true;
+    const nameBox = document.getElementById("nameResult");
+    nameBox.className = "name-box";
+    nameBox.style.display = "none";
+});
+
 auth.onAuthStateChanged(async (user) => {
     if (!user) {
-        document.getElementById("balanceInfo").innerHTML = 
+        document.getElementById("balanceInfo").innerHTML =
             '<span style="color:#c62828">Please login first</span>';
         return;
     }
@@ -266,10 +273,12 @@ async function loadBalance() {
         const res = await fetch(`${BACKEND_URL}/api/account/balance`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (data.success || data.balance !== undefined) {
-            document.getElementById("userBalance").textContent = 
+            document.getElementById("userBalance").textContent =
                 "₦" + Number(data.balance || 0).toLocaleString();
+        } else {
+            document.getElementById("userBalance").textContent = "—";
         }
     } catch (e) {
         document.getElementById("userBalance").textContent = "—";
@@ -277,13 +286,12 @@ async function loadBalance() {
 }
 
 async function searchUser() {
-    const phone = document.getElementById("phone").value.trim().replace(/\s+/g, "");
-    const pin = document.getElementById("pin").value.trim();
+    const phone = document.getElementById("phone").value.trim();
     const nameBox = document.getElementById("nameResult");
     const searchBtn = document.getElementById("searchBtn");
     const sendBtn = document.getElementById("sendBtn");
 
-    if (!phone || phone.length < 10) {
+    if (!phone || phone.replace(/\D/g, "").length < 10) {
         nameBox.className = "name-box show error";
         nameBox.textContent = "Enter a valid phone number";
         recipientUID = null;
@@ -295,31 +303,34 @@ async function searchUser() {
     searchBtn.innerHTML = '<span class="loading"></span> Checking...';
     nameBox.className = "name-box";
     nameBox.style.display = "none";
+    recipientUID = null;
+    sendBtn.disabled = true;
 
     try {
+        const token = await currentUser.getIdToken();
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/search-user`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
             },
-            body: JSON.stringify({ 
-                phone, 
-                uid: currentUser.uid,
-                pin: pin || "" 
+            body: JSON.stringify({
+                phone: phone,
+                uid: currentUser.uid          // required by your existing gatekeeper
             })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
-        if (data.success) {
+        if (res.ok && data.success) {
             recipientUID = data.uid;
             nameBox.className = "name-box show";
             nameBox.textContent = "✓ " + data.name;
             sendBtn.disabled = false;
         } else {
-            recipientUID = null;
             nameBox.className = "name-box show error";
             nameBox.textContent = data.message || data.error || "User not found";
+            recipientUID = null;
             sendBtn.disabled = true;
         }
     } catch (err) {
@@ -344,7 +355,7 @@ async function sendMoney() {
         msg.textContent = "Please verify recipient first";
         return;
     }
-    if (!amount || amount <= 0) {
+    if (!amount || amount <= 0 || !Number.isFinite(amount)) {
         msg.className = "msg error";
         msg.textContent = "Enter a valid amount";
         return;
@@ -355,32 +366,41 @@ async function sendMoney() {
         return;
     }
 
+    if (!confirm(`Send ₦${amount.toLocaleString()} to the verified recipient?`)) {
+        return;
+    }
+
     sendBtn.disabled = true;
     sendBtn.innerHTML = '<span class="loading"></span> Processing...';
     msg.className = "msg";
     msg.style.display = "none";
 
     try {
+        const token = await currentUser.getIdToken();
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
                 recipientUid: recipientUID,
                 amount: amount,
-                uid: currentUser.uid,
-                pin: pin
+                uid: currentUser.uid,   // required by securityGatekeeper
+                pin: pin                // required by securityGatekeeper
             })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
-        if (data.success) {
+        if (res.ok && data.success) {
             msg.className = "msg success";
             msg.textContent = `✓ ₦${amount.toLocaleString()} sent successfully to ${data.recipientName}`;
             document.getElementById("amount").value = "";
             document.getElementById("pin").value = "";
+            recipientUID = null;
+            document.getElementById("sendBtn").disabled = true;
+            document.getElementById("nameResult").className = "name-box";
             loadBalance();
         } else {
             msg.className = "msg error";
