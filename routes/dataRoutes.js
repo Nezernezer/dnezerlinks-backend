@@ -37,18 +37,18 @@ router.post('/buy', async (req, res) => {
         }
 
         // 4. Generate unique request-id (required by VTU Naija)
-        const requestId = `\( {Date.now()} \){Math.floor(Math.random() * 100000)}`;
+        const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
         // 5. Call VTU Naija Data API
         try {
             const response = await axios.post(
                 'https://vtunaija.com.ng/api/data/',
                 {
-                    network: String(networkID),       // "1", "2", "3", or "4"
+                    network: String(networkID),
                     mobile_number: String(phone),
                     plan: String(dataPlan),
                     Ported_number: "true",
-                    "request-id": requestId           // REQUIRED
+                    "request-id": requestId
                 },
                 {
                     headers: {
@@ -62,12 +62,10 @@ router.post('/buy', async (req, res) => {
             // 6. Handle success
             if (response.data && (response.data.Status === "successful" || response.data.status === "success")) {
 
-                // Deduct balance atomically
                 await userRef.child('balance').transaction(currentBal => {
                     return (currentBal || 0) - purchaseAmount;
                 });
 
-                // Log transaction
                 const txnRef = db.ref(`transactions/${uid}`).push();
                 const txnId = txnRef.key;
 
@@ -93,7 +91,6 @@ router.post('/buy', async (req, res) => {
                 });
 
             } else {
-                // Provider rejected
                 console.error("❌ VTU API Data Rejection:", response.data);
                 return res.status(400).json({
                     success: false,

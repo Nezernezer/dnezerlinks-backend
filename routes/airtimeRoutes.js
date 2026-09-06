@@ -25,18 +25,18 @@ router.post('/buy', async (req, res) => {
         }
 
         // 2. Generate unique request-id (required by VTU Naija)
-        const requestId = `\( {Date.now()} \){Math.floor(Math.random() * 100000)}`;
+        const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
         // 3. Call VTU Naija API
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
             {
-                network: String(networkID),       // must be "1", "2", "3" or "4"
+                network: String(networkID),
                 mobile_number: String(phone),
                 amount: String(amount),
                 airtime_type: "VTU",
                 Ported_number: "true",
-                "request-id": requestId           // REQUIRED
+                "request-id": requestId
             },
             {
                 headers: {
@@ -49,12 +49,10 @@ router.post('/buy', async (req, res) => {
 
         // 4. Handle success
         if (response.data.Status === "successful" || response.data.status === "success") {
-            // Deduct balance atomically
             await userRef.transaction(currentBalance => {
                 return (currentBalance || 0) - amountNum;
             });
 
-            // Log transaction
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 service: "Airtime Purchase",
@@ -82,13 +80,11 @@ router.post('/buy', async (req, res) => {
     } catch (error) {
         console.error("Airtime purchase error:", error.message);
 
-        // Log the real response from VTU Naija if available
         if (error.response) {
             console.error("VTU Naija status:", error.response.status);
             console.error("VTU Naija response:", error.response.data);
         }
 
-        // Handle timeout
         if (error.code === 'ECONNABORTED') {
             await userRef.transaction(currentBalance => {
                 return (currentBalance || 0) - amountNum;
@@ -114,9 +110,8 @@ router.post('/buy', async (req, res) => {
             });
         }
 
-        // Return provider error message if available
-        const providerError = error.response?.data?.api_response 
-            || error.response?.data?.message 
+        const providerError = error.response?.data?.api_response
+            || error.response?.data?.message
             || "API Connection Error";
 
         return res.status(error.response?.status || 500).json({
