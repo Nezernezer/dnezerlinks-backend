@@ -4,7 +4,7 @@ const router = express.Router();
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-// Official VTU Naija DISCO IDs
+// VTU Naija DISCO IDs (confirm AEDC/BEDC/etc on your VTU Naija dashboard if needed)
 const discoIdMap = {
     'IKEDC': '1',
     'EKEDC': '2',
@@ -28,7 +28,8 @@ router.post('/validate-meter', async (req, res) => {
             return res.status(400).json({ status: 'error', error: 'Missing parameters' });
         }
 
-        const discoId = discoIdMap[String(disco).toUpperCase()];
+        const discoKey = String(disco).toUpperCase();
+        const discoId = discoIdMap[discoKey];
         if (!discoId) {
             return res.status(400).json({ status: 'error', error: 'Unsupported Disco type' });
         }
@@ -38,7 +39,7 @@ router.post('/validate-meter', async (req, res) => {
             return res.status(500).json({ status: 'error', error: 'Gateway configuration missing' });
         }
 
-        console.log(`[METER VALIDATE] disco=\( {disco} id= \){discoId} meter=${meterNumber}`);
+        console.log(`[METER VALIDATE] disco=\( {discoKey} id= \){discoId} meter=${meterNumber}`);
 
         const response = await axios.post(
             'https://vtunaija.com.ng/api/billpayment/verify/',
@@ -56,12 +57,22 @@ router.post('/validate-meter', async (req, res) => {
             }
         );
 
-        console.log('[METER VALIDATE RESPONSE]', response.status, JSON.stringify(response.data));
-
         const data = response.data || {};
-        const apiStatus = String(data.status || data.Status || '').toLowerCase();
+        console.log('[METER VALIDATE RESPONSE]', response.status, JSON.stringify(data));
 
-        const customerName =
+        const apiStatus = String(data.status || data.Status || '').toLowerCase();
+        const apiMsg = String(data.api_response || data.message || data.msg || '').toLowerCase();
+
+        const isSuccess =
+            (response.status >= 200 && response.status < 300) &&
+            (
+                apiStatus === 'success' ||
+                apiStatus === 'successful' ||
+                apiMsg.includes('successfully') ||
+                apiMsg.includes('name gotten')
+            );
+
+        let customerName =
             data.Customer_Name ||
             data.customer_Name ||
             data.customer_name ||
@@ -71,13 +82,18 @@ router.post('/validate-meter', async (req, res) => {
             data.Customer ||
             null;
 
-        if (
-            response.status >= 200 &&
-            response.status < 300 &&
-            (apiStatus === 'success' || apiStatus === 'successful') &&
-            customerName &&
-            String(customerName).trim() !== ''
-        ) {
+        if (!customerName && data.Full_Details) {
+            try {
+                const details = typeof data.Full_Details === 'string'
+                    ? JSON.parse(data.Full_Details)
+                    : data.Full_Details;
+                customerName = details.Customer_Name || details.customer_name || details.name || null;
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        if (isSuccess && customerName && String(customerName).trim() !== '') {
             return res.status(200).json({
                 status: 'success',
                 customer: String(customerName).trim(),
@@ -85,10 +101,18 @@ router.post('/validate-meter', async (req, res) => {
             });
         }
 
+        if (isSuccess && !customerName) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'Provider verified meter but did not return customer name. Check DISCO ID mapping on VTU Naija.'
+            });
+        }
+
         return res.status(400).json({
             status: 'error',
             error: data.api_response || data.message || data.msg || 'Meter validation failed'
         });
+
     } catch (err) {
         console.error('Meter Validation Error:', err.response?.data || err.message);
         return res.status(err.response?.status || 500).json({
@@ -199,7 +223,7 @@ router.post('/pay', async (req, res) => {
                 });
             }
 
-            // Refund on provider reject
+            // Refund on reject
             await balanceRef.transaction(currentBal =>
                 Math.round((Number(currentBal || 0) + payAmount) * 100) / 100
             );
