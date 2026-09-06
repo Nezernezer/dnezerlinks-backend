@@ -12,41 +12,49 @@ router.post('/buy', async (req, res) => {
         return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
+    const userRef = db.ref(`users/${uid}/balance`);
+    const amountNum = parseFloat(amount);
+
     try {
         // 1. Check balance
-        const userRef = db.ref(`users/${uid}/balance`);
         const snap = await userRef.once('value');
         const balance = snap.val() || 0;
-        const amountNum = parseFloat(amount);
 
         if (balance < amountNum) {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // 2. Call VTU API with a timeout (50 seconds)
+        // 2. Generate unique request-id (required by VTU Naija)
+        const requestId = `\( {Date.now()} \){Math.floor(Math.random() * 100000)}`;
+
+        // 3. Call VTU Naija API
         const response = await axios.post(
             'https://vtunaija.com.ng/api/topup/',
             {
-                network: networkID,
-                mobile_number: phone,
-                amount: amount,
+                network: String(networkID),       // must be "1", "2", "3" or "4"
+                mobile_number: String(phone),
+                amount: String(amount),
                 airtime_type: "VTU",
-                Ported_number: "true"
+                Ported_number: "true",
+                "request-id": requestId           // REQUIRED
             },
             {
-                headers: { 'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}` },
-                timeout: 50000  // 50 seconds timeout
+                headers: {
+                    'Authorization': `Token ${process.env.VTUNAIJA_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 50000
             }
         );
 
-        // 3. Handle response
-        if (response.data.Status === "successful") {
+        // 4. Handle success
+        if (response.data.Status === "successful" || response.data.status === "success") {
             // Deduct balance atomically
             await userRef.transaction(currentBalance => {
                 return (currentBalance || 0) - amountNum;
             });
 
-            // Log transaction only once
+            // Log transaction
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 service: "Airtime Purchase",
@@ -56,7 +64,7 @@ router.post('/buy', async (req, res) => {
                 type: "debit",
                 status: "successful",
                 timestamp: Date.now(),
-                reference: response.data.request_id || txRef.key,
+                reference: response.data.id || response.data.request_id || requestId || txRef.key,
                 description: `Airtime purchase for ${phone}`
             });
 
@@ -68,22 +76,24 @@ router.post('/buy', async (req, res) => {
         console.error("VTU API error:", response.data);
         return res.status(400).json({
             success: false,
-            error: response.data.api_response || "VTU provider failed"
+            error: response.data.api_response || response.data.message || "VTU provider failed"
         });
 
     } catch (error) {
         console.error("Airtime purchase error:", error.message);
-        
-        // Handle timeout error
+
+        // Log the real response from VTU Naija if available
+        if (error.response) {
+            console.error("VTU Naija status:", error.response.status);
+            console.error("VTU Naija response:", error.response.data);
+        }
+
+        // Handle timeout
         if (error.code === 'ECONNABORTED') {
-            const amountNum = parseFloat(amount);
-            
-            // Deduct balance atomically on timeout
             await userRef.transaction(currentBalance => {
                 return (currentBalance || 0) - amountNum;
             });
 
-            // Log transaction as pending
             const txRef = db.ref(`transactions/${uid}`).push();
             await txRef.set({
                 service: "Airtime Purchase",
@@ -97,11 +107,22 @@ router.post('/buy', async (req, res) => {
                 description: `Airtime purchase for ${phone} (Timed out - Pending)`
             });
 
-            console.log(`⏳ Airtime timed out after 50s. Logged as pending and deducted: ${amount} (UID: ${uid})`);
-            return res.status(504).json({ success: false, error: "VTU API timeout. Transaction marked as pending." });
+            console.log(`⏳ Airtime timed out after 50s. Logged as pending: ${amount} (UID: ${uid})`);
+            return res.status(504).json({
+                success: false,
+                error: "VTU API timeout. Transaction marked as pending."
+            });
         }
-        
-        return res.status(500).json({ success: false, error: "API Connection Error" });
+
+        // Return provider error message if available
+        const providerError = error.response?.data?.api_response 
+            || error.response?.data?.message 
+            || "API Connection Error";
+
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            error: providerError
+        });
     }
 });
 
