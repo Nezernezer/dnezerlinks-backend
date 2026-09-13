@@ -45,7 +45,6 @@ router.post('/search-user', async (req, res) => {
 router.post('/transfer', async (req, res) => {
     const { email, amount, pin } = req.body;
     
-    // Enforce using the authenticated user's Firebase token UID as the sender
     const uid = req.user ? req.user.uid : null;
     const numericAmount = Number(amount);
 
@@ -80,9 +79,14 @@ router.post('/transfer', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Cannot transfer to your own account' });
         }
 
-        // 2. Fetch Sender Data from the authenticated UID node
-        const senderSnap = await db.ref(`users/${uid}`).once('value');
+        // 2. Fetch Sender and Recipient Data simultaneously
+        const [senderSnap, recipientSnap] = await Promise.all([
+            db.ref(`users/${uid}`).once('value'),
+            db.ref(`users/${recipientUid}`).once('value')
+        ]);
+
         const senderData = senderSnap.val();
+        const recipientCurrentBalance = Number(recipientSnap.val()?.balance || 0);
 
         if (!senderData) {
             console.log(`[TRANSFER ERROR] Sender node not found at users/${uid}`);
@@ -100,34 +104,21 @@ router.post('/transfer', async (req, res) => {
         const senderName = senderData.fullName || senderData.name || senderData.username || 'Dlinks User';
         const recipientName = recipientData.fullName || recipientData.name || recipientData.username || 'Dlinks User';
 
-        // 3. Perform Atomic Transaction for Sender (Deduct)
-        const senderBalanceRef = db.ref(`users/${uid}/balance`);
-        const senderResult = await senderBalanceRef.transaction((current) => {
-            const bal = Number(current || 0);
-            if (bal < numericAmount) {
-                return; // Aborts transaction
-            }
-            return bal - numericAmount;
-        });
-
-        if (!senderResult.committed) {
-            console.log(`[TRANSFER ERROR] Sender transaction aborted due to insufficient balance.`);
-            return res.status(400).json({ success: false, error: 'Insufficient balance' });
-        }
-
-        // 4. Perform Atomic Transaction for Recipient (Credit)
-        const recipientBalanceRef = db.ref(`users/${recipientUid}/balance`);
-        await recipientBalanceRef.transaction((current) => {
-            const bal = Number(current || 0);
-            return bal + numericAmount;
-        });
+        const newSenderBalance = senderBalance - numericAmount;
+        const newRecipientBalance = recipientCurrentBalance + numericAmount;
 
         const now = Date.now();
         const reference = `TRF-${now}-${Math.floor(Math.random() * 100000)}`;
 
-        // 5. Record Transactions
+        // 3. Multi-path Atomic Update
+        const updates = {};
+        updates[`users/${uid}/balance`] = newSenderBalance;
+        updates[`users/${recipientUid}/balance`] = newRecipientBalance;
+
         const senderTxRef = db.ref(`transactions/${uid}`).push();
-        await senderTxRef.set({
+        const recipientTxRef = db.ref(`transactions/${recipientUid}`).push();
+
+        updates[`transactions/${uid}/${senderTxRef.key}`] = {
             transaction_id: senderTxRef.key,
             service: 'Wallet Transfer',
             type: 'debit',
@@ -139,10 +130,9 @@ router.post('/transfer', async (req, res) => {
             email: cleanEmail,
             recipientUid: recipientUid,
             recipientName: recipientName
-        });
+        };
 
-        const recipientTxRef = db.ref(`transactions/${recipientUid}`).push();
-        await recipientTxRef.set({
+        updates[`transactions/${recipientUid}/${recipientTxRef.key}`] = {
             transaction_id: recipientTxRef.key,
             service: 'Wallet Transfer',
             type: 'credit',
@@ -154,7 +144,9 @@ router.post('/transfer', async (req, res) => {
             email: cleanEmail,
             senderUid: uid,
             senderName: senderName
-        });
+        };
+
+        await db.ref().update(updates);
 
         console.log(`[TRANSFER SUCCESS] Reference: ${reference}`);
         res.json({
