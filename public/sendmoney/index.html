@@ -6,6 +6,7 @@
 <title>Send Money | Dnezerlinks</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,7 +26,6 @@
     .btn-primary:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
     .btn-secondary { background: #0D47A1; color: white; }
     .btn-secondary:hover:not(:disabled) { background: #1565C0; }
-    .btn-secondary:disabled { background: #90a4ae; cursor: not-allowed; }
     .name-box { margin-top: 14px; padding: 14px; border-radius: 12px; background: #e3f2fd; color: #0D47A1; font-weight: 600; font-size: 0.95rem; display: none; text-align: center; }
     .name-box.error { background: #ffebee; color: #c62828; }
     .name-box.show { display: block; }
@@ -67,7 +67,7 @@
         <input type="number" id="amount" placeholder="Enter amount" min="1" step="1">
 
         <label for="pin">Transaction PIN</label>
-        <input type="password" id="pin" placeholder="Enter 4-digit PIN" maxlength="6">
+        <input type="password" id="pin" placeholder="Enter transaction PIN" maxlength="6">
 
         <button class="btn btn-primary" id="sendBtn" onclick="sendMoney()" disabled>
             Send Money
@@ -90,11 +90,13 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
+const db = firebase.database();
 
-const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
+const BACKEND_URL = "https://api.dlinks.name.ng";
 
 let verifiedEmail = null;
 let currentUser = null;
+let isAuthResolved = false;
 
 document.getElementById("email").addEventListener("input", () => {
     verifiedEmail = null;
@@ -104,31 +106,40 @@ document.getElementById("email").addEventListener("input", () => {
     nameBox.style.display = "none";
 });
 
-auth.onAuthStateChanged(async (user) => {
+auth.onAuthStateChanged((user) => {
+    isAuthResolved = true;
     if (!user) {
         document.getElementById("balanceInfo").innerHTML =
             '<span style="color:#c62828">Please login first</span>';
+        currentUser = null;
         return;
     }
     currentUser = user;
-    loadBalance();
+
+    db.ref(`users/${user.uid}/balance`).on('value', (snap) => {
+        const balance = parseFloat(snap.val() || 0);
+        document.getElementById("userBalance").innerText = "₦" + balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+    });
 });
 
-async function loadBalance() {
-    try {
-        const token = await currentUser.getIdToken();
-        const res = await fetch(`${BACKEND_URL}/api/balance`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json().catch(() => ({}));
-        if (data.success || data.balance !== undefined) {
-            document.getElementById("userBalance").textContent =
-                "₦" + Number(data.balance || 0).toLocaleString();
-        } else {
-            document.getElementById("userBalance").textContent = "—";
+async function getValidToken() {
+    if (!isAuthResolved) {
+        let attempts = 0;
+        while (!isAuthResolved && attempts < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
         }
-    } catch (e) {
-        document.getElementById("userBalance").textContent = "—";
+    }
+    if (!currentUser) {
+        currentUser = auth.currentUser;
+    }
+    if (!currentUser) {
+        throw new Error("NO_SESSION");
+    }
+    try {
+        return await currentUser.getIdToken(true);
+    } catch (err) {
+        throw new Error("NO_SESSION");
     }
 }
 
@@ -140,6 +151,7 @@ async function searchUser() {
 
     if (!email || !email.includes("@")) {
         nameBox.className = "name-box show error";
+        nameBox.style.display = "block";
         nameBox.textContent = "Enter a valid email address";
         verifiedEmail = null;
         sendBtn.disabled = true;
@@ -154,7 +166,8 @@ async function searchUser() {
     sendBtn.disabled = true;
 
     try {
-        const token = await currentUser.getIdToken();
+        const token = await getValidToken();
+
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/search-user`, {
             method: "POST",
             headers: {
@@ -166,20 +179,32 @@ async function searchUser() {
 
         const data = await res.json().catch(() => ({}));
 
+        if (res.status === 401 || res.status === 403) {
+            throw new Error("NO_SESSION");
+        }
+
         if (res.ok && data.success) {
             verifiedEmail = data.email || email;
             nameBox.className = "name-box show";
-            nameBox.textContent = "✓ " + data.name;
+            nameBox.style.display = "block";
+            nameBox.textContent = "✓ " + (data.name || "Dlinks User");
             sendBtn.disabled = false;
         } else {
             nameBox.className = "name-box show error";
+            nameBox.style.display = "block";
             nameBox.textContent = data.message || data.error || "User not found";
             verifiedEmail = null;
             sendBtn.disabled = true;
         }
     } catch (err) {
         nameBox.className = "name-box show error";
-        nameBox.textContent = "Network error. Try again.";
+        nameBox.style.display = "block";
+        if (err.message === "NO_SESSION") {
+            nameBox.textContent = "Invalid session. Please login again.";
+            setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+        } else {
+            nameBox.textContent = "Network error or server unreachable.";
+        }
         verifiedEmail = null;
         sendBtn.disabled = true;
     }
@@ -194,6 +219,12 @@ async function sendMoney() {
     const msg = document.getElementById("msg");
     const sendBtn = document.getElementById("sendBtn");
 
+    if (!currentUser) {
+        msg.className = "msg error";
+        msg.textContent = "Invalid session. Please login again.";
+        setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+        return;
+    }
     if (!verifiedEmail) {
         msg.className = "msg error";
         msg.textContent = "Please verify recipient first";
@@ -220,7 +251,8 @@ async function sendMoney() {
     msg.style.display = "none";
 
     try {
-        const token = await currentUser.getIdToken();
+        const token = await getValidToken();
+
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {
             method: "POST",
             headers: {
@@ -237,22 +269,31 @@ async function sendMoney() {
 
         const data = await res.json().catch(() => ({}));
 
+        if (res.status === 401 || res.status === 403) {
+            throw new Error("NO_SESSION");
+        }
+
         if (res.ok && data.success) {
             msg.className = "msg success";
-            msg.textContent = `✓ ₦${amount.toLocaleString()} sent successfully to ${data.recipientName}`;
+            msg.textContent = data.message || `✓ Transfer successful!`;
             document.getElementById("amount").value = "";
             document.getElementById("pin").value = "";
             verifiedEmail = null;
             document.getElementById("sendBtn").disabled = true;
             document.getElementById("nameResult").className = "name-box";
-            loadBalance();
+            document.getElementById("nameResult").style.display = "none";
         } else {
             msg.className = "msg error";
             msg.textContent = data.message || data.error || "Transfer failed";
         }
     } catch (err) {
         msg.className = "msg error";
-        msg.textContent = "Network error. Please try again.";
+        if (err.message === "NO_SESSION") {
+            msg.textContent = "Invalid session. Please login again.";
+            setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+        } else {
+            msg.textContent = "Network error. Please try again.";
+        }
     }
 
     sendBtn.disabled = false;
