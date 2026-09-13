@@ -54,8 +54,8 @@
             Your balance: <span id="userBalance">Loading...</span>
         </div>
 
-        <label for="phone">Recipient Phone Number</label>
-        <input type="tel" id="phone" placeholder="e.g. 08123456789" maxlength="15">
+        <label for="email">Recipient Email Address</label>
+        <input type="email" id="email" placeholder="e.g. user@example.com">
 
         <button class="btn btn-secondary" id="searchBtn" onclick="searchUser()">
             Verify Recipient
@@ -93,11 +93,11 @@ const auth = firebase.auth();
 
 const BACKEND_URL = "https://dnezerlinks-backend.onrender.com";
 
-let verifiedPhone = null;          // we only store the phone, never a UID
+let verifiedEmail = null;
 let currentUser = null;
 
-document.getElementById("phone").addEventListener("input", () => {
-    verifiedPhone = null;
+document.getElementById("email").addEventListener("input", () => {
+    verifiedEmail = null;
     document.getElementById("sendBtn").disabled = true;
     const nameBox = document.getElementById("nameResult");
     nameBox.className = "name-box";
@@ -133,15 +133,15 @@ async function loadBalance() {
 }
 
 async function searchUser() {
-    const phone = document.getElementById("phone").value.trim();
+    const email = document.getElementById("email").value.trim().toLowerCase();
     const nameBox = document.getElementById("nameResult");
     const searchBtn = document.getElementById("searchBtn");
     const sendBtn = document.getElementById("sendBtn");
 
-    if (!phone || phone.replace(/\D/g, "").length < 10) {
+    if (!email || !email.includes("@")) {
         nameBox.className = "name-box show error";
-        nameBox.textContent = "Enter a valid phone number";
-        verifiedPhone = null;
+        nameBox.textContent = "Enter a valid email address";
+        verifiedEmail = null;
         sendBtn.disabled = true;
         return;
     }
@@ -150,7 +150,7 @@ async function searchUser() {
     searchBtn.innerHTML = '<span class="loading"></span> Checking...';
     nameBox.className = "name-box";
     nameBox.style.display = "none";
-    verifiedPhone = null;
+    verifiedEmail = null;
     sendBtn.disabled = true;
 
     try {
@@ -161,26 +161,26 @@ async function searchUser() {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${token}`
             },
-            body: JSON.stringify({ phone })
+            body: JSON.stringify({ email })
         });
 
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.success) {
-            verifiedPhone = data.phone || phone;   // store the normalized phone
+            verifiedEmail = data.email || email;
             nameBox.className = "name-box show";
             nameBox.textContent = "✓ " + data.name;
             sendBtn.disabled = false;
         } else {
             nameBox.className = "name-box show error";
             nameBox.textContent = data.message || data.error || "User not found";
-            verifiedPhone = null;
+            verifiedEmail = null;
             sendBtn.disabled = true;
         }
     } catch (err) {
         nameBox.className = "name-box show error";
         nameBox.textContent = "Network error. Try again.";
-        verifiedPhone = null;
+        verifiedEmail = null;
         sendBtn.disabled = true;
     }
 
@@ -194,7 +194,7 @@ async function sendMoney() {
     const msg = document.getElementById("msg");
     const sendBtn = document.getElementById("sendBtn");
 
-    if (!verifiedPhone) {
+    if (!verifiedEmail) {
         msg.className = "msg error";
         msg.textContent = "Please verify recipient first";
         return;
@@ -228,7 +228,7 @@ async function sendMoney() {
                 "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
-                phone: verifiedPhone,   // only the phone is sent
+                email: verifiedEmail,
                 amount: amount,
                 uid: currentUser.uid,
                 pin: pin
@@ -242,7 +242,7 @@ async function sendMoney() {
             msg.textContent = `✓ ₦${amount.toLocaleString()} sent successfully to ${data.recipientName}`;
             document.getElementById("amount").value = "";
             document.getElementById("pin").value = "";
-            verifiedPhone = null;
+            verifiedEmail = null;
             document.getElementById("sendBtn").disabled = true;
             document.getElementById("nameResult").className = "name-box";
             loadBalance();
