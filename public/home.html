@@ -81,7 +81,7 @@
     <div class="service-item" onclick="location.href='airtime-to-cash/'">♻️<span>Swap</span></div>
     <div class="service-item" onclick="location.href='fund-wallet.html'">💰<span>Fund Wallet</span></div>
     <div class="service-item" onclick="location.href='history.html'"> 📜<span>History</span></div>
-    <div class="service-item" onclick="location.href='send-money.html'">💸<span>Send Money</span></div>
+    <div class="service-item" onclick="location.href='sendmoney/'">💸<span>Send Money</span></div>
 </div>
 
 <div class="bottom-nav">
@@ -337,15 +337,15 @@
         renderCombinedNotifications();
     }
     function closeNotif() { document.getElementById('notifModal').style.display = "none"; }
-    
+
     // Close Pin Modal & Remember dismissal for the session
     function closePinModal() {
         document.getElementById('pinPromptModal').style.display = "none";
         sessionStorage.setItem('pin_prompt_dismissed', 'true');
     }
 
-    window.onclick = function(event) { 
-        if (event.target == document.getElementById('notifModal')) closeNotif(); 
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('notifModal')) closeNotif();
         if (event.target == document.getElementById('pinPromptModal')) closePinModal();
     }
 </script>
@@ -386,7 +386,7 @@
         }
 
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'toggle-bal-btn';                                                 
+        toggleBtn.className = 'toggle-bal-btn';
         toggleBtn.id = 'toggleBalBtn';
         toggleBtn.innerHTML = isHidden ? 'Show' : 'Hide';
         balEl.parentNode.appendChild(toggleBtn);

@@ -55,7 +55,7 @@
         <div id="statusBox" class="status-msg"></div>
 
         <label>Amount (₦)</label>
-        <input type="number" id="amount" placeholder="Enter Amount">
+        <input type="number" id="amount" placeholder="Min ₦1,000" min="1000">
 
         <label>Transaction PIN</label>
         <input type="password" id="pin" placeholder="Enter 4-digit PIN" maxlength="6" inputmode="numeric">
@@ -95,7 +95,7 @@
             }
 
             if (meterNumber.length >= 8) {
-                const validationKey = `${disco}_${meterNumber}`;
+                const validationKey = `\( {disco}_ \){meterNumber}`;
                 if (validationKey !== lastValidatedNumber) {
                     if (!disco) {
                         showStatus("❌ Please select a Disco first.", "status-error");
@@ -171,8 +171,8 @@
                 alert("❌ Enter your transaction PIN.");
                 return;
             }
-            if (isNaN(amount) || amount <= 0) {
-                alert("❌ Please enter a valid amount.");
+            if (isNaN(amount) || amount < 1000) {
+                alert("❌ Minimum payment amount is ₦1,000.");
                 return;
             }
             if (!verifiedCustomerName) {
@@ -180,7 +180,7 @@
                 return;
             }
 
-            const confirmMsg = `CONFIRM PAYMENT\n\n👤 Name: ${verifiedCustomerName}\n🏢 Disco: ${disco}\n⚡ Type: ${meterType}\n🔢 Meter: ${meterNum}\n💰 Amount: ₦${amount.toLocaleString()}\n\nProceed?`;
+            const confirmMsg = `CONFIRM PAYMENT\n\n👤 Name: ${verifiedCustomerName}\n🏢 Disco: ${disco}\n⚡ Type: ${meterType}\n🔢 Meter: \( {meterNum}\n💰 Amount: ₦ \){amount.toLocaleString()}\n\nProceed?`;
             if (!confirm(confirmMsg)) return;
 
             payBtn.disabled = true;

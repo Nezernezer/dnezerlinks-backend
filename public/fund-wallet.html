@@ -265,10 +265,20 @@
 
                 if (processingBanks.has(key)) return;
 
-                // Only check newly created accounts inside virtual_accounts_new
-                let matched = valuesList.find(acc =>
-                    acc && acc.bank_name && acc.bank_name.toLowerCase().includes(key)
-                );
+                // Only check newly created accounts inside virtual_accounts_new with robust matching
+                let matched = valuesList.find(acc => {
+                    if (!acc || !acc.bank_name) return false;
+                    const bName = acc.bank_name.toLowerCase();
+                    
+                    if (key === '9psb') return bName.includes('9psb') || bName.includes('9 payment');
+                    if (key === 'palmpay') return bName.includes('palmpay') || bName.includes('palm pay');
+                    if (key === 'safehaven') return bName.includes('safehaven') || bName.includes('safe haven');
+                    if (key === 'bankly') return bName.includes('bankly');
+                    if (key === 'providus') return bName.includes('providus');
+                    if (key === 'wema') return bName.includes('wema');
+                    
+                    return bName.includes(key);
+                });
 
                 if (matched) {
                     numEl.innerText = matched.account_number;

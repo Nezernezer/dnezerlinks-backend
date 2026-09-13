@@ -96,7 +96,6 @@ const BACKEND_URL = "https://api.dlinks.name.ng";
 
 let verifiedEmail = null;
 let currentUser = null;
-let isAuthResolved = false;
 
 document.getElementById("email").addEventListener("input", () => {
     verifiedEmail = null;
@@ -107,10 +106,8 @@ document.getElementById("email").addEventListener("input", () => {
 });
 
 auth.onAuthStateChanged((user) => {
-    isAuthResolved = true;
     if (!user) {
-        document.getElementById("balanceInfo").innerHTML =
-            '<span style="color:#c62828">Please login first</span>';
+        document.getElementById("balanceInfo").innerHTML = '<span style="color:#c62828">Please login first</span>';
         currentUser = null;
         return;
     }
@@ -121,27 +118,6 @@ auth.onAuthStateChanged((user) => {
         document.getElementById("userBalance").innerText = "₦" + balance.toLocaleString(undefined, {minimumFractionDigits: 2});
     });
 });
-
-async function getValidToken() {
-    if (!isAuthResolved) {
-        let attempts = 0;
-        while (!isAuthResolved && attempts < 30) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
-        }
-    }
-    if (!currentUser) {
-        currentUser = auth.currentUser;
-    }
-    if (!currentUser) {
-        throw new Error("NO_SESSION");
-    }
-    try {
-        return await currentUser.getIdToken(true);
-    } catch (err) {
-        throw new Error("NO_SESSION");
-    }
-}
 
 async function searchUser() {
     const email = document.getElementById("email").value.trim().toLowerCase();
@@ -160,28 +136,26 @@ async function searchUser() {
 
     searchBtn.disabled = true;
     searchBtn.innerHTML = '<span class="loading"></span> Checking...';
-    nameBox.className = "name-box";
     nameBox.style.display = "none";
     verifiedEmail = null;
     sendBtn.disabled = true;
 
     try {
-        const token = await getValidToken();
+        let token = "";
+        if (currentUser) {
+            token = await currentUser.getIdToken().catch(() => "");
+        }
 
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/search-user`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
+                ...(token ? { "Authorization": `Bearer ${token}` } : {})
             },
             body: JSON.stringify({ email })
         });
 
         const data = await res.json().catch(() => ({}));
-
-        if (res.status === 401 || res.status === 403) {
-            throw new Error("NO_SESSION");
-        }
 
         if (res.ok && data.success) {
             verifiedEmail = data.email || email;
@@ -199,12 +173,7 @@ async function searchUser() {
     } catch (err) {
         nameBox.className = "name-box show error";
         nameBox.style.display = "block";
-        if (err.message === "NO_SESSION") {
-            nameBox.textContent = "Invalid session. Please login again.";
-            setTimeout(() => { window.location.href = 'login.html'; }, 1500);
-        } else {
-            nameBox.textContent = "Network error or server unreachable.";
-        }
+        nameBox.textContent = "Network error. Try again.";
         verifiedEmail = null;
         sendBtn.disabled = true;
     }
@@ -221,7 +190,7 @@ async function sendMoney() {
 
     if (!currentUser) {
         msg.className = "msg error";
-        msg.textContent = "Invalid session. Please login again.";
+        msg.textContent = "Please login first.";
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
         return;
     }
@@ -251,13 +220,13 @@ async function sendMoney() {
     msg.style.display = "none";
 
     try {
-        const token = await getValidToken();
+        const token = await currentUser.getIdToken().catch(() => "");
 
         const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
+                ...(token ? { "Authorization": `Bearer ${token}` } : {})
             },
             body: JSON.stringify({
                 email: verifiedEmail,
@@ -268,10 +237,6 @@ async function sendMoney() {
         });
 
         const data = await res.json().catch(() => ({}));
-
-        if (res.status === 401 || res.status === 403) {
-            throw new Error("NO_SESSION");
-        }
 
         if (res.ok && data.success) {
             msg.className = "msg success";
@@ -288,12 +253,7 @@ async function sendMoney() {
         }
     } catch (err) {
         msg.className = "msg error";
-        if (err.message === "NO_SESSION") {
-            msg.textContent = "Invalid session. Please login again.";
-            setTimeout(() => { window.location.href = 'login.html'; }, 1500);
-        } else {
-            msg.textContent = "Network error. Please try again.";
-        }
+        msg.textContent = "Network error. Please try again.";
     }
 
     sendBtn.disabled = false;

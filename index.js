@@ -20,17 +20,25 @@ try {
 const app = express();
 
 // CORS
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-billstack-signature']
+}));
 
-// 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
-app.use(express.json());
+app.use(express.json({ type: ['application/json', 'text/plain', 'application/vnd.api+json'] }));
+app.use(express.urlencoded({ extended: true }));
 
-// 2. Public webhook routes (handling both paths securely)
+// Public webhooks + virtual account generation
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
+app.use('/api/account', require('./routes/accountRoutes'));
 
-// Security gatekeeper
+// ─────────────────────────────────────────────
+// Security Gatekeeper
+// ─────────────────────────────────────────────
 const securityGatekeeper = async (req, res, next) => {
+    // Completely public paths (including recipient search)
     if (
         req.method === 'GET' ||
         req.path === '/' ||
@@ -38,14 +46,45 @@ const securityGatekeeper = async (req, res, next) => {
         req.path.includes('/webhook') ||
         req.path.includes('/validate-meter') ||
         req.path.includes('/users') ||
-        req.path.includes('/fund')
-    ) return next();
+        req.path.includes('/fund') ||
+        req.path.includes('/search-user') // <-- Excluded from token check entirely
+    ) {
+        return next();
+    }
 
+    // 1. Must be logged in (valid Firebase ID token)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Please login first' });
+    }
+
+    let decoded;
+    try {
+        const token = authHeader.split('Bearer ')[1];
+        decoded = await admin.auth().verifyIdToken(token);
+        req.user = decoded;
+    } catch (err) {
+        return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+    }
+
+    // 2. Routes that only need login (NO PIN)
+    if (
+        req.path.includes('/balance')
+    ) {
+        return next();
+    }
+
+    // 3. Money-moving routes → require PIN and strict authentication
     const { uid, userId, pin } = req.body;
-    const activeUid = uid || userId;
+    const activeUid = uid || userId || decoded.uid;
 
     if (!activeUid || String(activeUid).includes('.')) {
         return res.status(400).json({ success: false, error: 'Invalid Session' });
+    }
+
+    // Prevent UID spoofing
+    if (activeUid !== decoded.uid) {
+        return res.status(403).json({ success: false, error: 'UID mismatch' });
     }
 
     try {
