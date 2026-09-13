@@ -1,4 +1,3 @@
-// routes/api.js (already correct)
 const express = require('express');
 const router = express.Router();
 
@@ -14,5 +13,6 @@ router.use('/electricity', require('./electricityRoutes'));
 router.use('/airtimeswap', require('./airtimeswapRoutes'));
 router.use('/sendmoney', require('./sendmoneyRoutes'));
 router.use('/admin', require('./adminRoutes'));
+router.use('/balance', require('./balanceRoutes'));
 
 module.exports = router;
