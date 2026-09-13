@@ -1,3 +1,47 @@
+// routes/sendmoneyRoutes.js
+const express = require('express');
+const router = express.Router();
+const admin = require('firebase-admin');
+const db = admin.database();
+
+router.post('/search-user', async (req, res) => {
+    const { email } = req.body;
+    const senderUid = req.user ? req.user.uid : null;
+
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Enter a valid email address' });
+    }
+
+    try {
+        const snapshot = await db.ref('users')
+            .orderByChild('email')
+            .equalTo(cleanEmail)
+            .once('value');
+
+        const users = snapshot.val();
+        if (!users) {
+            return res.status(404).json({ success: false, error: 'User not found with this email address' });
+        }
+
+        const recipientUid = Object.keys(users)[0];
+        const userData = users[recipientUid];
+
+        if (senderUid && recipientUid === senderUid) {
+            return res.status(400).json({ success: false, error: 'You cannot send money to yourself' });
+        }
+
+        res.json({
+            success: true,
+            name: userData.fullName || userData.name || userData.username || 'Dlinks User',
+            email: cleanEmail
+        });
+    } catch (error) {
+        console.error('Search user error:', error);
+        res.status(500).json({ success: false, error: 'Server error during search' });
+    }
+});
+
 router.post('/transfer', async (req, res) => {
     const { email, amount, pin } = req.body;
     
@@ -125,3 +169,5 @@ router.post('/transfer', async (req, res) => {
         res.status(500).json({ success: false, error: 'Transfer failed. Please try again.' });
     }
 });
+
+module.exports = router;
