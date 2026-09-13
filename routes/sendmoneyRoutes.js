@@ -46,6 +46,8 @@ router.post('/transfer', async (req, res) => {
     const { email, amount, uid, pin } = req.body;
     const numericAmount = Number(amount);
 
+    console.log(`[TRANSFER] Attempt: Sender UID=${uid}, Recipient Email=${email}, Amount=${numericAmount}`);
+
     if (!uid || !email || !numericAmount || numericAmount <= 0 || !pin) {
         return res.status(400).json({ success: false, error: 'Missing required transfer details' });
     }
@@ -53,6 +55,7 @@ router.post('/transfer', async (req, res) => {
     const cleanEmail = String(email).trim().toLowerCase();
 
     try {
+        // 1. Find Recipient
         const snapshot = await db.ref('users')
             .orderByChild('email')
             .equalTo(cleanEmail)
@@ -70,6 +73,7 @@ router.post('/transfer', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Cannot transfer to your own account' });
         }
 
+        // 2. Fetch Sender Data
         const senderSnap = await db.ref(`users/${uid}`).once('value');
         const senderData = senderSnap.val();
 
@@ -79,30 +83,37 @@ router.post('/transfer', async (req, res) => {
 
         const senderName = senderData.fullName || senderData.name || senderData.username || 'Dlinks User';
         const recipientName = recipientData.fullName || recipientData.name || recipientData.username || 'Dlinks User';
+        
+        console.log(`[TRANSFER] Sender Balance in DB:`, senderData.balance);
 
-        // Atomic balance check & deduction (prevents sending more than balance)
+        // 3. Perform Atomic Transaction for Sender (Deduct)
         const senderBalanceRef = db.ref(`users/${uid}/balance`);
         const senderResult = await senderBalanceRef.transaction((current) => {
             const bal = Number(current || 0);
+            console.log(`[TRANSACTION] Current sender balance: ${bal}, Deducting: ${numericAmount}`);
             if (bal < numericAmount) {
-                return; // Aborts transaction if balance is insufficient
+                return; // Aborts if insufficient
             }
             return bal - numericAmount;
         });
 
         if (!senderResult.committed) {
+            console.log(`[TRANSFER ERROR] Insufficient balance or transaction aborted.`);
             return res.status(400).json({ success: false, error: 'Insufficient balance' });
         }
 
-        // Credit recipient balance atomically
-        await db.ref(`users/${recipientUid}/balance`).transaction((current) => {
-            return Number(current || 0) + numericAmount;
+        // 4. Perform Atomic Transaction for Recipient (Credit)
+        const recipientBalanceRef = db.ref(`users/${recipientUid}/balance`);
+        await recipientBalanceRef.transaction((current) => {
+            const bal = Number(current || 0);
+            console.log(`[TRANSACTION] Current recipient balance: ${bal}, Adding: ${numericAmount}`);
+            return bal + numericAmount;
         });
 
         const now = Date.now();
         const reference = `TRF-${now}-${Math.floor(Math.random() * 100000)}`;
 
-        // Record debit transaction for sender
+        // 5. Record Transactions
         const senderTxRef = db.ref(`transactions/${uid}`).push();
         await senderTxRef.set({
             transaction_id: senderTxRef.key,
@@ -118,7 +129,6 @@ router.post('/transfer', async (req, res) => {
             recipientName: recipientName
         });
 
-        // Record credit transaction for recipient
         const recipientTxRef = db.ref(`transactions/${recipientUid}`).push();
         await recipientTxRef.set({
             transaction_id: recipientTxRef.key,
@@ -134,6 +144,7 @@ router.post('/transfer', async (req, res) => {
             senderName: senderName
         });
 
+        console.log(`[TRANSFER SUCCESS] Reference: ${reference}`);
         res.json({
             success: true,
             recipientName,
@@ -142,7 +153,7 @@ router.post('/transfer', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Transfer error:', error);
+        console.error('Transfer execution error:', error);
         res.status(500).json({ success: false, error: 'Transfer failed. Please try again.' });
     }
 });
