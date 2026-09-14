@@ -52,7 +52,7 @@
         .btn-print { background: var(--primary); color: white; }
         .btn-share { background: #e3f2fd; color: var(--primary); }
         .btn-close { background: #eee; color: #555; }
-        
+
         .btn-view-pins { background: #2e7d32; color: white; width: 100%; padding: 14px; border-radius: 10px; border: none; font-weight: 800; cursor: pointer; font-size: 14px; text-transform: uppercase; box-shadow: 0 3px 6px rgba(46,125,50,0.2); }
         .btn-view-pins:active { background: #1b5e20; }
 
@@ -64,30 +64,30 @@
 
         /* --- OPTIMIZED MULTI-FORMAT PRINT ENGINE --- */
         #printArea { display: none; background: white; padding: 0; margin: 0; width: 100%; }
-        
+
         .tickets-grid.layout-a4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 100%; padding: 0; box-sizing: border-box; }
         .tickets-grid.layout-pos { display: flex; flex-direction: column; gap: 15px; max-width: 58mm; margin: 0 auto; padding: 5px; box-sizing: border-box; }
 
         .pin-ticket { border: 1px solid #333; padding: 3px 5px; background: #fff; border-radius: 4px; box-sizing: border-box; page-break-inside: avoid; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; position: relative; line-height: 1.0; }
-        
+
         .layout-a4 .pin-ticket { height: 28mm; }
         .layout-pos .pin-ticket { height: auto; padding: 10px 6px; border-bottom: 2px dashed #000; border-top: none; border-left: none; border-right: none; border-radius: 0; }
 
         .ticket-top-wrapper { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: 0px; line-height: 1.0; }
         .ticket-header { font-weight: 900; font-size: 12px; color: #000; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.0; text-align: center; width: 100%; padding: 0 22px; box-sizing: border-box; }
-        
+
         .layout-pos .ticket-header { font-size: 15px; }
 
         .ticket-brand { font-size: 10px; font-weight: 800; color: #0d47a1; margin: 0 0 1px 0; white-space: nowrap; line-height: 1.0; text-align: center; }
         .layout-pos .ticket-brand { font-size: 13px; margin: 4px 0; }
-        
+
         .pin-row { display: flex; align-items: center; justify-content: center; gap: 4px; line-height: 1.0; margin: 0; padding: 0; background: none; border: none; }
         .pin-label { font-size: 8px; color: #444; font-weight: bold; text-transform: uppercase; line-height: 1.0; }
         .layout-pos .pin-label { font-size: 11px; }
 
         .pin-code { font-size: 13px; font-weight: 900; color: #000; letter-spacing: 0.2px; line-height: 1.0; }
         .layout-pos .pin-code { font-size: 18px; letter-spacing: 0.5px; margin: 4px 0; }
-        
+
         .serial-row { font-size: 8px; font-weight: 800; color: #222; line-height: 1.0; margin: 0 0 1px 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .layout-pos .serial-row { font-size: 10px; margin: 2px 0; }
 
@@ -100,7 +100,7 @@
         /* Logos */
         .logo-box { position: absolute; top: 3px; right: 4px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box; }
         .layout-pos .logo-box { width: 22px; height: 22px; top: 6px; right: 2px; }
-        
+
         .logo-mtn { background: #ffcc00; border: 1px solid #000; border-radius: 50%; }
         .logo-mtn::before { content: "MTN"; color: #000; font-size: 5px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.8); }
         .layout-pos .logo-mtn::before { font-size: 6px; }
@@ -124,7 +124,7 @@
             body:not(.printing-vouchers) .header, body:not(.printing-vouchers) .btn-home, body:not(.printing-vouchers) .action-btns, body:not(.printing-vouchers) .btn-close, body:not(.printing-vouchers) #history-list, body:not(.printing-vouchers) .pagination { display: none !important; }
             body:not(.printing-vouchers) .modal { position: absolute; background: white; display: block !important; }
             body:not(.printing-vouchers) .modal-content { margin: 0; width: 100%; border: none; box-shadow: none; padding: 0; }
-            
+
             body.printing-vouchers #appLayoutContainer, body.printing-vouchers .modal, body.printing-vouchers #printControlsEngine, body.printing-vouchers #paperSelectionControl { display: none !important; }
             body.printing-vouchers #printArea { display: block !important; position: absolute; left: 0; top: 0; margin: 0; padding: 0; width: 100%; }
         }
@@ -189,7 +189,7 @@
     </div>
 
     <div id="ticketsWrapper"></div>
-    
+
     <div id="printControlsEngine" style="display: flex; gap: 12px; max-width: 400px; margin: 25px auto; padding: 0 15px; box-sizing: border-box;">
         <button style="flex: 1; background: #2e7d32; color: white; padding: 14px; border: none; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(46,125,50,0.3);" onclick="executeVoucherPrint()">🖨️ PRINT SHEET</button>
         <button style="flex: 1; background: #c62828; color: white; padding: 14px; border: none; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(198,40,40,0.3);" onclick="exitVoucherPrintCanvas()">❌ CLOSE SHEET</button>
@@ -250,7 +250,7 @@
             let data = {
                 service: "Transaction Ledger",
                 network: "N/A",
-                phone: tx.phone || tx.mobile_number || tx.number || "N/A",
+                phone: tx.target_details || tx.targetDetails || tx.recipientName || tx.senderName || tx.phone || tx.mobile_number || tx.number || "N/A",
                 type: (typeNode === 'CREDIT' || tx.type === 'credit') ? "Credit" : "Debit"
             };
 
@@ -261,9 +261,9 @@
                 }
             } else if (desc.includes("AIRTIME") || serviceNode.includes("AIRTIME")) {
                 data.service = "Airtime Top-up";
-		} else if (desc.includes("TRANSFER") || serviceNode.includes("TRANSFER")) {
-                data.service = "Wallet transfer";
-		} else if (desc.includes("SMS") || serviceNode.includes("SMS")) {
+            } else if (desc.includes("TRANSFER") || serviceNode.includes("TRANSFER") || serviceNode.includes("WALLET TRANSFER")) {
+                data.service = "Wallet Transfer";
+            } else if (desc.includes("SMS") || serviceNode.includes("SMS")) {
                 data.service = "Sms";
             } else if (desc.includes("DATA") || serviceNode.includes("DATA")) {
                 data.service = "Data Bundle";
@@ -294,7 +294,7 @@
         db.ref('transactions/' + user.uid).on('value', snap => {
             isTyping = false;
             allRecords = [];
-            
+
             if (!snap.exists()) {
                 document.getElementById('history-list').innerHTML = '<div class="no-history">No history available yet.</div>';
                 return;
@@ -390,9 +390,9 @@
             document.getElementById('detAmount').innerText = "₦" + parseFloat(tx.amount || 0).toLocaleString();
             document.getElementById('detDate').innerText = formatMyDate(tx.timestamp, tx.date);
             document.getElementById('detRef').innerText = tx.reference || tx.id;
-            
+
             const btnContainer = document.getElementById('historyPinsButtonContainer');
-            btnContainer.innerHTML = ''; 
+            btnContainer.innerHTML = '';
 
             if (meta.service === "Recharge PIN") {
                 const viewPinsBtn = document.createElement('button');
@@ -457,11 +457,11 @@
         const meta = parseMetaData(selectedTx);
         const corporateHeaderBrand = selectedTx.brandName || "DNEZERLINKS";
         const txDateString = formatMyDate(selectedTx.timestamp, selectedTx.date);
-        
+
         let targetNetwork = meta.network !== 'N/A' ? meta.network : 'MTN';
         let logoClass = 'logo-mtn';
         let loadUssd = '*311*PIN#';
-        let customerCare = '300'; 
+        let customerCare = '300';
 
         if (targetNetwork === 'GLO') logoClass = 'logo-glo';
         else if (targetNetwork === 'AIRTEL') logoClass = 'logo-airtel';

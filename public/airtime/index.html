@@ -202,6 +202,11 @@
 
     async function validateUserAndOpenModal() {
         const user = auth.currentUser;
+        if (!user) {
+            window.location.href = "../login.html";
+            return;
+        }
+
         const phone = document.getElementById('phone').value;
         const network = document.getElementById('network').value;
         const amount = document.getElementById('amount').value;
@@ -261,7 +266,6 @@
 
     function closePinModal() {
         document.getElementById('pinModal').style.display = 'none';
-        // Reset button and spinner if modal is closed manually
         document.getElementById('confirmBtn').style.display = 'inline-block';
         document.getElementById('processingSpinner').style.display = 'none';
     }
@@ -276,6 +280,11 @@
     async function verifyAndPay() {
         const enteredPin = document.getElementById('txnPin').value;
         const user = auth.currentUser;
+        if (!user) {
+            window.location.href = "../login.html";
+            return;
+        }
+
         const btn = document.getElementById('confirmBtn');
         const pinErr = document.getElementById('pinError');
         const spinner = document.getElementById('processingSpinner');
@@ -284,8 +293,8 @@
 
         btn.disabled = true;
         btn.innerText = "Processing...";
-        btn.style.display = 'none';       // Hide button
-        spinner.style.display = 'block';  // Show spinner
+        btn.style.display = 'none';
+        spinner.style.display = 'block';
         pinErr.textContent = "";
 
         try {
@@ -294,10 +303,9 @@
             const storedPin = data.transaction_pin || data.pin;
 
             if (String(enteredPin) === String(storedPin)) {
-                await executePurchase(data.balance, user.uid);
+                await executePurchase(data.balance, user);
             } else {
                 pinErr.textContent = "Incorrect PIN!";
-                // Reset UI
                 btn.disabled = false;
                 btn.innerText = "Confirm Payment";
                 btn.style.display = 'inline-block';
@@ -312,7 +320,7 @@
         }
     }
 
-    async function executePurchase(balance, uid) {
+    async function executePurchase(balance, user) {
         const network = document.getElementById("network").value;
         const phone = document.getElementById("phone").value;
         const amount = Number(document.getElementById("amount").value);
@@ -331,18 +339,23 @@
         }
 
         try {
-            // Create an AbortController with a 35-second timeout
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 35000);
 
+            // Get Firebase ID token to send securely in the Authorization header
+            const token = await user.getIdToken();
+
             const response = await fetch("https://dnezerlinks-backend.onrender.com/api/airtime/buy", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ pin, uid, phone, networkID: networkMap[network], amount }),
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}` 
+                },
+                body: JSON.stringify({ pin, phone, networkID: networkMap[network], amount }),
                 signal: controller.signal
             });
 
-            clearTimeout(timeoutId);  // Cancel timeout if request completes
+            clearTimeout(timeoutId);
 
             const res = await response.json();
 
@@ -352,7 +365,6 @@
                 showMessage("Transaction Successful!", false);
                 setTimeout(() => { window.location.href = "../home.html"; }, 2000);
             } else {
-                // FAIL: Reset button so they can fix and try again
                 pinErr.textContent = res.error || "Transaction Failed";
                 btn.disabled = false;
                 btn.innerText = "Confirm Payment";
@@ -360,7 +372,6 @@
                 spinner.style.display = 'none';
             }
         } catch (e) {
-            // ERROR: Reset button
             if (e.name === 'AbortError') {
                 pinErr.textContent = "Request timed out. Please try again.";
             } else {
