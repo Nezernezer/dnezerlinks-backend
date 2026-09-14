@@ -261,6 +261,8 @@
                 }
             } else if (desc.includes("AIRTIME") || serviceNode.includes("AIRTIME")) {
                 data.service = "Airtime Top-up";
+		} else if (desc.includes("TRANSFER") || serviceNode.includes("TRANSFER")) {
+                data.service = "Wallet transfer";
 		} else if (desc.includes("SMS") || serviceNode.includes("SMS")) {
                 data.service = "Sms";
             } else if (desc.includes("DATA") || serviceNode.includes("DATA")) {
