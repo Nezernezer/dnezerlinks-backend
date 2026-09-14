@@ -1,12 +1,11 @@
 // routes/sendmoneyRoutes.js
 const express = require('express');
 const router = express.Router();
-const admin = require('firebase-admin');
-const db = admin.database();
+const db = require('../config/firebase');
 
 router.post('/search-user', async (req, res) => {
-    const { email } = req.body;
-    const senderUid = req.user ? req.user.uid : null;
+    const { email, uid: requestUid } = req.body;
+    const senderUid = requestUid || (req.user ? req.user.uid : null);
 
     const cleanEmail = email ? String(email).trim().toLowerCase() : '';
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -37,18 +36,18 @@ router.post('/search-user', async (req, res) => {
             email: cleanEmail
         });
     } catch (error) {
-        console.error('Search user error:', error);
+        console.error('Search user error:', error.message);
         res.status(500).json({ success: false, error: 'Server error during search' });
     }
 });
 
 router.post('/transfer', async (req, res) => {
-    const { email, amount, pin } = req.body;
-    
-    const uid = req.user ? req.user.uid : null;
-    const numericAmount = Number(amount);
+    const { uid: requestUid, email, amount, pin } = req.body;
+    const uid = requestUid || (req.user ? req.user.uid : null);
 
-    console.log(`[TRANSFER] Authenticated Sender UID=${uid}, Recipient Email=${email}, Amount=${numericAmount}`);
+    const numericAmount = parseFloat(amount);
+
+    console.log(`[TRANSFER] Sender UID=${uid}, Recipient Email=${email}, Amount=${numericAmount}`);
 
     if (!uid) {
         return res.status(401).json({ success: false, error: 'Unauthorized: Missing user session' });
@@ -61,13 +60,25 @@ router.post('/transfer', async (req, res) => {
     const cleanEmail = String(email).trim().toLowerCase();
 
     try {
-        // 1. Find Recipient
-        const snapshot = await db.ref('users')
-            .orderByChild('email')
-            .equalTo(cleanEmail)
-            .once('value');
+        // 1. Fetch Sender profile and search recipient simultaneously
+        const [senderSnap, recipientSnapshot] = await Promise.all([
+            db.ref(`users/${uid}`).once('value'),
+            db.ref('users').orderByChild('email').equalTo(cleanEmail).once('value')
+        ]);
 
-        const users = snapshot.val();
+        const senderData = senderSnap.val();
+        if (!senderData) {
+            console.log(`[TRANSFER ERROR] Sender node not found at users/${uid}`);
+            return res.status(404).json({ success: false, error: 'Sender account not found' });
+        }
+
+        // 2. PIN Security Validation (Matching dataRoutes pattern)
+        const savedPin = String(senderData.transaction_pin || senderData.pin || '');
+        if (String(pin).trim() !== savedPin.trim()) {
+            return res.status(401).json({ success: false, error: 'Incorrect Transaction PIN!' });
+        }
+
+        const users = recipientSnapshot.val();
         if (!users) {
             return res.status(404).json({ success: false, error: 'Recipient not found' });
         }
@@ -79,27 +90,15 @@ router.post('/transfer', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Cannot transfer to your own account' });
         }
 
-        // 2. Fetch Sender and Recipient Data simultaneously
-        const [senderSnap, recipientSnap] = await Promise.all([
-            db.ref(`users/${uid}`).once('value'),
-            db.ref(`users/${recipientUid}`).once('value')
-        ]);
-
-        const senderData = senderSnap.val();
-        const recipientCurrentBalance = Number(recipientSnap.val()?.balance || 0);
-
-        if (!senderData) {
-            console.log(`[TRANSFER ERROR] Sender node not found at users/${uid}`);
-            return res.status(404).json({ success: false, error: 'Sender account not found' });
-        }
-
-        const senderBalance = Number(senderData.balance || 0);
+        const senderBalance = parseFloat(senderData.balance || 0);
         console.log(`[TRANSFER] Verified Sender DB Balance: ${senderBalance}, Attempting to send: ${numericAmount}`);
 
         if (senderBalance < numericAmount) {
             console.log(`[TRANSFER ERROR] Insufficient balance for UID ${uid}`);
-            return res.status(400).json({ success: false, error: 'Insufficient balance' });
+            return res.status(400).json({ success: false, error: 'Insufficient Balance' });
         }
+
+        const recipientCurrentBalance = parseFloat(recipientData.balance || 0);
 
         const senderName = senderData.fullName || senderData.name || senderData.username || 'Dlinks User';
         const recipientName = recipientData.fullName || recipientData.name || recipientData.username || 'Dlinks User';
@@ -119,7 +118,6 @@ router.post('/transfer', async (req, res) => {
         const recipientTxRef = db.ref(`transactions/${recipientUid}`).push();
         const recipientNotifRef = db.ref(`notifications/${recipientUid}`).push();
 
-        // Assigning recipient name to target details and description for the sender's receipt
         updates[`transactions/${uid}/${senderTxRef.key}`] = {
             transaction_id: senderTxRef.key,
             service: 'Wallet Transfer',
@@ -136,7 +134,6 @@ router.post('/transfer', async (req, res) => {
             recipientUid: recipientUid
         };
 
-        // Assigning sender name to target details for the recipient's transaction record
         updates[`transactions/${recipientUid}/${recipientTxRef.key}`] = {
             transaction_id: recipientTxRef.key,
             service: 'Wallet Transfer',
@@ -152,7 +149,6 @@ router.post('/transfer', async (req, res) => {
             senderUid: uid
         };
 
-        // Pushing notification directly to notifications/{recipientUid} so it pops up under the 🔔 bell icon instantly
         updates[`notifications/${recipientUid}/${recipientNotifRef.key}`] = {
             id: recipientNotifRef.key,
             title: 'Wallet Credited',
@@ -164,7 +160,7 @@ router.post('/transfer', async (req, res) => {
 
         await db.ref().update(updates);
 
-        console.log(`[TRANSFER SUCCESS] Reference: ${reference}`);
+        console.log(`✅ [TRANSFER SUCCESS] Reference: ${reference} (UID: ${uid} -> ${recipientUid})`);
         res.json({
             success: true,
             recipientName,
@@ -173,7 +169,7 @@ router.post('/transfer', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Transfer execution error:', error);
+        console.error('❌ Transfer execution error:', error.message);
         res.status(500).json({ success: false, error: 'Transfer failed. Please try again.' });
     }
 });
