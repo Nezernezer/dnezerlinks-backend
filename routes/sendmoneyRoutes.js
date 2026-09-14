@@ -117,7 +117,9 @@ router.post('/transfer', async (req, res) => {
 
         const senderTxRef = db.ref(`transactions/${uid}`).push();
         const recipientTxRef = db.ref(`transactions/${recipientUid}`).push();
+        const recipientNotifRef = db.ref(`notifications/${recipientUid}`).push();
 
+        // Assigning recipient name to target details and description for the sender's receipt
         updates[`transactions/${uid}/${senderTxRef.key}`] = {
             transaction_id: senderTxRef.key,
             service: 'Wallet Transfer',
@@ -126,12 +128,15 @@ router.post('/transfer', async (req, res) => {
             status: 'successful',
             timestamp: now,
             reference: reference,
-            description: `Transfer to ${recipientName}`,
+            target_details: recipientName,
+            targetDetails: recipientName,
+            description: recipientName,
+            recipientName: recipientName,
             email: cleanEmail,
-            recipientUid: recipientUid,
-            recipientName: recipientName
+            recipientUid: recipientUid
         };
 
+        // Assigning sender name to target details for the recipient's transaction record
         updates[`transactions/${recipientUid}/${recipientTxRef.key}`] = {
             transaction_id: recipientTxRef.key,
             service: 'Wallet Transfer',
@@ -140,10 +145,21 @@ router.post('/transfer', async (req, res) => {
             status: 'successful',
             timestamp: now,
             reference: reference,
-            description: `Transfer from ${senderName}`,
-            email: cleanEmail,
-            senderUid: uid,
-            senderName: senderName
+            target_details: senderName,
+            targetDetails: senderName,
+            description: senderName,
+            senderName: senderName,
+            senderUid: uid
+        };
+
+        // Pushing notification directly to notifications/{recipientUid} so it pops up under the 🔔 bell icon instantly
+        updates[`notifications/${recipientUid}/${recipientNotifRef.key}`] = {
+            id: recipientNotifRef.key,
+            title: 'Wallet Credited',
+            message: `Your account has been credited with ₦${numericAmount.toLocaleString()} by ${senderName}`,
+            timestamp: now,
+            read: false,
+            type: 'credit'
         };
 
         await db.ref().update(updates);
