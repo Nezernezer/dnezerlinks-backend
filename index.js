@@ -26,10 +26,28 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders:
 app.use(express.json({ type: ['application/json', 'text/plain', 'application/vnd.api+json'] }));
 app.use(express.urlencoded({ extended: true }));
 
+// Firebase Auth token extractor middleware for sendmoney and other routes
+const extractUser = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const token = authHeader.split('Bearer ')[1];
+            const decodedToken = await admin.auth().verifyIdToken(token);
+            req.user = decodedToken;
+        } catch (e) {
+            // Ignore invalid token, let downstream logic handle missing sessions
+        }
+    }
+    next();
+};
+
+app.use(extractUser);
+
 // 2. Public webhook and account routes mounted explicitly
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 app.use('/api/account', require('./routes/accountRoutes'));
+app.use('/api/sendmoney', require('./routes/sendmoneyRoutes'));
 
 // Security gatekeeper for authenticated user actions
 const securityGatekeeper = async (req, res, next) => {
@@ -38,10 +56,11 @@ const securityGatekeeper = async (req, res, next) => {
         req.path === '/' ||
         req.path.includes('/validate') ||
         req.path.includes('/webhook') ||
-	req.path.includes('/search-user') ||
+        req.path.includes('/search-user') ||
         req.path.includes('/validate-meter') ||
         req.path.includes('/users') ||
-        req.path.includes('/fund')
+        req.path.includes('/fund') ||
+        req.path.includes('/sendmoney')
     ) return next();
 
     const { uid, userId, pin } = req.body;
