@@ -7,6 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; }
         body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
@@ -20,9 +21,24 @@
         .buy-btn:active { transform: scale(0.98); background: #1565c0; }
         .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 100; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
+
+        /* Modal Styling */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .dialog-box { background: #fff; border-radius: 15px; width: 85%; max-width: 400px; padding: 20px; box-sizing: border-box; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
+
+<div class="modal-overlay" id="customPromptModal">
+    <div class="dialog-box">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: #0D47A1; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
+    </div>
+</div>
 
 <div class="header-card">
     <button class="back-btn" onclick="location.href='../home.html'">←</button>
@@ -33,10 +49,12 @@
     <div class="form-group">
         <label>Select Exam Body</label>
         <select id="examBody">
-            <option value="3500|WAEC Result Checker">WAEC PIN - ₦3,500</option>
-            <option value="1200|NECO Result Checker">NECO PIN - ₦1,200</option>
-            <option value="1500|NABTEB Result Checker">NABTEB PIN - ₦1,500</option>
-            <option value="4500|JAMB Profile Code">JAMB PIN - ₦4,500</option>
+            <option value="waec|3500|WAEC Result Checker">WAEC PIN - ₦3,500</option>
+            <option value="neco|1200|NECO Result Checker">NECO PIN - ₦1,200</option>
+            <option value="nabteb|1500|NABTEB Result Checker">NABTEB PIN - ₦1,500</option>
+            <option value="jamb|4500|JAMB Profile Code">JAMB PIN - ₦4,500</option>
+            <option value="waecreg|18000|WAEC Registration PIN">WAEC REG PIN - ₦18,000</option>
+            <option value="nbais|3500|NBAIS Result Checker">NBAIS PIN - ₦3,500</option>
         </select>
     </div>
 
@@ -45,7 +63,12 @@
         <input type="number" id="qty" value="1" min="1" max="5">
     </div>
 
-    <button class="buy-btn" id="procBtn">GENERATE PIN</button>
+    <div class="form-group">
+        <label>Transaction PIN</label>
+        <input type="password" id="pin" placeholder="Enter transaction PIN" maxlength="6">
+    </div>
+
+    <button class="buy-btn" id="procBtn" onclick="handlePurchaseClick()">GENERATE PIN</button>
 </div>
 
 <div class="bottom-nav">
@@ -65,16 +88,51 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const database = firebase.database();
+    const BACKEND_URL = "";
 
-    document.getElementById('procBtn').onclick = async () => {
+    async function handlePurchaseClick() {
+        const user = auth.currentUser;
+        if (!user) return alert("Please login first");
+
+        const pin = document.getElementById('pin').value.trim();
+        if (!pin) {
+            alert("Transaction PIN is required");
+            return;
+        }
+
+        try {
+            const snapshot = await database.ref(`users/${user.uid}`).once('value');
+            const userData = snapshot.val() || {};
+            if (!userData.transaction_pin && !userData.pin) {
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
+            }
+        } catch (e) {
+            console.error("Error checking transaction PIN:", e);
+        }
+
+        processExamPurchase();
+    }
+
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=exampin";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
+    }
+
+    async function processExamPurchase() {
         const user = auth.currentUser;
         if (!user) return alert("Please login first");
 
         const btn = document.getElementById('procBtn');
         const examData = document.getElementById('examBody').value.split('|');
-        const unitPrice = parseFloat(examData[0]);
-        const examName = examData[1];
+        const examType = examData[0];
+        const unitPrice = parseFloat(examData[1]);
+        const examName = examData[2];
         const qty = parseInt(document.getElementById('qty').value);
+        const pin = document.getElementById('pin').value.trim();
         const totalAmt = unitPrice * qty;
 
         if (isNaN(qty) || qty < 1) return alert("Enter a valid quantity");
@@ -84,36 +142,122 @@
         btn.disabled = true;
         btn.innerText = "Processing...";
 
-        const userRef = database.ref('users/' + user.uid);
+        try {
+            const token = await user.getIdToken().catch(() => "");
 
-        userRef.child('balance').transaction((currentBal) => {
-            if (currentBal === null || currentBal < totalAmt) {
-                return; // Abort transaction if balance is too low
-            }
-            return currentBal - totalAmt;
-        }, (error, committed) => {
-            if (error) {
-                alert("Transaction Error: " + error.message);
-                resetBtn();
-            } else if (!committed) {
-                alert("❌ Insufficient Wallet Balance!");
-                resetBtn();
-            } else {
-                // Log to history
-                database.ref('transactions/' + user.uid).push({
-                    type: 'Exam PIN',
-                    service: examName,
+            const res = await fetch(`${BACKEND_URL}/api/exampin/buy`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    uid: user.uid,
+                    examType: examType,
                     quantity: qty,
-                    amount: totalAmt,
-                    status: 'Successful',
-                    date: new Date().toLocaleString()
-                }).then(() => {
-                    alert("✅ Purchase Successful! PINs will be sent to your email.");
-                    location.href = '../home.html';
-                });
+                    pin: pin
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success) {
+                const pins = data.pin || 'N/A';
+                const serials = data.serial || 'N/A';
+                
+                alert(`✅ Purchase Successful!\nPIN: ${pins}\nSerial: ${serials}`);
+                
+                generateExamCardPDF(examName, pins, serials, qty, totalAmt);
+
+                document.getElementById('pin').value = "";
+                location.href = '../home.html';
+            } else {
+                alert(data.message || data.error || "❌ Transaction failed");
+                resetBtn();
             }
+        } catch (err) {
+            alert("Network error. Please try again.");
+            resetBtn();
+        }
+    }
+
+    function generateExamCardPDF(examName, pins, serials, qty, totalAmt) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
         });
-    };
+
+        let primaryColor = [13, 71, 161];
+        let headerTitle = examName.toUpperCase();
+        if (examName.includes('WAEC')) {
+            primaryColor = [0, 102, 51];
+        } else if (examName.includes('NECO')) {
+            primaryColor = [128, 0, 0];
+        } else if (examName.includes('NABTEB')) {
+            primaryColor = [204, 102, 0];
+        } else if (examName.includes('JAMB')) {
+            primaryColor = [0, 51, 102];
+        }
+
+        const startX = 20;
+        const startY = 20;
+        const cardWidth = 170;
+        const cardHeight = 110;
+
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(150, 150, 150);
+        doc.roundedRect(startX, startY, cardWidth, cardHeight, 4, 4);
+
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.roundedRect(startX, startY, cardWidth, 22, 4, 4, 'F');
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.rect(startX, startY + 12, cardWidth, 10, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text(headerTitle, startX + (cardWidth / 2), startY + 14, { align: 'center' });
+
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text("DNEZERLINKS VIRTUAL SOLUTIONS - AUTHORIZED E-VOUCHER", startX + (cardWidth / 2), startY + 28, { align: 'center' });
+
+        doc.setDrawColor(200, 200, 200);
+        doc.line(startX + 10, startY + 33, startX + cardWidth - 10, startY + 33);
+
+        doc.setTextColor(40, 40, 40);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text("VOUCHER PIN:", startX + 15, startY + 48);
+
+        doc.setFont("courier", "bold");
+        doc.setFontSize(15);
+        doc.setTextColor(0, 0, 0);
+        doc.text(String(pins), startX + 15, startY + 58);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(40, 40, 40);
+        doc.text("SERIAL NUMBER:", startX + 15, startY + 73);
+
+        doc.setFont("courier", "normal");
+        doc.setFontSize(13);
+        doc.text(String(serials), startX + 15, startY + 81);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(`Quantity: ${qty} | Total Paid: ₦${totalAmt.toLocaleString()}`, startX + 15, startY + 95);
+        doc.text(`Date Generated: ${new Date().toLocaleString()}`, startX + 15, startY + 101);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Keep your PIN safe. Do not expose to third parties.", startX + (cardWidth / 2), startY + 107, { align: 'center' });
+
+        doc.save(`${examName.replace(/\s+/g, '_')}_Voucher.pdf`);
+    }
 
     function resetBtn() {
         const btn = document.getElementById('procBtn');
