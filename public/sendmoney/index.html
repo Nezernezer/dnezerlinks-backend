@@ -11,6 +11,29 @@
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #333; min-height: 100vh; }
+    
+    /* Top Alert Banner */
+    #top-alert-banner {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 99999;
+        width: 90%;
+        max-width: 400px;
+        padding: 14px 20px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        display: none;
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    #top-alert-banner.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; display: block; }
+    #top-alert-banner.error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
     .header { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; text-align: center; padding: 28px 20px 24px; }
     .header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
     .header p { font-size: 0.95rem; opacity: 0.9; }
@@ -29,9 +52,6 @@
     .name-box { margin-top: 14px; padding: 14px; border-radius: 12px; background: #e3f2fd; color: #0D47A1; font-weight: 600; font-size: 0.95rem; display: none; text-align: center; }
     .name-box.error { background: #ffebee; color: #c62828; }
     .name-box.show { display: block; }
-    .msg { margin-top: 18px; padding: 14px; border-radius: 12px; text-align: center; font-weight: 600; font-size: 0.95rem; display: none; }
-    .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
-    .msg.error { background: #ffebee; color: #c62828; display: block; }
     .balance-info { text-align: center; margin-bottom: 18px; font-size: 0.9rem; color: #666; }
     .balance-info span { font-weight: 700; color: #0D47A1; }
     .loading { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
@@ -40,6 +60,9 @@
 </style>
 </head>
 <body>
+
+<!-- Top Alert Banner Container -->
+<div id="top-alert-banner"></div>
 
 <div class="header">
     <h1>Dnezerlinks</h1>
@@ -73,8 +96,6 @@
             Send Money
         </button>
 
-        <div id="msg" class="msg"></div>
-
         <p class="footer-note">Transfers are instant & secure via Dlinks</p>
     </div>
 </div>
@@ -96,6 +117,17 @@ const BACKEND_URL = "https://api.dlinks.name.ng";
 
 let verifiedEmail = null;
 let currentUser = null;
+
+function showTopAlert(message, type = 'success') {
+    const alertBox = document.getElementById('top-alert-banner');
+    alertBox.className = type;
+    alertBox.textContent = message;
+    alertBox.style.display = 'block';
+
+    setTimeout(() => {
+        alertBox.style.display = 'none';
+    }, 4000);
+}
 
 document.getElementById("email").addEventListener("input", () => {
     verifiedEmail = null;
@@ -126,6 +158,7 @@ async function searchUser() {
     const sendBtn = document.getElementById("sendBtn");
 
     if (!email || !email.includes("@")) {
+        showTopAlert("Enter a valid email address", "error");
         nameBox.className = "name-box show error";
         nameBox.style.display = "block";
         nameBox.textContent = "Enter a valid email address";
@@ -164,13 +197,16 @@ async function searchUser() {
             nameBox.textContent = "✓ " + (data.name || "Dlinks User");
             sendBtn.disabled = false;
         } else {
+            const errMsg = data.message || data.error || "User not found";
+            showTopAlert(errMsg, "error");
             nameBox.className = "name-box show error";
             nameBox.style.display = "block";
-            nameBox.textContent = data.message || data.error || "User not found";
+            nameBox.textContent = errMsg;
             verifiedEmail = null;
             sendBtn.disabled = true;
         }
     } catch (err) {
+        showTopAlert("Network error during verification.", "error");
         nameBox.className = "name-box show error";
         nameBox.style.display = "block";
         nameBox.textContent = "Network error. Try again.";
@@ -185,28 +221,23 @@ async function searchUser() {
 async function sendMoney() {
     const amount = parseFloat(document.getElementById("amount").value);
     const pin = document.getElementById("pin").value.trim();
-    const msg = document.getElementById("msg");
     const sendBtn = document.getElementById("sendBtn");
 
     if (!currentUser) {
-        msg.className = "msg error";
-        msg.textContent = "Please login first.";
+        showTopAlert("Please login first.", "error");
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
         return;
     }
     if (!verifiedEmail) {
-        msg.className = "msg error";
-        msg.textContent = "Please verify recipient first";
+        showTopAlert("Please verify recipient first", "error");
         return;
     }
     if (!amount || amount <= 0 || !Number.isFinite(amount)) {
-        msg.className = "msg error";
-        msg.textContent = "Enter a valid amount";
+        showTopAlert("Enter a valid amount", "error");
         return;
     }
     if (!pin) {
-        msg.className = "msg error";
-        msg.textContent = "Transaction PIN is required";
+        showTopAlert("Transaction PIN is required", "error");
         return;
     }
 
@@ -216,8 +247,6 @@ async function sendMoney() {
 
     sendBtn.disabled = true;
     sendBtn.innerHTML = '<span class="loading"></span> Processing...';
-    msg.className = "msg";
-    msg.style.display = "none";
 
     try {
         const token = await currentUser.getIdToken().catch(() => "");
@@ -231,16 +260,14 @@ async function sendMoney() {
             body: JSON.stringify({
                 email: verifiedEmail,
                 amount: amount,
-                uid: currentUser.uid,
                 pin: pin
             })
         });
 
         const data = await res.json().catch(() => ({}));
 
-        if (res.ok && data.success) {
-            msg.className = "msg success";
-            msg.textContent = data.message || `✓ Transfer successful!`;
+        if (res.ok && (data.success === true || data.success === "true")) {
+            showTopAlert(data.message || `✓ Transfer successful!`, "success");
             document.getElementById("amount").value = "";
             document.getElementById("pin").value = "";
             verifiedEmail = null;
@@ -248,12 +275,11 @@ async function sendMoney() {
             document.getElementById("nameResult").className = "name-box";
             document.getElementById("nameResult").style.display = "none";
         } else {
-            msg.className = "msg error";
-            msg.textContent = data.message || data.error || "Transfer failed";
+            const errMsg = data.message || data.error || "Transfer failed";
+            showTopAlert(errMsg, "error");
         }
     } catch (err) {
-        msg.className = "msg error";
-        msg.textContent = "Network error. Please try again.";
+        showTopAlert("Network error. Please try again.", "error");
     }
 
     sendBtn.disabled = false;
