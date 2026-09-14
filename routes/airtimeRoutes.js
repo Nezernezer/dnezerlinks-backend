@@ -24,8 +24,8 @@ router.post('/buy', async (req, res) => {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // 2. Generate unique request-id (required by VTU Naija)
-        const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        // 2. Generate unique request-id (Fixed template literal syntax)
+        const requestId = `${uid}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
         // 3. Call VTU Naija API
         const response = await axios.post(
