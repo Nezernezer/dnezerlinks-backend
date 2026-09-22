@@ -18,9 +18,14 @@ router.post('/generate', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid payload details.' });
     }
 
-    // Network mapping
-    // WisePay uses: 1=MTN, 2=GLO, 3=9MOBILE, 4=AIRTEL (same as VTU Naija)
-    const networkMap = { 'MTN': '1', 'GLO': '2', '9MOBILE': '3', 'AIRTEL': '4' };
+    // Network mapping according to WisePay docs
+    // 1 = MTN, 2 = AIRTEL, 3 = GLO, 4 = 9MOBILE
+    const networkMap = { 
+        'MTN': '1', 
+        'AIRTEL': '2', 
+        'GLO': '3', 
+        '9MOBILE': '4' 
+    };
     const apiNetworkId = networkMap[String(network).toUpperCase()];
 
     if (!apiNetworkId) {
@@ -79,7 +84,7 @@ router.post('/generate', async (req, res) => {
             }
 
             const wiseResponse = await axios.post(
-                'https://wisepay.com.ng/api/v1/topup/recharge-card',
+                'https://wisepay.com.ng/api/live/v1/topup/recharge-card',
                 {
                     network: apiNetworkId,
                     denomination: String(parsedAmt),
@@ -88,7 +93,7 @@ router.post('/generate', async (req, res) => {
                 },
                 {
                     headers: {
-                        'Authorization': wisePayKey,
+                        'Authorization': `Bearer ${wisePayKey}`,   // ← Fixed: Bearer required
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
@@ -141,10 +146,14 @@ router.post('/generate', async (req, res) => {
                     throw new Error(`VTU Naija requires minimum quantity of 10 (you requested ${parsedQty})`);
                 }
 
+                // VTU Naija network mapping is different
+                const vtuNetworkMap = { 'MTN': '1', 'GLO': '2', '9MOBILE': '3', 'AIRTEL': '4' };
+                const vtuNetworkId = vtuNetworkMap[String(network).toUpperCase()];
+
                 const vtuResponse = await axios.post(
                     'https://vtunaija.com.ng/api/rechargepin/',
                     {
-                        network: apiNetworkId,
+                        network: vtuNetworkId,
                         network_amount: String(parsedAmt),
                         quantity: String(parsedQty),
                         name_on_card: finalBrandValue,
