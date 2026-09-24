@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const admin = require('firebase-admin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -22,21 +23,18 @@ router.get('/', (req, res) => {
     return res.sendStatus(400);
 });
 
-// 2. POST /webhook -> Used by Facebook to receive incoming messages/clicks
+// 2. POST /webhook -> Used by Facebook to receive incoming messages
 router.post('/', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
         for (const entry of body.entry) {
             const webhookEvent = entry.messaging ? entry.messaging[0] : null;
-            if (webhookEvent) {
+            if (webhookEvent && webhookEvent.message && webhookEvent.message.text) {
                 const senderPsid = webhookEvent.sender.id;
-                console.log(`📩 Incoming Messenger Event from PSID: ${senderPsid}`);
-
-                if (webhookEvent.message && webhookEvent.message.text) {
-                    const incomingText = webhookEvent.message.text.trim();
-                    await handleUserMessage(senderPsid, incomingText);
-                }
+                const incomingText = webhookEvent.message.text.trim();
+                console.log(`📩 Messenger Message from ${senderPsid}: ${incomingText}`);
+                await handleUserMessage(senderPsid, incomingText);
             }
         }
         return res.status(200).send('EVENT_RECEIVED');
@@ -45,21 +43,175 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Helper function to handle text commands from users
+// Handle incoming user commands across all Dnezerlinks features
 async function handleUserMessage(senderPsid, text) {
-    let replyText = `Welcome to Dnezerlinks! You said: "${text}". Our automated messenger services are connecting to your account.`;
-
     const lowerText = text.toLowerCase();
+    let replyText = "";
+
     if (lowerText === 'menu' || lowerText === 'start') {
-        replyText = "Main Menu:\n1. Type 'balance' to check your wallet\n2. Type 'data' to purchase data bundles\n3. Type 'airtime' to buy airtime";
-    } else if (lowerText === 'balance') {
-        replyText = "To check your balance, please link your Dnezerlinks account first.";
+        replyText = "🤖 *Dnezerlinks Messenger Services*\n\n" +
+                    "Select a command to proceed:\n" +
+                    "🔹 `register [Name] [Email] [Password]` - Create account\n" +
+                    "🔹 `link [Email]` - Connect existing account\n" +
+                    "🔹 `balance` - Check live wallet balance\n" +
+                    "🔹 `airtime` - Airtime purchase guide\n" +
+                    "🔹 `data` - Data bundle service info\n" +
+                    "🔹 `cable` - Cable TV (DSTV/GOTV)\n" +
+                    "🔹 `electricity` - Electricity bill tokens\n" +
+                    "🔹 `bulksms` - Bulk SMS services\n" +
+                    "🔹 `status` - Check account link status";
+    } 
+    else if (lowerText.startsWith('register ')) {
+        const parts = text.split(' ');
+        if (parts.length < 4) {
+            replyText = "❌ Format error. Use: `register YourName your@email.com password`";
+        } else {
+            replyText = await registerAccount(senderPsid, parts[1], parts[2], parts[3]);
+        }
+    }
+    else if (lowerText.startsWith('link ')) {
+        const email = text.split(' ')[1]?.trim();
+        if (!email) {
+            replyText = "❌ Please provide your email. Example: `link user@gmail.com`";
+        } else {
+            replyText = await linkAccount(senderPsid, email);
+        }
+    }
+    else if (lowerText === 'balance') {
+        replyText = await checkBalance(senderPsid);
+    }
+    else if (lowerText === 'status') {
+        const linkedUserId = await getLinkedUserId(senderPsid);
+        if (linkedUserId) {
+            replyText = `✅ Your Messenger is successfully linked to your Dnezerlinks account!`;
+        } else {
+            replyText = "⚠️ Account not linked yet. Type `link your-email@gmail.com` or register.";
+        }
+    }
+    else if (lowerText === 'airtime') {
+        replyText = "📶 *Airtime VTU Top-up*\nInstantly recharge any network (MTN, Airtel, Glo, 9mobile) with automated discounts directly from your Dnezerlinks wallet.";
+    }
+    else if (lowerText === 'data') {
+        replyText = "🌐 *Data Bundles*\nAccess cheap SME and Corporate Gifting data packages directly via your web dashboard or API sync.";
+    }
+    else if (lowerText === 'cable') {
+        replyText = "📺 *Cable TV Subscription*\nPay for DSTV, GOTV, and Startimes instantly with instant automated activation.";
+    }
+    else if (lowerText === 'electricity') {
+        replyText = "⚡ *Electricity Bills*\nBuy prepaid/postpaid electricity tokens (AEDC, Ikeja Electric, Eko, PHED, etc.) securely.";
+    }
+    else if (lowerText === 'bulksms') {
+        replyText = "📱 *Bulk SMS Messaging*\nBroadcast customized SMS messages instantly using your Dnezerlinks messaging balance.";
+    }
+    else {
+        replyText = "👋 Welcome to Dnezerlinks! Type `menu` to see all available automated features.";
     }
 
     await sendMessengerReply(senderPsid, { text: replyText });
 }
 
-// Helper function to send messages back to Meta Graph API
+// Helper: Register new user
+async function registerAccount(senderPsid, name, email, password) {
+    try {
+        const usersRef = admin.database().ref('users');
+        const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
+        
+        if (snapshot.exists()) {
+            return `❌ An account with ${email} already exists. Type \`link ${email}\` to connect it instead.`;
+        }
+
+        const newUserRef = usersRef.push();
+        const userId = newUserRef.key;
+
+        await newUserRef.set({
+            userId: userId,
+            name: name,
+            email: email,
+            password: password,
+            balance: 0,
+            wallet_balance: 0,
+            messenger_psid: senderPsid,
+            createdAt: new Date().toISOString()
+        });
+
+        await admin.database().ref(`messenger_links/${senderPsid}`).set({
+            userId: userId,
+            email: email,
+            linkedAt: new Date().toISOString()
+        });
+
+        return `🎉 Account created & linked successfully!\nName: ${name}\nEmail: ${email}\nBalance: ₦0.00\n\nType \`balance\` anytime to check your wallet.`;
+    } catch (error) {
+        console.error("🔥 Registration Error:", error);
+        return `❌ Registration failed. Please try again.`;
+    }
+}
+
+// Helper: Link account
+async function linkAccount(senderPsid, email) {
+    try {
+        const usersRef = admin.database().ref('users');
+        const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
+        
+        if (!snapshot.exists()) {
+            return `❌ No account found with ${email}. Type \`register Name Email Password\` to create one.`;
+        }
+
+        let userId = null;
+        snapshot.forEach((childSnapshot) => {
+            userId = childSnapshot.key;
+        });
+
+        await admin.database().ref(`messenger_links/${senderPsid}`).set({
+            userId: userId,
+            email: email,
+            linkedAt: new Date().toISOString()
+        });
+
+        await admin.database().ref(`users/${userId}/messenger_psid`).set(senderPsid);
+
+        return `✅ Account linked successfully! Type \`balance\` to view your wallet.`;
+    } catch (error) {
+        return `❌ An error occurred while linking. Please try again.`;
+    }
+}
+
+// Helper: Get linked user ID
+async function getLinkedUserId(senderPsid) {
+    try {
+        const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
+        if (linkSnap.exists() && linkSnap.val().userId) {
+            return linkSnap.val().userId;
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Helper: Check balance
+async function checkBalance(senderPsid) {
+    try {
+        const userId = await getLinkedUserId(senderPsid);
+        if (!userId) {
+            return "⚠️ Account not linked. Type \`link email@gmail.com\` or \`register Name Email Password\`.";
+        }
+
+        const userSnap = await admin.database().ref(`users/${userId}`).once('value');
+        if (!userSnap.exists()) {
+            return "❌ User record not found.";
+        }
+
+        const userData = userSnap.val();
+        const balance = userData.balance !== undefined ? userData.balance : (userData.wallet_balance !== undefined ? userData.wallet_balance : 0);
+
+        return `💰 *Dnezerlinks Wallet*\n\nName: ${userData.name || 'User'}\nBalance: ₦${Number(balance).toLocaleString()}`;
+    } catch (error) {
+        return "❌ Failed to retrieve balance.";
+    }
+}
+
+// Helper: Send reply to Facebook
 async function sendMessengerReply(senderPsid, response) {
     try {
         await axios.post(
