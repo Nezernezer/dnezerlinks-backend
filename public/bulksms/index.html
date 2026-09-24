@@ -20,9 +20,9 @@
         .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
         .bottom-nav { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; justify-content: space-around; border-top: 1px solid #ddd; padding: 12px 0; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
-        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
+        #pinModal, #customPromptModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
-        .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
+        .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; padding: 10px; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
         .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 10px auto; display: none; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -56,15 +56,28 @@
     <button class="buy-btn" id="procBtn" onclick="openPinModal()">SEND MESSAGE</button>
 </div>
 
+<!-- PIN Input Modal -->
 <div id="pinModal">
     <div class="modal-content">
         <h3>Enter Transaction PIN</h3>
-        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
+        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px; min-height: 1rem;"></div>
         <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
-        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-bottom: 10px;" id="toggleBtn">Show PIN</button>
+        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-bottom: 10px; width: 100%;" id="toggleBtn">Show PIN</button>
         <div id="processingSpinner" class="spinner"></div>
-        <button id="confirmBtn" onclick="executeSmsTransaction()">Confirm & Pay</button>
+        <button id="confirmBtn" onclick="executeSmsTransaction()" style="background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer;">Confirm & Pay</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div id="customPromptModal">
+    <div class="modal-content">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: var(--primary); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
     </div>
 </div>
 
@@ -85,9 +98,25 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const database = firebase.database();
-    const API_BASE_URL ="https://dnezerlinks-backend.onrender.com";
+    const API_BASE_URL = "https://dnezerlinks-backend.onrender.com";
 
-    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
+    auth.onAuthStateChanged(async user => { 
+        if (!user) {
+            window.location.href = "../login.html";
+            return;
+        }
+
+        // Check PIN on page load
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val() || {};
+            if (!data.transaction_pin && !data.pin) {
+                document.getElementById('customPromptModal').style.display = 'flex';
+            }
+        } catch (e) {
+            console.error("Error checking PIN on load", e);
+        }
+    });
 
     function showGlobalMessage(text, isError = true) {
         const msgDiv = document.getElementById('globalMsg');
@@ -106,8 +135,6 @@
         const msg = document.getElementById('message').value;
         const unicodeDetected = isUnicode(msg);
         const pages = msg.length === 0 ? 0 : Math.ceil(msg.length / (unicodeDetected ? 70 : 160));
-        
-        // Exact Lagos timezone engine implementation for frontend stability
         const lagosHour = parseInt(
             new Intl.DateTimeFormat('en-US', {
                 timeZone: 'Africa/Lagos',
@@ -115,7 +142,7 @@
                 hour12: false
             }).format(new Date()), 10
         );
-        
+
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
         const totalRecipients = document.getElementById('recipients').value.split(',').filter(n => n.trim().length >= 10).length;
         const totalCost = pages * ratePerPage * (totalRecipients || 1);
@@ -127,13 +154,35 @@
         return { pages, totalCost };
     }
 
-    function openPinModal() {
+    async function openPinModal() {
         if (document.getElementById('message').value.length === 0 || !document.getElementById('recipients').value.trim()) {
             return showGlobalMessage("Please enter recipients and message content.");
         }
-        document.getElementById('pinError').textContent = '';
-        document.getElementById('txnPin').value = '';
-        document.getElementById('pinModal').style.display = 'flex';
+
+        try {
+            const user = auth.currentUser;
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val() || {};
+
+            if (!data.transaction_pin && !data.pin) {
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
+            }
+
+            document.getElementById('pinError').textContent = '';
+            document.getElementById('txnPin').value = '';
+            document.getElementById('pinModal').style.display = 'flex';
+        } catch (e) {
+            showGlobalMessage("Validation error.");
+        }
+    }
+
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=bulksms";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
     }
 
     function closePinModal() {
@@ -142,7 +191,6 @@
         document.getElementById('processingSpinner').style.display = 'none';
     }
 
-    // Fixed internal element tracking structure rules here
     function togglePinVisibility() {
         const pinInput = document.getElementById('txnPin');
         const toggleBtn = document.getElementById('toggleBtn');
@@ -165,7 +213,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userId: user.uid,
-                    pin: enteredPin, // Successfully parsing to API backend route controller payload
+                    pin: enteredPin,
                     recipient: document.getElementById('recipients').value,
                     message: document.getElementById('message').value,
                     senderName: document.getElementById('senderId').value

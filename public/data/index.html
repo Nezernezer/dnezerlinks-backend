@@ -12,13 +12,11 @@
         .card { width: 100%; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
         h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
         #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
-        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-        .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
-        input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
+        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }                       .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }                                                                                                            input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
         button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        #pinModal, #customPromptModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; }
         .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; }
         .cancel-btn { background: #f44336; margin-top: 10px; width: 100%; padding: 10px; color: white; border: none; border-radius: 8px; cursor: pointer; }
@@ -74,11 +72,23 @@
         <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
         <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="off">
         <button onclick="togglePinVisibility()" id="toggleBtn" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Show PIN</button>
-        
+
         <div id="processingSpinner" class="spinner"></div>
 
         <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div id="customPromptModal">
+    <div class="modal-content">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: var(--primary); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
     </div>
 </div>
 
@@ -127,8 +137,7 @@
     function showMessage(msg, isError = true) {
         const msgDiv = document.getElementById('statusMsg');
         msgDiv.textContent = msg;
-        msgDiv.style.display = 'block';
-        msgDiv.className = isError ? 'error-msg' : 'success-msg';
+        msgDiv.style.display = 'block';                                                                      msgDiv.className = isError ? 'error-msg' : 'success-msg';
     }
 
     function autoLookupNetwork() {
@@ -145,12 +154,9 @@
                 if (prefixes.includes(prefix)) {
                     document.getElementById('network').value = name;
                     updateDataTypes();
-                    break;
-                }
-            }
+                    break;                                                                                           }                                                                                                }
         }
-    }
-
+    }                                                                                                
     function updateDataTypes() {
         const network = document.getElementById('network').value;
         const dataTypeSelect = document.getElementById('dataType');
@@ -166,12 +172,9 @@
         const dataType = document.getElementById('dataType').value;
         const variationSelect = document.getElementById('variation');
         variationSelect.innerHTML = '<option value="">Choose Plan</option>';
-        if (network && dataType && groupedPlans[network] && groupedPlans[network][dataType]) {
-            groupedPlans[network][dataType].forEach(plan => {
-                const cleanName = plan.name.split(' - ₦')[0];
+        if (network && dataType && groupedPlans[network] && groupedPlans[network][dataType]) {                   groupedPlans[network][dataType].forEach(plan => {                                                        const cleanName = plan.name.split(' - ₦')[0];
                 const displayName = `${cleanName} - ₦${plan.price}`;
-                variationSelect.add(new Option(displayName, JSON.stringify(plan)));
-            });
+                variationSelect.add(new Option(displayName, JSON.stringify(plan)));                              });
         }
     }
 
@@ -189,14 +192,22 @@
         try {
             const snap = await database.ref('users/' + user.uid).once('value');
             const data = snap.val() || {};
-            if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") return window.location.href = "../kyc_status.html";
-            if (!data.transaction_pin) {
+            
+            if (!data.transaction_pin && !data.pin) {
                 sessionStorage.setItem('pending_data_order', JSON.stringify({ phone, network, dataType: document.getElementById('dataType').value, variation }));
-                return window.location.href = "../pinsetup.html?return=data";
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
             }
-            document.getElementById('pinModal').style.display = 'flex';
-        } catch (e) { showMessage("Error validating."); }
+            document.getElementById('pinModal').style.display = 'flex';                                      } catch (e) { showMessage("Error validating."); }
         finally { btn.disabled = false; btn.textContent = "Subscribe Now"; }
+    }
+
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=data";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
     }
 
     function togglePinVisibility() {
@@ -222,8 +233,9 @@
 
         try {
             const snap = await database.ref('users/' + user.uid).once('value');
-            if (pin === String(snap.val().transaction_pin || snap.val().pin)) {
-                executePurchase(snap.val().balance, user.uid, JSON.parse(document.getElementById('variation').value));
+            const userData = snap.val() || {};
+            if (pin === String(userData.transaction_pin || userData.pin || '')) {
+                executePurchase(userData.balance, user.uid, JSON.parse(document.getElementById('variation').value));
             } else {
                 pinError.textContent = "Incorrect PIN!";
                 btn.disabled = false;
@@ -237,8 +249,7 @@
             spinner.style.display = 'none';
         }
     }
-
-    async function executePurchase(balance, uid, plan) {
+                                                                                                         async function executePurchase(balance, uid, plan) {
         const btn = document.getElementById('confirmBtn');
         const phone = document.getElementById("phone").value;
         const spinner = document.getElementById('processingSpinner');
@@ -250,39 +261,28 @@
         }
         try {
             const res = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
-                method: "POST", 
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ pin: document.getElementById("txnPin").value, uid, phone, dataPlan: plan.id, networkID: networkMap[document.getElementById("network").value], amount: plan.price })
             });
             const data = await res.json();
             if (data.success) {
                 saveRecentPhone(phone);
-                closePinModal();
-                showMessage("Success!", false);
-                document.getElementById('phone').value = '';
-                setTimeout(() => window.location.href = "../home.html", 2000);
-            } else {
-                throw new Error(data.error || "Failed");
+                closePinModal();                                                                                     showMessage("Success!", false);
+                document.getElementById('phone').value = '';                                                         setTimeout(() => window.location.href = "../home.html", 2000);
+            } else {                                                                                                 throw new Error(data.error || "Failed");
             }
-        } catch (e) {
-            showMessage(e.message || "Error processing transaction.");
+        } catch (e) {                                                                                            showMessage(e.message || "Error processing transaction.");
             closePinModal();
         } finally {
-            btn.disabled = false;
-            btn.style.display = 'inline-block';
-            spinner.style.display = 'none';
-        }
-    }
-
-    function closePinModal() {
-        document.getElementById('pinModal').style.display = 'none';
-        document.getElementById('txnPin').value = '';
-        document.getElementById('pinError').textContent = '';
+            btn.disabled = false;                                                                                btn.style.display = 'inline-block';
+            spinner.style.display = 'none';                                                                  }
+    }                                                                                                
+    function closePinModal() {                                                                               document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('txnPin').value = '';                                                        document.getElementById('pinError').textContent = '';
         document.getElementById('confirmBtn').style.display = 'inline-block';
-        document.getElementById('processingSpinner').style.display = 'none';
-    }
-
-    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
+        document.getElementById('processingSpinner').style.display = 'none';                             }
+                                                                                                         auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
 </script>
 </body>
 </html>

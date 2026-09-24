@@ -254,7 +254,20 @@
                 type: (typeNode === 'CREDIT' || tx.type === 'credit') ? "Credit" : "Debit"
             };
 
-            if (typeNode === "RECHARGE PIN" || serviceNode.includes("PIN") || desc.includes("PIN") || desc.includes("VOUCHER")) {
+            // ===== EXAM PIN DETECTION =====
+            if (typeNode === "EXAM PIN" || 
+                serviceNode.includes("WAEC") || serviceNode.includes("NECO") || 
+                serviceNode.includes("NABTEB") || serviceNode.includes("JAMB") || 
+                serviceNode.includes("NBAIS") ||
+                desc.includes("EXAM PIN") || desc.includes("WAEC") || desc.includes("NECO") ||
+                desc.includes("NABTEB") || desc.includes("JAMB") || desc.includes("NBAIS")) {
+                
+                data.service = "Exam PIN";
+                data.network = serviceNode || "Exam";
+                if (data.phone === "N/A") data.phone = tx.service || "Exam Voucher";
+            }
+            // ===== RECHARGE PIN =====
+            else if (typeNode === "RECHARGE PIN" || serviceNode.includes("PIN") || desc.includes("PIN") || desc.includes("VOUCHER")) {
                 data.service = "Recharge PIN";
                 if (data.phone === "N/A" && tx.service) {
                     data.phone = tx.service;
@@ -347,16 +360,19 @@
                 card.style.borderLeftColor = isCredit ? 'var(--success)' : 'var(--primary)';
                 card.onclick = () => showDetails(tx);
 
-                card.innerHTML = `
-                    <div class="card-top">
-                        <span class="card-title">${meta.service}</span>
-                        <span class="card-date">${formatMyDate(tx.timestamp, tx.date)}</span>
-                    </div>
-                    <div class="card-amt" style="color: ${isCredit ? 'var(--success)' : '#222'}">
-                        ${isCredit ? '+' : '-'}₦${parseFloat(tx.amount || 0).toLocaleString()}
-                    </div>
-                    <div class="card-sub">${meta.network !== 'N/A' ? meta.network + ' | ' : ''}${meta.phone}</div>
-                `;
+                const amountText = (isCredit ? '+' : '-') + '₦' + parseFloat(tx.amount || 0).toLocaleString();
+                const subText = (meta.network !== 'N/A' ? meta.network + ' | ' : '') + meta.phone;
+
+                card.innerHTML = 
+                    '<div class="card-top">' +
+                        '<span class="card-title">' + meta.service + '</span>' +
+                        '<span class="card-date">' + formatMyDate(tx.timestamp, tx.date) + '</span>' +
+                    '</div>' +
+                    '<div class="card-amt" style="color: ' + (isCredit ? 'var(--success)' : '#222') + '">' +
+                        amountText +
+                    '</div>' +
+                    '<div class="card-sub">' + subText + '</div>';
+
                 list.appendChild(card);
             } catch (err) {}
         });
@@ -367,7 +383,7 @@
 
         if (prevBtn) prevBtn.className = currentPage === 1 ? 'page-btn disabled' : 'page-btn';
         if (nextBtn) nextBtn.className = end >= allRecords.length ? 'page-btn disabled' : 'page-btn';
-        if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(allRecords.length / recordsPerPage) || 1}`;
+        if (pageInfo) pageInfo.innerText = 'Page ' + currentPage + ' of ' + (Math.ceil(allRecords.length / recordsPerPage) || 1);
     }
 
     function changePage(dir) {
@@ -391,9 +407,49 @@
             document.getElementById('detDate').innerText = formatMyDate(tx.timestamp, tx.date);
             document.getElementById('detRef').innerText = tx.reference || tx.id;
 
+            // Clean previous Exam PIN rows
+            const oldPin = document.getElementById('detExamPin');
+            const oldSerial = document.getElementById('detExamSerial');
+            if (oldPin) oldPin.remove();
+            if (oldSerial) oldSerial.remove();
+
             const btnContainer = document.getElementById('historyPinsButtonContainer');
             btnContainer.innerHTML = '';
 
+            // ===== EXAM PIN SUPPORT =====
+            if (meta.service === "Exam PIN") {
+                const amountRow = document.getElementById('detAmount').parentElement;
+
+                const pinRow = document.createElement('div');
+                pinRow.className = 'detail-row';
+                pinRow.id = 'detExamPin';
+                pinRow.innerHTML = 
+                    '<span class="detail-label">Voucher PIN</span>' +
+                    '<span class="detail-value" style="font-family: monospace; font-size: 15px; color: #0d47a1; font-weight: 800;">' +
+                        (tx.pin || 'N/A') +
+                    '</span>';
+
+                const serialRow = document.createElement('div');
+                serialRow.className = 'detail-row';
+                serialRow.id = 'detExamSerial';
+                serialRow.innerHTML = 
+                    '<span class="detail-label">Serial Number</span>' +
+                    '<span class="detail-value" style="font-family: monospace;">' +
+                        (tx.serial || 'N/A') +
+                    '</span>';
+
+                amountRow.after(serialRow);
+                amountRow.after(pinRow);
+
+                // Green button
+                const viewExamBtn = document.createElement('button');
+                viewExamBtn.className = 'btn-view-pins';
+                viewExamBtn.innerHTML = '👁️ VIEW & PRINT EXAM PIN';
+                viewExamBtn.onclick = () => launchExamVoucher();
+                btnContainer.appendChild(viewExamBtn);
+            }
+
+            // Recharge PIN button
             if (meta.service === "Recharge PIN") {
                 const viewPinsBtn = document.createElement('button');
                 viewPinsBtn.className = 'btn-view-pins';
@@ -409,16 +465,33 @@
     function closeModal() {
         const modal = document.getElementById('detailModal');
         if (modal) modal.style.display = 'none';
+
+        // Clean exam pin rows
+        const oldPin = document.getElementById('detExamPin');
+        const oldSerial = document.getElementById('detExamSerial');
+        if (oldPin) oldPin.remove();
+        if (oldSerial) oldSerial.remove();
     }
 
     function shareReceipt() {
         if (!selectedTx) return;
         const meta = parseMetaData(selectedTx);
-        const text = `*Dnezerlinks Receipt*\n\nService: ${meta.service}\nAmount: ₦${parseFloat(selectedTx.amount || 0).toLocaleString()}\nTarget: ${meta.phone}\nDate: ${formatMyDate(selectedTx.timestamp, selectedTx.date)}\n\n_Thank you for choosing Dnezerlinks!_`;
+        let text = '*Dnezerlinks Receipt*\n\nService: ' + meta.service + 
+                   '\nAmount: ₦' + parseFloat(selectedTx.amount || 0).toLocaleString() + 
+                   '\nTarget: ' + meta.phone + 
+                   '\nDate: ' + formatMyDate(selectedTx.timestamp, selectedTx.date);
+
+        if (meta.service === "Exam PIN") {
+            text += '\n\n*Voucher PIN:* ' + (selectedTx.pin || 'N/A') + 
+                    '\n*Serial:* ' + (selectedTx.serial || 'N/A');
+        }
+
+        text += '\n\n_Thank you for choosing Dnezerlinks!_';
+
         if (navigator.share) {
             navigator.share({ title: 'Receipt', text: text });
         } else {
-            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+            window.open('https://wa.me/?text=' + encodeURIComponent(text));
         }
     }
 
@@ -452,7 +525,7 @@
         wrapper.innerHTML = '';
 
         const gridContainer = document.createElement('div');
-        gridContainer.className = `tickets-grid layout-${profileMode}`;
+        gridContainer.className = 'tickets-grid layout-' + profileMode;
 
         const meta = parseMetaData(selectedTx);
         const corporateHeaderBrand = selectedTx.brandName || "DNEZERLINKS";
@@ -474,39 +547,98 @@
             finalPinsArray = Object.values(targetPins);
         } else if (typeof targetPins === 'string') {
             if (targetPins.includes(',')) {
-                finalPinsArray = targetPins.split(',').map(p => ({ pin: p.trim(), serial: 'N/A' }));
+                finalPinsArray = targetPins.split(',').map(function(p) {
+                    return { pin: p.trim(), serial: 'N/A' };
+                });
             } else {
                 finalPinsArray.push({ pin: targetPins, serial: selectedTx.serial || 'N/A' });
             }
         }
 
-        finalPinsArray.forEach(item => {
+        finalPinsArray.forEach(function(item) {
             const voucherPinValue = item.pin || item.pin_code || (typeof item === 'string' ? item : 'N/A');
             const voucherSerialValue = item.serial || item.serial_number || selectedTx.serial || 'N/A';
             const individualCardAmount = selectedTx.pinAmount || selectedTx.amount || '0';
 
             const ticketCard = document.createElement('div');
             ticketCard.className = 'pin-ticket';
-            ticketCard.innerHTML = `
-                <div class="ticket-top-wrapper">
-                    <div class="ticket-header">${corporateHeaderBrand}</div>
-                    <div class="logo-box ${logoClass}"></div>
-                </div>
-                <div class="ticket-brand">${targetNetwork} ₦${parseFloat(individualCardAmount).toLocaleString()}</div>
-                <div class="pin-row">
-                    <span class="pin-label">PIN:</span>
-                    <span class="pin-code">${voucherPinValue}</span>
-                </div>
-                <div class="serial-row">Serial Number: ${voucherSerialValue}</div>
-                <div class="ticket-footer">
-                    Load: ${loadUssd} | Customer Care: ${customerCare}
-                    <div class="ticket-timestamp">${txDateString}</div>
-                </div>
-            `;
+            ticketCard.innerHTML = 
+                '<div class="ticket-top-wrapper">' +
+                    '<div class="ticket-header">' + corporateHeaderBrand + '</div>' +
+                    '<div class="logo-box ' + logoClass + '"></div>' +
+                '</div>' +
+                '<div class="ticket-brand">' + targetNetwork + ' ₦' + parseFloat(individualCardAmount).toLocaleString() + '</div>' +
+                '<div class="pin-row">' +
+                    '<span class="pin-label">PIN:</span>' +
+                    '<span class="pin-code">' + voucherPinValue + '</span>' +
+                '</div>' +
+                '<div class="serial-row">Serial Number: ' + voucherSerialValue + '</div>' +
+                '<div class="ticket-footer">' +
+                    'Load: ' + loadUssd + ' | Customer Care: ' + customerCare +
+                    '<div class="ticket-timestamp">' + txDateString + '</div>' +
+                '</div>';
             gridContainer.appendChild(ticketCard);
         });
 
         wrapper.appendChild(gridContainer);
+        document.getElementById('paperSelectionControl').style.display = 'flex';
+        document.getElementById('printArea').style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+
+    // ===== EXAM PIN VOUCHER =====
+    function launchExamVoucher() {
+        if (!selectedTx) return;
+
+        document.getElementById('appLayoutContainer').style.display = 'none';
+        document.getElementById('detailModal').style.display = 'none';
+
+        const wrapper = document.getElementById('ticketsWrapper');
+        wrapper.innerHTML = '';
+
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'tickets-grid layout-a4';
+        gridContainer.style.gridTemplateColumns = '1fr';
+        gridContainer.style.maxWidth = '400px';
+        gridContainer.style.margin = '30px auto';
+
+        const serviceName = (selectedTx.service || 'EXAM PIN').toUpperCase();
+        const pin = selectedTx.pin || 'N/A';
+        const serial = selectedTx.serial || 'N/A';
+        const amount = parseFloat(selectedTx.amount || 0).toLocaleString();
+        const dateStr = formatMyDate(selectedTx.timestamp, selectedTx.date);
+
+        let headerColor = '#0d47a1';
+        if (serviceName.includes('WAEC')) headerColor = '#006633';
+        else if (serviceName.includes('NECO')) headerColor = '#800000';
+        else if (serviceName.includes('NABTEB')) headerColor = '#cc6600';
+        else if (serviceName.includes('JAMB')) headerColor = '#003366';
+        else if (serviceName.includes('NBAIS')) headerColor = '#0d47a1';
+
+        const card = document.createElement('div');
+        card.style.cssText = 'border: 2px solid #333; border-radius: 12px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.1);';
+
+        card.innerHTML = 
+            '<div style="background: ' + headerColor + '; color: white; padding: 16px; text-align: center;">' +
+                '<div style="font-size: 18px; font-weight: 800; letter-spacing: 1px;">' + serviceName + '</div>' +
+                '<div style="font-size: 12px; margin-top: 4px; opacity: 0.9;">DNEZERLINKS VIRTUAL SOLUTIONS</div>' +
+            '</div>' +
+            '<div style="padding: 20px;">' +
+                '<div style="font-size: 11px; color: #777; font-weight: 600; margin-bottom: 4px;">VOUCHER PIN</div>' +
+                '<div style="font-family: Courier New, monospace; font-size: 22px; font-weight: 900; color: #111; margin-bottom: 18px; letter-spacing: 1px;">' + pin + '</div>' +
+                '<div style="font-size: 11px; color: #777; font-weight: 600; margin-bottom: 4px;">SERIAL NUMBER</div>' +
+                '<div style="font-family: Courier New, monospace; font-size: 16px; font-weight: 700; color: #333; margin-bottom: 18px;">' + serial + '</div>' +
+                '<div style="display: flex; justify-content: space-between; font-size: 13px; color: #555; border-top: 1px dashed #ccc; padding-top: 12px;">' +
+                    '<div><div>Amount Paid</div><div style="font-weight: 800; color: #111; margin-top: 2px;">₦' + amount + '</div></div>' +
+                    '<div style="text-align: right;"><div>Date Generated</div><div style="font-weight: 600; margin-top: 2px;">' + dateStr + '</div></div>' +
+                '</div>' +
+                '<div style="margin-top: 16px; text-align: center; font-size: 11px; color: #888; font-style: italic;">Keep your PIN safe. Do not share with anyone.</div>' +
+            '</div>';
+
+        gridContainer.appendChild(card);
+        wrapper.appendChild(gridContainer);
+
+        document.getElementById('paperSelectionControl').style.display = 'none';
         document.getElementById('printArea').style.display = 'block';
         window.scrollTo(0, 0);
     }
@@ -519,11 +651,14 @@
     function exitVoucherPrintCanvas() {
         document.body.classList.remove('printing-vouchers');
         document.getElementById('printArea').style.display = 'none';
+        document.getElementById('paperSelectionControl').style.display = 'flex';
         document.getElementById('appLayoutContainer').style.display = 'block';
         document.getElementById('detailModal').style.display = 'block';
     }
 
-    window.onclick = e => { if (e.target.className === 'modal') closeModal(); };
+    window.onclick = function(e) { 
+        if (e.target.className === 'modal') closeModal(); 
+    };
 </script>
 </body>
 </html>

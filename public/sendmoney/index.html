@@ -7,11 +7,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #333; min-height: 100vh; }
-    
+
     /* Top Alert Banner */
     #top-alert-banner {
         position: fixed;
@@ -57,12 +56,28 @@
     .loading { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .footer-note { text-align: center; margin-top: 20px; font-size: 0.8rem; color: #888; }
+
+    /* Modal Styling */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+    .dialog-box { background: #fff; border-radius: 15px; width: 85%; max-width: 400px; padding: 20px; box-sizing: border-box; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); animation: fadeIn 0.2s ease-out; }
 </style>
 </head>
 <body>
 
 <!-- Top Alert Banner Container -->
 <div id="top-alert-banner"></div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div class="modal-overlay" id="customPromptModal">
+    <div class="dialog-box">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: #0D47A1; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
+    </div>
+</div>
 
 <div class="header">
     <h1>Dnezerlinks</h1>
@@ -90,9 +105,8 @@
         <input type="number" id="amount" placeholder="Enter amount" min="1" step="1">
 
         <label for="pin">Transaction PIN</label>
-        <input type="password" id="pin" placeholder="Enter transaction PIN" maxlength="6">
-
-        <button class="btn btn-primary" id="sendBtn" onclick="sendMoney()" disabled>
+        <input type="password" id="pin" placeholder="Enter transaction PIN" maxlength="6">           
+        <button class="btn btn-primary" id="sendBtn" onclick="handleSendMoneyClick()" disabled>
             Send Money
         </button>
 
@@ -113,10 +127,9 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
-const BACKEND_URL = "https://api.dlinks.name.ng";
-
+const BACKEND_URL = "https://api.dlinks.name.ng";                                                    
 let verifiedEmail = null;
-let currentUser = null;
+let currentUser = null;                                                                              
 
 function showTopAlert(message, type = 'success') {
     const alertBox = document.getElementById('top-alert-banner');
@@ -153,8 +166,8 @@ auth.onAuthStateChanged((user) => {
 
 async function searchUser() {
     const email = document.getElementById("email").value.trim().toLowerCase();
-    const nameBox = document.getElementById("nameResult");
-    const searchBtn = document.getElementById("searchBtn");
+    const nameBox = document.getElementById("nameResult");                                               
+    const searchBtn = document.getElementById("searchBtn");                                              
     const sendBtn = document.getElementById("sendBtn");
 
     if (!email || !email.includes("@")) {
@@ -162,14 +175,14 @@ async function searchUser() {
         nameBox.className = "name-box show error";
         nameBox.style.display = "block";
         nameBox.textContent = "Enter a valid email address";
-        verifiedEmail = null;
+        verifiedEmail = null;                                                                                
         sendBtn.disabled = true;
         return;
     }
 
     searchBtn.disabled = true;
     searchBtn.innerHTML = '<span class="loading"></span> Checking...';
-    nameBox.style.display = "none";
+    nameBox.style.display = "none";                                                                      
     verifiedEmail = null;
     sendBtn.disabled = true;
 
@@ -193,17 +206,17 @@ async function searchUser() {
         if (res.ok && data.success) {
             verifiedEmail = data.email || email;
             nameBox.className = "name-box show";
-            nameBox.style.display = "block";
+            nameBox.style.display = "block";                                                                     
             nameBox.textContent = "✓ " + (data.name || "Dlinks User");
-            sendBtn.disabled = false;
-        } else {
+            sendBtn.disabled = false;                                                                        
+        } else {                                                                                                 
             const errMsg = data.message || data.error || "User not found";
             showTopAlert(errMsg, "error");
             nameBox.className = "name-box show error";
             nameBox.style.display = "block";
             nameBox.textContent = errMsg;
-            verifiedEmail = null;
-            sendBtn.disabled = true;
+            verifiedEmail = null;                                                                                
+            sendBtn.disabled = true;                                                                         
         }
     } catch (err) {
         showTopAlert("Network error during verification.", "error");
@@ -218,47 +231,71 @@ async function searchUser() {
     searchBtn.textContent = "Verify Recipient";
 }
 
-async function sendMoney() {
-    const amount = parseFloat(document.getElementById("amount").value);
-    const pin = document.getElementById("pin").value.trim();
-    const sendBtn = document.getElementById("sendBtn");
-
+async function handleSendMoneyClick() {
     if (!currentUser) {
         showTopAlert("Please login first.", "error");
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
         return;
     }
+
+    try {
+        const snapshot = await db.ref(`users/${currentUser.uid}`).once('value');
+        const userData = snapshot.val() || {};
+        if (!userData.transaction_pin && !userData.pin) {
+            document.getElementById('customPromptModal').style.display = 'flex';
+            return;
+        }
+    } catch (e) {
+        console.error("Error checking transaction PIN:", e);
+    }
+
+    sendMoney();
+}
+
+function redirectToPinSetup() {
+    window.location.href = "../pinsetup.html?return=sendmoney";
+}
+
+function closeCustomPrompt() {
+    document.getElementById('customPromptModal').style.display = 'none';
+}
+
+async function sendMoney() {
+    const amount = parseFloat(document.getElementById("amount").value);
+    const pin = document.getElementById("pin").value.trim();
+    const sendBtn = document.getElementById("sendBtn");
+
     if (!verifiedEmail) {
         showTopAlert("Please verify recipient first", "error");
         return;
     }
     if (!amount || amount <= 0 || !Number.isFinite(amount)) {
         showTopAlert("Enter a valid amount", "error");
-        return;
+        return;                                                                                          
     }
-    if (!pin) {
+    if (!pin) {                                                                                              
         showTopAlert("Transaction PIN is required", "error");
         return;
     }
 
     if (!confirm(`Send ₦${amount.toLocaleString()} to the verified recipient?`)) {
-        return;
+        return;                                                                                          
     }
 
     sendBtn.disabled = true;
-    sendBtn.innerHTML = '<span class="loading"></span> Processing...';
+    sendBtn.innerHTML = '<span class="loading"></span> Processing...';                               
 
     try {
         const token = await currentUser.getIdToken().catch(() => "");
 
-        const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {
+        const res = await fetch(`${BACKEND_URL}/api/sendmoney/transfer`, {                                       
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 ...(token ? { "Authorization": `Bearer ${token}` } : {})
             },
             body: JSON.stringify({
-                email: verifiedEmail,
+                email: verifiedEmail,                                                                                
                 amount: amount,
                 pin: pin
             })
@@ -282,7 +319,7 @@ async function sendMoney() {
         showTopAlert("Network error. Please try again.", "error");
     }
 
-    sendBtn.disabled = false;
+    sendBtn.disabled = false;                                                                            
     sendBtn.textContent = "Send Money";
 }
 </script>

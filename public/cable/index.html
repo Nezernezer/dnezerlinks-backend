@@ -18,7 +18,7 @@
         .price-display { background: #e3f2fd; padding: 12px; margin-top: 15px; border-radius: 8px; text-align: center; border: 1px dashed var(--primary); display: none; }
         button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-        #pinModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
+        #pinModal, #customPromptModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 320px; text-align: center; position: relative; }
         .pin-container { position: relative; width: 100%; margin: 15px 0; }
         .pin-input { font-size: 2rem; text-align: center; letter-spacing: 10px; width: 100%; border: 1px solid #ccc; border-radius: 8px; padding: 10px; box-sizing: border-box; }
@@ -77,16 +77,25 @@
     <div class="modal-content">
         <h3>Enter PIN</h3>
         <div id="pinError" style="color: var(--error); font-size: 0.85rem; margin-bottom: 5px; min-height: 1rem;"></div>
-
         <div class="pin-container">
             <input type="password" id="txnPin" name="txn_pin_field" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="one-time-code">
             <button type="button" class="toggle-pin" onclick="togglePinVisibility()">SHOW</button>
         </div>
-
         <div id="processingSpinner" class="spinner"></div>
-
         <button id="confirmBtn" onclick="verifyAndPay()">Confirm Payment</button>
         <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div id="customPromptModal">
+    <div class="modal-content">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: var(--primary); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
     </div>
 </div>
 
@@ -103,7 +112,6 @@
         projectId: "dnezerlinks",
         appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
     };
-
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
     const auth = firebase.auth();
@@ -113,6 +121,18 @@
 
     window.addEventListener('DOMContentLoaded', () => {
         fetch("https://dnezerlinks-backend.onrender.com/api/cabletv/validate", { method: "HEAD" }).catch(() => {});
+
+        const pending = sessionStorage.getItem('pending_cable_order');
+        if (pending) {
+            const order = JSON.parse(pending);
+            document.getElementById('provider').value = order.provider;
+            populatePlans();
+            document.getElementById('planList').value = order.planID;
+            updatePriceDisplay();
+            document.getElementById('iuc').value = order.iuc;
+            sessionStorage.removeItem('pending_cable_order');
+            autoLookupCustomer();
+        }
     });
 
     auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
@@ -172,18 +192,18 @@
         const infoDiv = document.getElementById("customerInfo");
         const buyBtn = document.getElementById('buyBtn');
 
-        if (iuc.length < 8) { 
-            infoDiv.innerText = ""; 
+        if (iuc.length < 8) {
+            infoDiv.innerText = "";
             infoDiv.style.color = "";
-            isIucVerified = false; 
-            buyBtn.disabled = true; 
-            return; 
+            isIucVerified = false;
+            buyBtn.disabled = true;
+            return;
         }
-        if (!provider) { 
-            infoDiv.innerText = "Select provider first"; 
-            infoDiv.style.color = "#d32f2f"; 
-            buyBtn.disabled = true; 
-            return; 
+        if (!provider) {
+            infoDiv.innerText = "Select provider first";
+            infoDiv.style.color = "#d32f2f";
+            buyBtn.disabled = true;
+            return;
         }
 
         if (lookupTimeout) clearTimeout(lookupTimeout);
@@ -206,7 +226,6 @@
                     isIucVerified = true;
                     buyBtn.disabled = false;
                 } else {
-                    // FIXED: Clear red error
                     infoDiv.style.color = "#d32f2f";
                     infoDiv.style.fontWeight = "bold";
                     infoDiv.innerText = "❌ Invalid IUC/card number.";
@@ -229,16 +248,38 @@
         buyBtn.disabled = true;
 
         try {
-            const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
+            const user = auth.currentUser;
+            const snap = await database.ref('users/' + user.uid).once('value');
             const data = snap.val() || {};
-            if ((data.kyc_status || "").toUpperCase() !== "VERIFIED") { window.location.href = "../kyc_status.html"; return; }
-            if (!data.transaction_pin && !data.pin) { window.location.href = "../pinsetup.html?return=cable"; return; }
+
+            if (!data.transaction_pin && !data.pin) {
+                const provider = document.getElementById("provider").value;
+                const planList = document.getElementById("planList");
+                const planID = planList.value;
+                const iuc = document.getElementById("iuc").value.trim();
+
+                sessionStorage.setItem('pending_cable_order', JSON.stringify({ provider, planID, iuc }));
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
+            }
 
             document.getElementById('pinModal').style.display = 'flex';
             document.getElementById('txnPin').value = '';
             document.getElementById('pinError').textContent = '';
-        } catch (e) { showMessage("Validation error."); }
-        finally { buyBtn.disabled = !isIucVerified; }
+        } catch (e) {
+            showMessage("Validation error.");
+        } finally {
+            buyBtn.disabled = !isIucVerified;
+        }
+    }
+
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=cable";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
+        document.getElementById('buyBtn').disabled = !isIucVerified;
     }
 
     function closePinModal() {
@@ -264,7 +305,7 @@
 
         try {
             const snap = await database.ref('users/' + auth.currentUser.uid).once('value');
-            const userData = snap.val();
+            const userData = snap.val() || {};
             const storedPin = userData.transaction_pin || userData.pin;
 
             if (String(enteredPin) === String(storedPin)) {

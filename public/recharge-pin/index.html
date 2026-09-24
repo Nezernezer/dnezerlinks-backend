@@ -176,18 +176,6 @@
     </div>
 </div>
 
-<!-- Native KYC Dialog Popup Wrapper -->
-<div class="modal-overlay" id="kycDialogOverlay" style="align-items: center;">
-    <div class="dialog-box">
-        <h3 style="margin: 0 0 10px 0; color: #c62828;">KYC Verification Warning</h3>
-        <p style="color: #555; font-size: 14px; line-height: 1.5;">Your KYC verification portfolio is currently incomplete. Would you like to complete the verification of security parameters now?</p>
-        <div class="dialog-buttons">
-            <button class="btn-flex" style="background: #e0e0e0; color: #333;" onclick="bypassKycToPinModal()">Do Later</button>
-            <button class="btn-flex" style="background: var(--primary); color: #fff;" onclick="location.href='../kyc_status.html'">Verify Now</button>
-        </div>
-    </div>
-</div>
-
 <!-- Security Authorization Pin Bottom Sheet Modal -->
 <div class="modal-overlay" id="pinModalOverlay">
     <div class="modal-sheet">
@@ -205,6 +193,18 @@
                 <span id="authBtnText">Confirm & Pay</span>
             </button>
         </div>
+    </div>
+</div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div class="modal-overlay" id="customPromptModal" style="align-items: center;">
+    <div class="dialog-box">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: var(--primary); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
     </div>
 </div>
 
@@ -251,9 +251,20 @@
         fetch('https://Dnezerlinks-backend.onrender.com/api/ping').catch(() => {});
         updateTotal();
 
-        auth.onAuthStateChanged((user) => {
+        auth.onAuthStateChanged(async (user) => {
             if (user) {
                 checkLastTransactionAvailability(user.uid);
+                
+                // Check PIN on page load
+                try {
+                    const snap = await database.ref('users/' + user.uid).once('value');
+                    const data = snap.val() || {};
+                    if (!data.transaction_pin && !data.pin) {
+                        document.getElementById('customPromptModal').style.display = 'flex';
+                    }
+                } catch (e) {
+                    console.error("Error checking PIN on load", e);
+                }
             }
         });
     });
@@ -323,31 +334,35 @@
 
         const procBtn = document.getElementById('procBtn');
         procBtn.disabled = true;
-        procBtn.innerText = "Checking KYC Profiles...";
+        procBtn.innerText = "Checking User Profile...";
 
         try {
-            const snapshot = await database.ref(`users/${user.uid}/kyc_status`).once('value');
-            const currentKycStatus = snapshot.val();
+            const snapshot = await database.ref(`users/${user.uid}`).once('value');
+            const userData = snapshot.val() || {};
 
             procBtn.disabled = false;
             procBtn.innerText = "GENERATE PIN";
 
-            if (currentKycStatus === "VERIFIED") {
-                openPinModal();
-            } else {
-                document.getElementById('kycDialogOverlay').style.display = 'flex';
+            if (!userData.transaction_pin && !userData.pin) {
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
             }
+
+            openPinModal();
         } catch (dbErr) {
-            console.error("KYC root fetch failure:", dbErr);
+            console.error("Profile root fetch failure:", dbErr);
             procBtn.disabled = false;
             procBtn.innerText = "GENERATE PIN";
-            document.getElementById('kycDialogOverlay').style.display = 'flex';
+            openPinModal();
         }
     }
 
-    function bypassKycToPinModal() {
-        document.getElementById('kycDialogOverlay').style.display = 'none';
-        openPinModal();
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=rechargepin";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
     }
 
     function openPinModal() {
@@ -401,7 +416,6 @@
                     brandName: typedBrandName || "Dnezerlinks"
                 })
             });
-
             const result = await response.json();
 
             if (!response.ok || !result.success) {
@@ -491,7 +505,6 @@
                         buildVoucherCanvas('a4', dataPayload);
                     }, 1200);
                 });
-
         } catch (err) {
             console.error("Reprint handling pipeline crash:", err);
             reprintBtn.disabled = false;
@@ -533,13 +546,13 @@
             const year = now.getFullYear();
             const hours = String(now.getHours()).padStart(2, '0');
             const minutes = String(now.getMinutes()).padStart(2, '0');
-            
+
             let hr12 = now.getHours();
             const ampm = hr12 >= 12 ? 'PM' : 'AM';
             hr12 = hr12 % 12;
-            hr12 = hr12 ? hr12 : 12; 
+            hr12 = hr12 ? hr12 : 12;
             const strHr = String(hr12).padStart(2, '0');
-            
+
             formattedTimestamp = `${day}/${month}/${year}, ${strHr}:${minutes} ${ampm}`;
         }
 
