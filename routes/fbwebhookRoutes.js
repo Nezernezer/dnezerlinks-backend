@@ -28,14 +28,14 @@ router.post('/', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
-        // Immediately acknowledge Meta to prevent timeout re-deliveries (stops message duplication)
+        // Immediately acknowledge Meta to prevent timeout re-deliveries
         res.status(200).send('EVENT_RECEIVED');
 
         for (const entry of body.entry) {
             if (!entry.messaging) continue;
             
             for (const webhookEvent of entry.messaging) {
-                // Process only user-sent text messages (ignore delivery receipts, read receipts, echoes)
+                // Process only user-sent text messages (ignore delivery receipts and echoes)
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
                     const incomingText = webhookEvent.message.text.trim();
@@ -52,23 +52,55 @@ router.post('/', async (req, res) => {
 
 // Handle incoming user commands across all Dnezerlinks features
 async function handleUserMessage(senderPsid, text) {
-    const lowerText = text.toLowerCase();
-    let replyText = "";
+    let lowerText = text.toLowerCase().trim();
+
+    // Map numerical shortcuts to commands for quick selection
+    const numberShortcuts = {
+        '1': 'balance',
+        '2': 'airtime',
+        '3': 'data',
+        '4': 'cable',
+        '5': 'electricity',
+        '6': 'bulksms',
+        '7': 'status',
+        '8': 'register',
+        '9': 'link'
+    };
+
+    if (numberShortcuts[lowerText]) {
+        lowerText = numberShortcuts[lowerText];
+    }
 
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help') {
-        replyText = "🤖 *Dnezerlinks Messenger Services*\n\n" +
-                    "Select a command to proceed:\n\n" +
-                    "🔹 `register [Name] [Email] [Password]`\n   ┗ Create a new account\n" +
-                    "🔹 `link [Email]`\n   ┗ Connect existing account\n" +
-                    "🔹 `balance`\n   ┗ Check live wallet balance\n" +
-                    "🔹 `airtime`\n   ┗ Airtime purchase guide\n" +
-                    "🔹 `data`\n   ┗ Data bundle service info\n" +
-                    "🔹 `cable`\n   ┗ Cable TV (DSTV/GOTV)\n" +
-                    "🔹 `electricity`\n   ┗ Electricity bill tokens\n" +
-                    "🔹 `bulksms`\n   ┗ Bulk SMS services\n" +
-                    "🔹 `status`\n   ┗ Check account link status";
+        const menuPayload = {
+            text: "🤖 *Dnezerlinks Services*\n\n" +
+                  "Select a number or tap an option below:\n\n" +
+                  "1️⃣ **Balance** - Check live wallet balance\n" +
+                  "2️⃣ **Airtime** - Airtime top-up guide\n" +
+                  "3️⃣ **Data** - Data bundle info\n" +
+                  "4️⃣ **Cable TV** - DSTV / GOTV / Startimes\n" +
+                  "5️⃣ **Electricity** - Prepaid/postpaid tokens\n" +
+                  "6️⃣ **Bulk SMS** - SMS broadcast services\n" +
+                  "7️⃣ **Status** - Check account link status\n" +
+                  "8️⃣ **Register** - `register Name Email Pass`\n" +
+                  "9️⃣ **Link** - `link your-email@gmail.com`",
+            quick_replies: [
+                { content_type: "text", title: "1. Balance", payload: "1" },
+                { content_type: "text", title: "2. Airtime", payload: "2" },
+                { content_type: "text", title: "3. Data", payload: "3" },
+                { content_type: "text", title: "4. Cable", payload: "4" },
+                { content_type: "text", title: "5. Electricity", payload: "5" },
+                { content_type: "text", title: "6. Bulk SMS", payload: "6" },
+                { content_type: "text", title: "7. Status", payload: "7" }
+            ]
+        };
+        await sendMessengerReply(senderPsid, menuPayload);
+        return;
     }
-    else if (lowerText.startsWith('register ')) {
+
+    let replyText = "";
+
+    if (lowerText.startsWith('register ')) {
         const parts = text.split(' ');
         if (parts.length < 4) {
             replyText = "❌ *Format Error*\nUse: `register YourName your@email.com password`";
@@ -111,7 +143,7 @@ async function handleUserMessage(senderPsid, text) {
         replyText = "📱 *Bulk SMS Messaging*\nBroadcast customized SMS messages instantly using your Dnezerlinks messaging balance.";
     }
     else {
-        replyText = "👋 Welcome to Dnezerlinks!\nType `menu` to see all available automated features.";
+        replyText = "👋 Welcome to Dnezerlinks!\nType `menu` to see all available options with unique keys.";
     }
 
     await sendMessengerReply(senderPsid, { text: replyText });
