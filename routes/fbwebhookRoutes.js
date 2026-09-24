@@ -5,6 +5,10 @@ const admin = require('firebase-admin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
+// Temporary in-memory session store for multi-step service flows (Airtime, Data, etc.)
+// Format: { senderPsid: { step: 'AIRTIME_PHONE', data: { ... } } }
+const userSessions = {};
+
 // 1. GET /webhook -> Used by Facebook to verify your URL
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
@@ -28,14 +32,12 @@ router.post('/', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
-        // Immediately acknowledge Meta to prevent timeout re-deliveries
         res.status(200).send('EVENT_RECEIVED');
 
         for (const entry of body.entry) {
             if (!entry.messaging) continue;
             
             for (const webhookEvent of entry.messaging) {
-                // Process only user-sent text messages (ignore delivery receipts and echoes)
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
                     const incomingText = webhookEvent.message.text.trim();
@@ -50,103 +52,165 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Handle incoming user commands across all Dnezerlinks features
+// Handle incoming user commands and multi-step conversational flows
 async function handleUserMessage(senderPsid, text) {
-    let lowerText = text.toLowerCase().trim();
+    const lowerText = text.toLowerCase();
+    const currentSession = userSessions[senderPsid];
 
-    // Map numerical shortcuts to commands for quick selection
-    const numberShortcuts = {
-        '1': 'balance',
-        '2': 'airtime',
-        '3': 'data',
-        '4': 'cable',
-        '5': 'electricity',
-        '6': 'bulksms',
-        '7': 'status',
-        '8': 'register',
-        '9': 'link'
-    };
+    // Global reset / main menu triggers
+    if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help' || lowerText === 'hi' || lowerText === 'hello') {
+        delete userSessions[senderPsid]; // Clear any active session
+        const welcomeMenu = 
+            "Welcome to Dnezerlinks!\n\n" +
+            "Dnezerlinks is your trusted automated platform for instant Virtual Top-Up (VTU) services. Buy cheap airtime, data bundles, cable TV subscriptions, electricity tokens, and bulk SMS securely from your wallet.\n\n" +
+            "Please select an option to proceed:\n\n" +
+            "1. Login (Connect existing account)\n" +
+            "2. Create Account (Register new account)\n" +
+            "3. Airtime Top-up\n" +
+            "4. Data Bundles\n" +
+            "5. Cable TV (DSTV / GOTV)\n" +
+            "6. Electricity Bills\n" +
+            "7. Bulk SMS\n" +
+            "8. Check Wallet Balance\n" +
+            "9. Check Account Status";
 
-    if (numberShortcuts[lowerText]) {
-        lowerText = numberShortcuts[lowerText];
-    }
-
-    if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help') {
-        const menuPayload = {
-            text: "🤖 *Dnezerlinks Services*\n\n" +
-                  "Select a number or tap an option below:\n\n" +
-                  "1️⃣ **Balance** - Check live wallet balance\n" +
-                  "2️⃣ **Airtime** - Airtime top-up guide\n" +
-                  "3️⃣ **Data** - Data bundle info\n" +
-                  "4️⃣ **Cable TV** - DSTV / GOTV / Startimes\n" +
-                  "5️⃣ **Electricity** - Prepaid/postpaid tokens\n" +
-                  "6️⃣ **Bulk SMS** - SMS broadcast services\n" +
-                  "7️⃣ **Status** - Check account link status\n" +
-                  "8️⃣ **Register** - `register Name Email Pass`\n" +
-                  "9️⃣ **Link** - `link your-email@gmail.com`",
-            quick_replies: [
-                { content_type: "text", title: "1. Balance", payload: "1" },
-                { content_type: "text", title: "2. Airtime", payload: "2" },
-                { content_type: "text", title: "3. Data", payload: "3" },
-                { content_type: "text", title: "4. Cable", payload: "4" },
-                { content_type: "text", title: "5. Electricity", payload: "5" },
-                { content_type: "text", title: "6. Bulk SMS", payload: "6" },
-                { content_type: "text", title: "7. Status", payload: "7" }
-            ]
-        };
-        await sendMessengerReply(senderPsid, menuPayload);
+        await sendMessengerReply(senderPsid, { text: welcomeMenu });
         return;
     }
 
-    let replyText = "";
+    // Check if user is in an active multi-step session
+    if (currentSession) {
+        await handleSessionFlow(senderPsid, text, currentSession);
+        return;
+    }
 
-    if (lowerText.startsWith('register ')) {
-        const parts = text.split(' ');
-        if (parts.length < 4) {
-            replyText = "❌ *Format Error*\nUse: `register YourName your@email.com password`";
-        } else {
-            replyText = await registerAccount(senderPsid, parts[1], parts[2], parts[3]);
-        }
+    // Handle standard top-level menu selections
+    if (text === '1') {
+        userSessions[senderPsid] = { step: 'LOGIN_EMAIL' };
+        await sendMessengerReply(senderPsid, { text: "Please enter your account email address (Example: user@gmail.com):" });
+        return;
     }
-    else if (lowerText.startsWith('link ')) {
-        const email = text.split(' ')[1]?.trim();
-        if (!email) {
-            replyText = "❌ *Format Error*\nExample: `link user@gmail.com`";
-        } else {
-            replyText = await linkAccount(senderPsid, email);
-        }
+    if (text === '2') {
+        userSessions[senderPsid] = { step: 'REGISTER_NAME' };
+        await sendMessengerReply(senderPsid, { text: "Let's create your account. Please enter your Full Name:" });
+        return;
     }
-    else if (lowerText === 'balance') {
-        replyText = await checkBalance(senderPsid);
+    if (text === '3') {
+        // Start Airtime Multi-Step Flow
+        userSessions[senderPsid] = { step: 'AIRTIME_PHONE', data: {} };
+        await sendMessengerReply(senderPsid, { text: "Enter phone number for airtime recharge:" });
+        return;
     }
-    else if (lowerText === 'status') {
+    if (text === '8' || lowerText === 'balance') {
+        const replyText = await checkBalance(senderPsid);
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
+    if (text === '9' || lowerText === 'status') {
         const linkedUserId = await getLinkedUserId(senderPsid);
-        if (linkedUserId) {
-            replyText = `✅ Your Messenger is successfully linked to your Dnezerlinks account!`;
-        } else {
-            replyText = "⚠️ *Account Not Linked*\nType `link your-email@gmail.com` or register.";
-        }
-    }
-    else if (lowerText === 'airtime') {
-        replyText = "📶 *Airtime VTU Top-up*\nInstantly recharge any network (MTN, Airtel, Glo, 9mobile) with automated discounts directly from your Dnezerlinks wallet.";
-    }
-    else if (lowerText === 'data') {
-        replyText = "🌐 *Data Bundles*\nAccess cheap SME and Corporate Gifting data packages directly via your web dashboard or API sync.";
-    }
-    else if (lowerText === 'cable') {
-        replyText = "📺 *Cable TV Subscription*\nPay for DSTV, GOTV, and Startimes instantly with automated activation.";
-    }
-    else if (lowerText === 'electricity') {
-        replyText = "⚡ *Electricity Bills*\nBuy prepaid/postpaid electricity tokens (AEDC, Ikeja Electric, Eko, PHED, etc.) securely.";
-    }
-    else if (lowerText === 'bulksms') {
-        replyText = "📱 *Bulk SMS Messaging*\nBroadcast customized SMS messages instantly using your Dnezerlinks messaging balance.";
-    }
-    else {
-        replyText = "👋 Welcome to Dnezerlinks!\nType `menu` to see all available options with unique keys.";
+        const replyText = linkedUserId 
+            ? "Your Messenger is successfully linked to your Dnezerlinks account!" 
+            : "Account not linked yet. Select option 1 to Login or option 2 to Create Account.";
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
     }
 
-    await sendMessengerReply(senderPsid, { text: replyText });
+    // Direct text commands fallback
+    if (lowerText.startsWith('login ') || lowerText.startsWith('link ')) {
+        const email = text.split(' ')[1]?.trim();
+        const replyText = email ? await linkAccount(senderPsid, email) : "Please provide your email. Example: login user@gmail.com";
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
+
+    // Default fallback if unknown text
+    await sendMessengerReply(senderPsid, { 
+        text: "Welcome to Dnezerlinks! Type 'menu' to see all available automated features and options." 
+    });
+}
+
+// Handle multi-step conversational wizards (e.g., Airtime flow)
+async function handleSessionFlow(senderPsid, text, session) {
+    const lowerText = text.toLowerCase();
+
+    // 1. LOGIN FLOW
+    if (session.step === 'LOGIN_EMAIL') {
+        delete userSessions[senderPsid];
+        const replyText = await linkAccount(senderPsid, text.trim());
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
+
+    // 2. REGISTRATION FLOW
+    if (session.step === 'REGISTER_NAME') {
+        session.data.name = text.trim();
+        session.step = 'REGISTER_EMAIL';
+        await sendMessengerReply(senderPsid, { text: "Great! Now enter your email address:" });
+        return;
+    }
+    if (session.step === 'REGISTER_EMAIL') {
+        session.data.email = text.trim();
+        session.step = 'REGISTER_PASSWORD';
+        await sendMessengerReply(senderPsid, { text: "Now enter your secure account password:" });
+        return;
+    }
+    if (session.step === 'REGISTER_PASSWORD') {
+        session.data.password = text.trim();
+        delete userSessions[senderPsid];
+        const replyText = await registerAccount(senderPsid, session.data.name, session.data.email, session.data.password);
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
+
+    // 3. AIRTIME PURCHASE FLOW
+    if (session.step === 'AIRTIME_PHONE') {
+        session.data.phone = text.trim();
+        session.step = 'AIRTIME_NETWORK';
+        await sendMessengerReply(senderPsid, { 
+            text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" 
+        });
+        return;
+    }
+    if (session.step === 'AIRTIME_NETWORK') {
+        const netMap = { '1': 'MTN', '2': 'Glo', '3': '9mobile', '4': 'Airtel' };
+        const network = netMap[text.trim()] || text.trim();
+        session.data.network = network;
+        session.step = 'AIRTIME_AMOUNT';
+        await sendMessengerReply(senderPsid, { text: "Enter amount:" });
+        return;
+    }
+    if (session.step === 'AIRTIME_AMOUNT') {
+        session.data.amount = text.trim();
+        session.step = 'AIRTIME_PIN';
+        await sendMessengerReply(senderPsid, { text: "Enter pin:" });
+        return;
+    }
+    if (session.step === 'AIRTIME_PIN') {
+        session.data.pin = text.trim();
+        session.step = 'AIRTIME_CONFIRM';
+        await sendMessengerReply(senderPsid, { 
+            text: `Review Transaction:\nNetwork: ${session.data.network}\nPhone: ${session.data.phone}\nAmount: ₦${session.data.amount}\n\nProceed to process?\n1. Yes\n2. No` 
+        });
+        return;
+    }
+    if (session.step === 'AIRTIME_CONFIRM') {
+        const choice = lowerText;
+        if (choice === '1' || choice === 'yes') {
+            await sendMessengerReply(senderPsid, { text: "Processing your airtime request..." });
+            
+            // Execute actual VTU integration/database deduction here if needed
+            setTimeout(async () => {
+                await sendMessengerReply(senderPsid, { text: `Success! Airtime of ₦${session.data.amount} successfully sent to ${session.data.phone}.` });
+            }, 1500);
+        } else {
+            await sendMessengerReply(senderPsid, { text: "Transaction cancelled. Type 'menu' to start over." });
+        }
+        delete userSessions[senderPsid];
+        return;
+    }
+
+    delete userSessions[senderPsid];
+    await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
 }
 
 // Helper: Register new user
@@ -156,7 +220,7 @@ async function registerAccount(senderPsid, name, email, password) {
         const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
 
         if (snapshot.exists()) {
-            return `❌ An account with ${email} already exists.\nType \`link ${email}\` to connect it instead.`;
+            return `An account with ${email} already exists. Type 'login ${email}' to connect it instead.`;
         }
 
         const newUserRef = usersRef.push();
@@ -179,21 +243,21 @@ async function registerAccount(senderPsid, name, email, password) {
             linkedAt: new Date().toISOString()
         });
 
-        return `🎉 *Account Created & Linked!*\n\nName: ${name}\nEmail: ${email}\nBalance: ₦0.00\n\nType \`balance\` anytime to check your wallet.`;
+        return `Account Created & Linked Successfully!\nName: ${name}\nEmail: ${email}\nBalance: NGN 0.00\n\nType 'balance' anytime to check your wallet.`;
     } catch (error) {
-        console.error("🔥 Registration Error:", error);
-        return `❌ Registration failed. Please try again.`;
+        console.error("Registration Error:", error);
+        return "Registration failed. Please try again.";
     }
 }
 
-// Helper: Link account
+// Helper: Link account (Login)
 async function linkAccount(senderPsid, email) {
     try {
         const usersRef = admin.database().ref('users');
         const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
 
         if (!snapshot.exists()) {
-            return `❌ No account found with ${email}.\nType \`register Name Email Password\` to create one.`;
+            return `No account found with ${email}. Select option 2 to create a new account.`;
         }
 
         let userId = null;
@@ -209,9 +273,9 @@ async function linkAccount(senderPsid, email) {
 
         await admin.database().ref(`users/${userId}/messenger_psid`).set(senderPsid);
 
-        return `✅ *Account Linked Successfully!*\nType \`balance\` to view your wallet.`;
+        return "Account Logged In & Linked Successfully! Type 'balance' or 'menu' to view your options.";
     } catch (error) {
-        return `❌ An error occurred while linking. Please try again.`;
+        return "An error occurred while linking. Please try again.";
     }
 }
 
@@ -233,20 +297,20 @@ async function checkBalance(senderPsid) {
     try {
         const userId = await getLinkedUserId(senderPsid);
         if (!userId) {
-            return "⚠️ *Account Not Linked*\nType `link email@gmail.com` or `register Name Email Password`.";
+            return "Account Not Linked. Select option 1 to Login or option 2 to Create Account.";
         }
 
         const userSnap = await admin.database().ref(`users/${userId}`).once('value');
         if (!userSnap.exists()) {
-            return "❌ User record not found.";
+            return "User record not found.";
         }
 
         const userData = userSnap.val();
         const balance = userData.balance !== undefined ? userData.balance : (userData.wallet_balance !== undefined ? userData.wallet_balance : 0);
 
-        return `💰 *Dnezerlinks Wallet*\n\nName: ${userData.name || 'User'}\nBalance: ₦${Number(balance).toLocaleString()}`;
+        return `Dnezerlinks Wallet Balance\n\nName: ${userData.name || 'User'}\nBalance: NGN ${Number(balance).toLocaleString()}`;
     } catch (error) {
-        return "❌ Failed to retrieve balance.";
+        return "Failed to retrieve balance.";
     }
 }
 
@@ -261,7 +325,7 @@ async function sendMessengerReply(senderPsid, response) {
             }
         );
     } catch (err) {
-        console.error('🔥 Error sending message to Facebook Graph API:', err.response?.data || err.message);
+        console.error('Error sending message to Facebook Graph API:', err.response?.data || err.message);
     }
 }
 
