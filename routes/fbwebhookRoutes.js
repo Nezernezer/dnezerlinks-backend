@@ -3,12 +3,13 @@ const router = express.Router();
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+// Import your existing modular service handlers
+const { handleAirtimeFlow } = require('./airtimeRoutes');
 
-// In-memory session store for multi-step transaction flows
+const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const userSessions = {};
 
-// 1. GET /webhook -> Used by Facebook to verify your URL
+// GET /webhook -> Verify URL with Facebook
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -16,17 +17,17 @@ router.get('/', (req, res) => {
 
     if (mode && token) {
         if (mode === 'subscribe' && token === process.env.FB_VERIFY_TOKEN) {
-            console.log('✅ Facebook Webhook Verified Successfully.');
+            console.log('Facebook Webhook Verified Successfully.');
             return res.status(200).send(challenge);
         } else {
-            console.log('❌ Facebook Webhook Verification Failed: Token mismatch');
+            console.log('Facebook Webhook Verification Failed: Token mismatch');
             return res.sendStatus(403);
         }
     }
     return res.sendStatus(400);
 });
 
-// 2. POST /webhook -> Cleanly processes incoming user messages
+// POST /webhook -> Process incoming messages
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
                     const incomingText = webhookEvent.message.text.trim();
-                    console.log(`📩 Messenger Message from ${senderPsid}: ${incomingText}`);
+                    console.log(`Messenger Message from ${senderPsid}: ${incomingText}`);
                     
                     await handleUserMessage(senderPsid, incomingText);
                 }
@@ -51,20 +52,20 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Handle incoming user commands and multi-step conversational flows
+// Handle incoming user commands and delegate appropriately
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
     const currentSession = userSessions[senderPsid];
 
-    // Global reset / main menu triggers
+    // Main Menu Trigger
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help' || lowerText === 'hi' || lowerText === 'hello') {
         delete userSessions[senderPsid];
         const welcomeMenu = 
             "Welcome to Dnezerlinks!\n\n" +
             "Dnezerlinks is your trusted automated platform for instant Virtual Top-Up (VTU) services. Buy cheap airtime, data bundles, cable TV subscriptions, electricity tokens, and bulk SMS securely from your wallet.\n\n" +
             "Please select an option to proceed:\n\n" +
-            "1. Login (Connect existing account)\n" +
-            "2. Create Account (Register new account)\n" +
+            "1. Login\n" +
+            "2. Create Account\n" +
             "3. Airtime Top-up\n" +
             "4. Data Bundles\n" +
             "5. Cable TV (DSTV / GOTV)\n" +
@@ -77,13 +78,17 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // Check if user is in an active multi-step session
+    // Delegate session flows based on active service
     if (currentSession) {
-        await handleSessionFlow(senderPsid, text, currentSession);
+        if (currentSession.data && currentSession.data.service === 'airtime') {
+            await handleAirtimeFlow(senderPsid, text, currentSession, sendMessengerReply, (psid) => delete userSessions[psid]);
+            return;
+        }
+        await handleGeneralSessionFlow(senderPsid, text, currentSession);
         return;
     }
 
-    // Top-level menu routing
+    // Top-Level Menu Selection (1 to 9)
     if (text === '1') {
         userSessions[senderPsid] = { step: 'LOGIN_EMAIL' };
         await sendMessengerReply(senderPsid, { text: "Please enter your account email address (Example: user@gmail.com):" });
@@ -95,6 +100,7 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
     if (text === '3') {
+        // Route to Airtime Module
         userSessions[senderPsid] = { step: 'AIRTIME_PHONE', data: { service: 'airtime' } };
         await sendMessengerReply(senderPsid, { text: "Enter phone number for airtime recharge:" });
         return;
@@ -145,11 +151,8 @@ async function handleUserMessage(senderPsid, text) {
     });
 }
 
-// Handle multi-step conversational wizards with strict PIN validation & server feedback
-async function handleSessionFlow(senderPsid, text, session) {
-    const lowerText = text.toLowerCase();
-
-    // 1. LOGIN FLOW
+// General session flows for Login and Registration
+async function handleGeneralSessionFlow(senderPsid, text, session) {
     if (session.step === 'LOGIN_EMAIL') {
         delete userSessions[senderPsid];
         const replyText = await linkAccount(senderPsid, text.trim());
@@ -157,8 +160,8 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 2. REGISTRATION FLOW (Fixed state tracking)
     if (session.step === 'REGISTER_NAME') {
+        session.data = session.data || {};
         session.data.name = text.trim();
         session.step = 'REGISTER_EMAIL';
         await sendMessengerReply(senderPsid, { text: "Great! Now enter your email address:" });
@@ -184,238 +187,11 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 3. AIRTIME PURCHASE FLOW
-    if (session.step === 'AIRTIME_PHONE') {
-        session.data.phone = text.trim();
-        session.step = 'AIRTIME_NETWORK';
-        await sendMessengerReply(senderPsid, { text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" });
-        return;
-    }
-    if (session.step === 'AIRTIME_NETWORK') {
-        const netMap = { '1': 'MTN', '2': 'Glo', '3': '9mobile', '4': 'Airtel' };
-        session.data.network = netMap[text.trim()] || text.trim();
-        session.step = 'AIRTIME_AMOUNT';
-        await sendMessengerReply(senderPsid, { text: "Enter amount:" });
-        return;
-    }
-    if (session.step === 'AIRTIME_AMOUNT') {
-        session.data.amount = text.trim();
-        session.step = 'AIRTIME_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'AIRTIME_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'AIRTIME_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Airtime Transaction:\nNetwork: ${session.data.network}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nProceed to process?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'AIRTIME_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Validating transaction PIN and processing..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled. Type 'menu' to start over." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 4. DATA BUNDLE FLOW
-    if (session.step === 'DATA_PHONE') {
-        session.data.phone = text.trim();
-        session.step = 'DATA_NETWORK';
-        await sendMessengerReply(senderPsid, { text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" });
-        return;
-    }
-    if (session.step === 'DATA_NETWORK') {
-        const netMap = { '1': 'MTN', '2': 'Glo', '3': '9mobile', '4': 'Airtel' };
-        session.data.network = netMap[text.trim()] || text.trim();
-        session.step = 'DATA_PLAN';
-        await sendMessengerReply(senderPsid, { text: "Enter data plan code or description (e.g. 1GB SME):" });
-        return;
-    }
-    if (session.step === 'DATA_PLAN') {
-        session.data.plan = text.trim();
-        session.step = 'DATA_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'DATA_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'DATA_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Data Transaction:\nNetwork: ${session.data.network}\nPhone: ${session.data.phone}\nPlan: ${session.data.plan}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'DATA_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and processing data bundle..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 5. CABLE TV FLOW
-    if (session.step === 'CABLE_PROVIDER') {
-        const provMap = { '1': 'DSTV', '2': 'GOTV', '3': 'Startimes' };
-        session.data.provider = provMap[text.trim()] || text.trim();
-        session.step = 'CABLE_SMARTCARD';
-        await sendMessengerReply(senderPsid, { text: "Enter Smartcard / IUC Number:" });
-        return;
-    }
-    if (session.step === 'CABLE_SMARTCARD') {
-        session.data.smartcard = text.trim();
-        session.step = 'CABLE_PACKAGE';
-        await sendMessengerReply(senderPsid, { text: "Enter Package / Bouquet name or code:" });
-        return;
-    }
-    if (session.step === 'CABLE_PACKAGE') {
-        session.data.package = text.trim();
-        session.step = 'CABLE_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'CABLE_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'CABLE_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Cable TV Subscription:\nProvider: ${session.data.provider}\nIUC: ${session.data.smartcard}\nPackage: ${session.data.package}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'CABLE_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and processing cable subscription..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 6. ELECTRICITY BILL FLOW
-    if (session.step === 'ELECTRICITY_DISCO') {
-        session.data.disco = text.trim();
-        session.step = 'ELECTRICITY_METER';
-        await sendMessengerReply(senderPsid, { text: "Enter Meter Number:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_METER') {
-        session.data.meter = text.trim();
-        session.step = 'ELECTRICITY_AMOUNT';
-        await sendMessengerReply(senderPsid, { text: "Enter Amount:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_AMOUNT') {
-        session.data.amount = text.trim();
-        session.step = 'ELECTRICITY_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'ELECTRICITY_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Electricity Bill:\nDisco: ${session.data.disco}\nMeter: ${session.data.meter}\nAmount: NGN ${session.data.amount}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and generating token..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 7. BULK SMS FLOW
-    if (session.step === 'BULKSMS_RECIPIENTS') {
-        session.data.recipients = text.trim();
-        session.step = 'BULKSMS_MESSAGE';
-        await sendMessengerReply(senderPsid, { text: "Enter SMS Message text:" });
-        return;
-    }
-    if (session.step === 'BULKSMS_MESSAGE') {
-        session.data.messageText = text.trim();
-        session.step = 'BULKSMS_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'BULKSMS_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'BULKSMS_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Bulk SMS:\nRecipients: ${session.data.recipients}\nMessage: ${session.data.messageText}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'BULKSMS_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and broadcasting SMS..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
     delete userSessions[senderPsid];
     await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
 }
 
-// Strict Transaction Execution & PIN Verification against Firebase
-async function processTransaction(senderPsid, transactionData) {
-    try {
-        const userId = await getLinkedUserId(senderPsid);
-        if (!userId) {
-            return "❌ Error: Account not linked. Please login (Option 1) first.";
-        }
-
-        const userSnap = await admin.database().ref(`users/${userId}`).once('value');
-        if (!userSnap.exists()) {
-            return "❌ Error: User record not found.";
-        }
-
-        const userData = userSnap.val();
-        
-        // Strict PIN Verification
-        if (!userData.pin) {
-            return "❌ Transaction Denied: You have not created a transaction PIN. Please update your profile or re-register with a PIN.";
-        }
-
-        if (String(userData.pin).trim() !== String(transactionData.pin).trim()) {
-            return "❌ Transaction Failed: Incorrect transaction PIN provided. Access denied.";
-        }
-
-        // Simulate server response handling based on transaction type
-        // (You can plug your live VTUNAIJA Axios request here)
-        console.log(`Processing ${transactionData.service} for user ${userId} with verified PIN.`);
-        
-        return `✅ Success! Your ${transactionData.service} request has been processed successfully by the server.`;
-    } catch (error) {
-        console.error("Transaction Processing Error:", error);
-        return "❌ Server Error: Failed to process transaction.";
-    }
-}
-
-// Helper: Register new user with PIN
+// Helper: Register new user
 async function registerAccount(senderPsid, name, email, password, pin) {
     try {
         const usersRef = admin.database().ref('users');
@@ -434,6 +210,7 @@ async function registerAccount(senderPsid, name, email, password, pin) {
             email: email,
             password: password,
             pin: pin,
+            transaction_pin: pin,
             balance: 0,
             wallet_balance: 0,
             messenger_psid: senderPsid,
