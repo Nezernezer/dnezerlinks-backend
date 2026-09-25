@@ -5,28 +5,26 @@ const admin = require('firebase-admin');
 const crypto = require('crypto');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng'; 
-
-const userSessions = {};
-const pendingPinTokens = {}; 
+const APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';                    
+const userSessions = {};                                                                
+const pendingPinTokens = {};
 const pendingAuthTokens = {}; // Handles secure login/signup/reset/funding webview tokens
 
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes inactivity timeout
-const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;  // 5 minutes webview token expiry
+const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;  // 5 minutes webview token expiry           
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000;      // 5 minutes webview auth token expiry
 
 // 1. GET /webhook -> Facebook Webhook Verification
-router.get('/', (req, res) => {
+router.get('/', (req, res) => {                                                             
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-
-    if (mode && token) {
+    const challenge = req.query['hub.challenge'];                                       
+    if (mode && token) {                                                                        
         if (mode === 'subscribe' && token === process.env.FB_VERIFY_TOKEN) {
-            console.log('✅ Facebook Webhook Verified Successfully.');
+            console.log('✅ Facebook Webhook Verified Successfully.');                              
             return res.status(200).send(challenge);
         } else {
-            return res.sendStatus(403);
+            return res.sendStatus(403);                                                         
         }
     }
     return res.sendStatus(400);
@@ -41,7 +39,7 @@ router.post('/', async (req, res) => {
 
         for (const entry of body.entry) {
             if (!entry.messaging) continue;
-            
+
             for (const webhookEvent of entry.messaging) {
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
@@ -76,11 +74,11 @@ router.get('/secure-pin-portal', (req, res) => {
     const sessionData = pendingPinTokens[token];
 
     if (Date.now() > sessionData.expiresAt) {
-        delete pendingPinTokens[token];
-        return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");
+        delete pendingPinTokens[token];                                                         
+        return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");                                                                  
     }
 
-    const { service, phone, network, amount, dataPlan } = sessionData;
+    const { service, phone, network, amount, dataPlan, cableProvider, smartcard, cablePlan, disco, meterNumber, recipients, senderId, message } = sessionData;
 
     res.send(`
         <!DOCTYPE html>
@@ -109,12 +107,19 @@ router.get('/secure-pin-portal', (req, res) => {
             <div class="card">
                 <h3>🔒 Authorize Transaction</h3>
                 <p>Enter your 4-digit transaction PIN securely</p>
-                
+
                 <div class="summary">
                     <div><b>Service:</b> ${service.toUpperCase()}</div>
                     ${network ? `<div><b>Network:</b> ${network.toUpperCase()}</div>` : ''}
                     ${phone ? `<div><b>Phone:</b> ${phone}</div>` : ''}
                     ${dataPlan ? `<div><b>Plan ID:</b> ${dataPlan}</div>` : ''}
+                    ${cableProvider ? `<div><b>Provider:</b> ${cableProvider.toUpperCase()}</div>` : ''}
+                    ${smartcard ? `<div><b>Smartcard:</b> ${smartcard}</div>` : ''}
+                    ${cablePlan ? `<div><b>Package:</b> ${cablePlan}</div>` : ''}
+                    ${disco ? `<div><b>DISCO:</b> ${disco.toUpperCase()}</div>` : ''}
+                    ${meterNumber ? `<div><b>Meter:</b> ${meterNumber}</div>` : ''}
+                    ${recipients ? `<div><b>Recipients:</b> ${recipients}</div>` : ''}
+                    ${senderId ? `<div><b>Sender ID:</b> ${senderId}</div>` : ''}
                     <div><b>Amount:</b> NGN ${Number(amount).toLocaleString()}</div>
                 </div>
 
@@ -127,9 +132,8 @@ router.get('/secure-pin-portal', (req, res) => {
                     <div class="loader" id="loader">Processing transaction securely...</div>
                 </form>
             </div>
-
             <script>
-                function closeMessengerWindow() {
+                function closeMessengerWindow() {                                                           
                     if (typeof MessengerExtensions !== 'undefined') {
                         MessengerExtensions.requestCloseBrowser(function success() {}, function error(err) {
                             window.close();
@@ -143,7 +147,7 @@ router.get('/secure-pin-portal', (req, res) => {
                     e.preventDefault();
                     const pin = document.getElementById('pinInput').value;
                     const token = document.getElementById('tokenField').value;
-                    const submitBtn = document.getElementById('submitBtn');
+                    const submitBtn = document.getElementById('submitBtn');                                 
                     const loader = document.getElementById('loader');
                     const errorMsg = document.getElementById('errorMsg');
 
@@ -168,11 +172,11 @@ router.get('/secure-pin-portal', (req, res) => {
                             submitBtn.disabled = false;
                             submitBtn.style.opacity = '1';
                             document.getElementById('pinInput').value = '';
-                            
+
                             errorMsg.innerText = result.message;
                             errorMsg.style.display = 'block';
                         }
-                    } catch (err) {
+                    } catch (err) {                                                                             
                         loader.style.display = 'none';
                         submitBtn.disabled = false;
                         submitBtn.style.opacity = '1';
@@ -197,13 +201,13 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     const sessionData = pendingPinTokens[token];
 
     if (Date.now() > sessionData.expiresAt) {
-        delete pendingPinTokens[token];
+        delete pendingPinTokens[token];                                                         
         return res.json({ success: false, message: "❌ Link has expired. Please restart your transaction.", closeWindow: true });
     }
 
-    const { psid, service, phone, network, amount, dataPlan } = sessionData;
+    const { psid, service, phone, network, amount, dataPlan, cableProvider, smartcard, cablePlan, disco, meterNumber, recipients, senderId, message } = sessionData;
 
-    try {
+    try {                                                                                       
         const userId = await getLinkedUserId(psid);
         if (!userId) {
             delete pendingPinTokens[token];
@@ -225,41 +229,42 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             if (sessionData.attempts >= 3) {
                 delete pendingPinTokens[token];
-                delete userSessions[psid]; 
+                delete userSessions[psid];
 
-                const failureMenuText = 
+                const failureMenuText =
                     "❌ Incorrect PIN entered 3 times. Action failed and cancelled for security.\n\n" +
                     "Welcome back to Dnezerlinks! Type 'menu' or select an option to restart:\n\n" +
                     "1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Logout\n12. Fund Wallet\n13. Transaction History";
 
                 await sendMessengerReply(psid, { text: failureMenuText });
 
-                return res.json({ 
-                    success: false, 
-                    message: "Max attempts reached.", 
-                    closeWindow: true 
+                return res.json({
+                    success: false,
+                    message: "Max attempts reached.",
+                    closeWindow: true
                 });
             }
 
-            return res.json({ 
-                success: false, 
-                message: `❌ Invalid PIN. Try again (${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} left).`, 
-                closeWindow: false 
+            return res.json({
+                success: false,
+                message: `❌ Invalid PIN. Try again (${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} left).`,
+                closeWindow: false
             });
         }
 
         delete pendingPinTokens[token];
         delete userSessions[psid];
 
+        const parsedAmount = parseFloat(amount);
+
         if (service === 'airtime') {
-            const parsedAmount = parseFloat(amount);
             const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
             const networkID = networkMap[network?.toLowerCase()] || network;
 
-            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
+            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;                                   
             const response = await axios.post(airtimeEndpoint, {
                 uid: userId,
-                phone: phone,
+                phone: phone,                                                                           
                 amount: parsedAmount,
                 networkID: networkID,
                 pin: pin
@@ -268,8 +273,8 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const resData = response.data;
 
             if (resData && resData.success) {
-                await sendMessengerReply(psid, { 
-                    text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
+                await sendMessengerReply(psid, {
+                    text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}`
                 });
 
                 return res.json({ success: true });
@@ -281,41 +286,109 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         }
 
         if (service === 'data') {
-            const parsedAmount = parseFloat(amount);
-            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
+            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };                                                                                                   
             const networkID = networkMap[network?.toLowerCase()] || network;
-
+                                                                                                    
             const dataEndpoint = `${APP_URL}/api/data/buy`;
-            const response = await axios.post(dataEndpoint, {
+            const response = await axios.post(dataEndpoint, {                                           
                 uid: userId,
                 phone: phone,
                 dataPlan: String(dataPlan),
-                networkID: networkID,
+                networkID: networkID,                                                                   
+                amount: parsedAmount,
+                pin: pin                                                                            
+            }, { timeout: 55000 });
+                                                                                                    
+            const resData = response.data;
+            if (resData && resData.success) {                                                           
+                await sendMessengerReply(psid, {
+                    text: `✅ Data Subscription Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nPlan ID: ${dataPlan}\nAmount: NGN ${parsedAmount.toLocaleString()}`
+                });
+
+                return res.json({ success: true });                                                 
+            } else {
+                const errReason = resData.error || 'Data subscription could not be completed.';
+                await sendMessengerReply(psid, { text: `❌ Data Purchase Failed: ${errReason}` });                                                                                              
+                return res.json({ success: false, closeWindow: true });
+            }                                                                                   
+        }
+
+        if (service === 'cable') {
+            const cableEndpoint = `${APP_URL}/api/cable/buy`;
+            const response = await axios.post(cableEndpoint, {
+                uid: userId,
+                provider: cableProvider,
+                smartcard: smartcard,
+                plan: cablePlan,
                 amount: parsedAmount,
                 pin: pin
             }, { timeout: 55000 });
 
             const resData = response.data;
-
             if (resData && resData.success) {
-                await sendMessengerReply(psid, { 
-                    text: `✅ Data Subscription Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nPlan ID: ${dataPlan}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
+                await sendMessengerReply(psid, {
+                    text: `✅ Cable TV Subscription Successful!\n\nProvider: ${cableProvider.toUpperCase()}\nSmartcard: ${smartcard}\nPlan: ${cablePlan}\nAmount: NGN ${parsedAmount.toLocaleString()}`
                 });
-
                 return res.json({ success: true });
             } else {
-                const errReason = resData.error || 'Data subscription could not be completed.';
-                await sendMessengerReply(psid, { text: `❌ Data Purchase Failed: ${errReason}` });
+                const errReason = resData.error || 'Cable subscription failed.';
+                await sendMessengerReply(psid, { text: `❌ Cable Subscription Failed: ${errReason}` });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
+
+        if (service === 'electricity') {
+            const elecEndpoint = `${APP_URL}/api/electricity/buy`;
+            const response = await axios.post(elecEndpoint, {
+                uid: userId,
+                disco: disco,
+                meterNumber: meterNumber,
+                amount: parsedAmount,
+                pin: pin
+            }, { timeout: 55000 });
+
+            const resData = response.data;
+            if (resData && resData.success) {
+                await sendMessengerReply(psid, {
+                    text: `✅ Electricity Token Purchase Successful!\n\nDISCO: ${disco.toUpperCase()}\nMeter: ${meterNumber}\nToken: ${resData.token || 'N/A'}\nAmount: NGN ${parsedAmount.toLocaleString()}`
+                });
+                return res.json({ success: true });
+            } else {
+                const errReason = resData.error || 'Electricity purchase failed.';
+                await sendMessengerReply(psid, { text: `❌ Electricity Failed: ${errReason}` });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
+
+        if (service === 'bulksms') {
+            const smsEndpoint = `${APP_URL}/api/bulksms/send`;
+            const response = await axios.post(smsEndpoint, {
+                uid: userId,
+                recipients: recipients,
+                senderId: senderId,
+                message: message,
+                amount: parsedAmount,
+                pin: pin
+            }, { timeout: 55000 });
+
+            const resData = response.data;
+            if (resData && resData.success) {
+                await sendMessengerReply(psid, {
+                    text: `✅ Bulk SMS Sent Successfully!\n\nSender ID: ${senderId}\nRecipients: ${recipients}\nCost: NGN ${parsedAmount.toLocaleString()}`
+                });
+                return res.json({ success: true });
+            } else {
+                const errReason = resData.error || 'Bulk SMS dispatch failed.';
+                await sendMessengerReply(psid, { text: `❌ Bulk SMS Failed: ${errReason}` });
                 return res.json({ success: false, closeWindow: true });
             }
         }
 
         if (service === 'fund_wallet') {
-            const parsedAmount = parseFloat(amount);
             const currentBalance = Number(userData.balance || 0);
             const newBalance = currentBalance + parsedAmount;
 
-            await admin.database().ref(`users/${userId}`).update({
+            await admin.database().ref(`users/${userId}`).update({                                      
                 balance: newBalance,
                 updatedAt: new Date().toISOString()
             });
@@ -327,13 +400,13 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                 date: new Date().toISOString()
             });
 
-            await sendMessengerReply(psid, { 
-                text: `✅ Wallet Funded Successfully!\n\nAmount Added: NGN ${parsedAmount.toLocaleString()}\nNew Balance: NGN ${newBalance.toLocaleString()}` 
+            await sendMessengerReply(psid, {
+                text: `✅ Wallet Funded Successfully!\n\nAmount Added: NGN ${parsedAmount.toLocaleString()}\nNew Balance: NGN ${newBalance.toLocaleString()}`
             });
 
             return res.json({ success: true });
         }
-
+                                                                                                
         return res.json({ success: true });
 
     } catch (error) {
@@ -347,7 +420,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 // 5. GET /secure-auth-portal -> Secure Webview for Login, Sign Up, & Password Recovery
 router.get('/secure-auth-portal', (req, res) => {
     const { token } = req.query;
-    if (!token || !pendingAuthTokens[token]) {
+    if (!token || !pendingAuthTokens[token]) {                                                  
         return res.status(400).send("<h3>❌ Link Expired or Invalid. Please restart your request in Messenger.</h3>");
     }
 
@@ -361,26 +434,26 @@ router.get('/secure-auth-portal', (req, res) => {
 
     let title = "Dnezerlinks Access";
     let htmlForm = '';
-
+                                                                                            
     if (action === 'login') {
         title = "Login to Dnezerlinks";
         htmlForm = `
-            <h3>🔐 Account Login</h3>
+            <h3>🔐 Account Login</h3>                                                               
             <p>Enter your credentials safely below</p>
             <form id="authForm">
                 <input type="email" id="email" placeholder="Email Address" required autocomplete="email"><br>
                 <input type="password" id="password" placeholder="Password" required autocomplete="current-password"><br>
-                <button type="submit" id="submitBtn">Login Securely</button>
+                <button type="submit" id="submitBtn">Login Securely</button>                        
             </form>
         `;
     } else if (action === 'register') {
         title = "Create Account";
         htmlForm = `
             <h3>📝 Account Registration</h3>
-            <p>Fill out your signup details</p>
+            <p>Fill out your signup details</p>                                                     
             <form id="authForm">
                 <input type="text" id="name" placeholder="Full Name" required><br>
-                <input type="tel" id="phone" placeholder="Phone Number" required><br>
+                <input type="tel" id="phone" placeholder="Phone Number" required><br>                   
                 <input type="text" id="address" placeholder="Home Address" required><br>
                 <input type="email" id="email" placeholder="Email Address" required><br>
                 <input type="password" id="password" placeholder="Password (min 6 chars)" required><br>
@@ -389,13 +462,13 @@ router.get('/secure-auth-portal', (req, res) => {
             </form>
         `;
     } else if (action === 'forgot') {
-        title = "Reset Password";
+        title = "Reset Password";                                                               
         htmlForm = `
             <h3>🔄 Password Recovery</h3>
             <p>Enter your registered account email</p>
             <form id="authForm">
                 <input type="email" id="email" placeholder="Account Email" required autocomplete="email"><br>
-                <button type="submit" id="submitBtn">Send Reset Link</button>
+                <button type="submit" id="submitBtn">Send Reset Link</button>                       
             </form>
         `;
     }
@@ -404,7 +477,7 @@ router.get('/secure-auth-portal', (req, res) => {
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${title}</title>
         <script src="https://connect.facebook.net/en_US/messenger.Extensions.js" crossorigin="anonymous"></script>
-        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>                                                                                       
         <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -419,7 +492,7 @@ router.get('/secure-auth-portal', (req, res) => {
         <body>
             <div class="card">
                 <div id="errorMsg" class="error-msg"></div>
-                ${htmlForm}
+                ${htmlForm}                                                                             
                 <div class="loader" id="loader">Processing securely...</div>
             </div>
             <script>
@@ -431,12 +504,12 @@ router.get('/secure-auth-portal', (req, res) => {
                 };
                 firebase.initializeApp(firebaseConfig);
 
-                function closeWindow() { 
-                    if (typeof MessengerExtensions !== 'undefined') { 
-                        MessengerExtensions.requestCloseBrowser(() => {}, () => window.close()); 
-                    } else { 
-                        window.close(); 
-                    } 
+                function closeWindow() {
+                    if (typeof MessengerExtensions !== 'undefined') {
+                        MessengerExtensions.requestCloseBrowser(() => {}, () => window.close());
+                    } else {
+                        window.close();
+                    }
                 }
 
                 document.getElementById('authForm').addEventListener('submit', async (e) => {
@@ -458,38 +531,38 @@ router.get('/secure-auth-portal', (req, res) => {
 
                         if (action === 'login') {
                             const userCred = await firebase.auth().signInWithEmailAndPassword(email, password);
-                            const idToken = await userCred.user.getIdToken();
-                            body.idToken = idToken;
-                            delete body.password; 
+                            const idToken = await userCred.user.getIdToken();                                       
+                            body.idToken = idToken;                                                                 
+                            delete body.password;                                                               
                         }
 
-                        const res = await fetch('./secure-auth-portal-submit', {
-                            method: 'POST',
+                        const res = await fetch('./secure-auth-portal-submit', {                                    
+                            method: 'POST',                                                                         
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(body)
-                        });
+                        });                                                                                     
                         const result = await res.json();
                         if (result.success) {
                             closeWindow();
                         } else {
                             loader.style.display = 'none';
                             btn.disabled = false;
-                            err.innerText = result.message;
+                            err.innerText = result.message;                                                         
                             err.style.display = 'block';
                         }
                     } catch(ex) {
                         loader.style.display = 'none';
                         btn.disabled = false;
-                        const msg = (ex.code === 'auth/wrong-password' || 
-                                     ex.code === 'auth/user-not-found' || 
-                                     ex.code === 'auth/invalid-credential' || 
+                        const msg = (ex.code === 'auth/wrong-password' ||
+                                     ex.code === 'auth/user-not-found' ||
+                                     ex.code === 'auth/invalid-credential' ||
                                      ex.code === 'auth/invalid-login-credentials')
                                     ? '❌ Incorrect password.'
-                                    : (ex.message || 'Network / Auth error. Please try again.');
-                        err.innerText = msg;
+                                    : (ex.message || 'Network / Auth error. Please try again.');                                                                                                        
+                        err.innerText = msg;                                                                    
                         err.style.display = 'block';
                     }
-                });
+                });                                                                                 
             </script>
         </body></html>
     `);
@@ -498,10 +571,10 @@ router.get('/secure-auth-portal', (req, res) => {
 // 6. POST /secure-auth-portal-submit -> AJAX JSON endpoint handling Login/Register/Recovery webview actions
 router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
     const { token, action, email, password, name, phone, address, pin, idToken } = req.body;
-    if (!token || !pendingAuthTokens[token]) return res.json({ success: false, message: "❌ Link expired or invalid." });
-    const sessionData = pendingAuthTokens[token];
+    if (!token || !pendingAuthTokens[token]) return res.json({ success: false, message: "❌ Link expired or invalid." });                                                           
+    const sessionData = pendingAuthTokens[token];                                           
     if (Date.now() > sessionData.expiresAt) { delete pendingAuthTokens[token]; return res.json({ success: false, message: "❌ Link expired." }); }
-
+                                                                                            
     const psid = sessionData.psid;
     const cleanEmail = email ? email.toLowerCase().trim() : '';
 
@@ -529,10 +602,10 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
                 let userId = null;
                 snapshot.forEach((child) => { userId = child.key; });
 
-                await admin.database().ref(`messenger_links/${psid}`).set({ 
-                    userId, 
-                    email: cleanEmail, 
-                    linkedAt: new Date().toISOString() 
+                await admin.database().ref(`messenger_links/${psid}`).set({
+                    userId,
+                    email: cleanEmail,
+                    linkedAt: new Date().toISOString()                                                  
                 });
                 await admin.database().ref(`users/${userId}/messenger_psid`).set(psid);
 
@@ -543,8 +616,8 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             } catch (authErr) {
                 return res.json({ success: false, message: "❌ Incorrect password." });
             }
-        } 
-        
+        }
+
         if (action === 'register') {
             if (!name || !phone || !address || !cleanEmail || !password || password.length < 6 || !pin) {
                 return res.json({ success: false, message: "❌ Please fill all fields correctly (Password min 6 chars, 4-digit PIN)." });
@@ -575,13 +648,13 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             if (!snapshot.exists()) return res.json({ success: false, message: "❌ No account matches this email address." });
 
             await admin.auth().generatePasswordResetLink(cleanEmail);
-            
+
             delete pendingAuthTokens[token];
             await sendMessengerReply(psid, { text: `🔄 Password Reset Instructions sent.\n\nWe have sent a secure password reset link to your registered email: ${cleanEmail}. Please check your inbox or spam folder.` });
             return res.json({ success: true });
         }
 
-        return res.json({ success: false, message: "❌ Invalid action specified." });
+        return res.json({ success: false, message: "❌ Invalid action specified." });       
     } catch (e) {
         return res.json({ success: false, message: `❌ Error: ${e.message}` });
     }
@@ -595,8 +668,8 @@ async function handleUserMessage(senderPsid, text) {
 
     if (currentSession && (now - currentSession.lastActive > SESSION_TIMEOUT_MS)) {
         delete userSessions[senderPsid];
-        await sendMessengerReply(senderPsid, { 
-            text: "⏳ Your previous session timed out due to inactivity. All pending actions have been cancelled safely. Please type 'menu' to start over whenever you're ready!" 
+        await sendMessengerReply(senderPsid, {
+            text: "⏳ Your previous session timed out due to inactivity. All pending actions have been cancelled safely. Please type 'menu' to start over whenever you're ready!"
         });
         return;
     }
@@ -607,7 +680,7 @@ async function handleUserMessage(senderPsid, text) {
 
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help' || lowerText === 'hi' || lowerText === 'hello') {
         delete userSessions[senderPsid];
-        const welcomeMenu = 
+        const welcomeMenu =
             "Welcome to Dnezerlinks!\n\n" +
             "Dnezerlinks is your trusted automated platform for instant Virtual Top-Up (VTU) services. Buy cheap airtime, data bundles, cable TV subscriptions, electricity tokens, and bulk SMS securely from your wallet.\n\n" +
             "Please select an option to proceed:\n\n" +
@@ -616,28 +689,28 @@ async function handleUserMessage(senderPsid, text) {
             "3. Airtime Top-up\n" +
             "4. Data Bundles\n" +
             "5. Cable TV (DSTV / GOTV)\n" +
-            "6. Electricity Bills\n" +
+            "6. Electricity Bills\n" +                                                              
             "7. Bulk SMS\n" +
-            "8. Check Wallet Balance\n" +
+            "8. Check Wallet Balance\n" +                                                           
             "9. Check Account Status\n" +
             "10. Forgot Password / Reset\n" +
             "11. Logout\n" +
             "12. Fund Wallet\n" +
             "13. Transaction History";
-
+                                                                                            
         await sendMessengerReply(senderPsid, { text: welcomeMenu });
         return;
     }
-
+                                                                                            
     if (currentSession) {
         await handleSessionFlow(senderPsid, text, currentSession);
-        return;
+        return;                                                                             
     }
-
+                                                                                            
     if (text === '1' || lowerText === 'login') {
-        const authToken = crypto.randomBytes(32).toString('hex');
+        const authToken = crypto.randomBytes(32).toString('hex');                               
         pendingAuthTokens[authToken] = { psid: senderPsid, action: 'login', expiresAt: Date.now() + TOKEN_EXPIRY_MS };
-        await sendMessengerButtonTemplate(senderPsid, {
+        await sendMessengerButtonTemplate(senderPsid, {                                             
             text: "🔐 Click below to log in securely through our protected web portal (Link expires in 5 minutes):",
             buttonText: "🔐 Open Secure Login",
             url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
@@ -678,16 +751,16 @@ async function handleUserMessage(senderPsid, text) {
         userSessions[senderPsid] = { step: 'BULKSMS_RECIPIENTS', data: { service: 'bulksms' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Enter recipient phone number(s) separated by commas:" });
         return;
-    }
+    }                                                                                       
     if (text === '8' || lowerText === 'balance') {
-        const replyText = await checkBalance(senderPsid);
+        const replyText = await checkBalance(senderPsid);                                       
         await sendMessengerReply(senderPsid, { text: replyText });
         return;
     }
     if (text === '9' || lowerText === 'status') {
         const linkedUserId = await getLinkedUserId(senderPsid);
-        const replyText = linkedUserId 
-            ? "Your Messenger is successfully linked to your Dnezerlinks account!" 
+        const replyText = linkedUserId
+            ? "Your Messenger is successfully linked to your Dnezerlinks account!"
             : "Account not linked yet. Select option 1 to Login or option 2 to Create Account.";
         await sendMessengerReply(senderPsid, { text: replyText });
         return;
@@ -725,20 +798,20 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    await sendMessengerReply(senderPsid, { 
-        text: "Welcome to Dnezerlinks! Type 'menu' to see all available automated features and options." 
+    await sendMessengerReply(senderPsid, {
+        text: "Welcome to Dnezerlinks! Type 'menu' to see all available automated features and options."
     });
 }
 
-async function handleSessionFlow(senderPsid, text, session) {
+async function handleSessionFlow(senderPsid, text, session) {                               
     if (session.step === 'AIRTIME_PHONE') {
         session.data.phone = text.trim();
         session.step = 'AIRTIME_NETWORK';
         await sendMessengerReply(senderPsid, { text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" });
         return;
-    }
+    }                                                                                       
     if (session.step === 'AIRTIME_NETWORK') {
-        const netMap = { '1': 'mtn', '2': 'glo', '3': '9mobile', '4': 'airtel' };
+        const netMap = { '1': 'mtn', '2': 'glo', '3': '9mobile', '4': 'airtel' };               
         session.data.network = netMap[text.trim()] || text.trim().toLowerCase();
         session.step = 'AIRTIME_AMOUNT';
         await sendMessengerReply(senderPsid, { text: "Enter amount (Min ₦100):" });
@@ -754,7 +827,7 @@ async function handleSessionFlow(senderPsid, text, session) {
             psid: senderPsid,
             service: 'airtime',
             phone: session.data.phone,
-            network: session.data.network,
+            network: session.data.network,                                                          
             amount: session.data.amount,
             expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
             attempts: 0
@@ -779,7 +852,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         session.data.network = netMap[text.trim()] || text.trim().toLowerCase();
         session.step = 'DATA_PLAN';
         await sendMessengerReply(senderPsid, { text: "Enter Data Plan ID (e.g., 500 for 500MB / 1000 for 1GB):" });
-        return;
+        return;                                                                             
     }
     if (session.step === 'DATA_PLAN') {
         session.data.dataPlan = text.trim();
@@ -791,14 +864,13 @@ async function handleSessionFlow(senderPsid, text, session) {
         session.data.amount = text.trim();
         delete userSessions[senderPsid];
 
-        const pinToken = crypto.randomBytes(32).toString('hex');
-
+        const pinToken = crypto.randomBytes(32).toString('hex');                        
         pendingPinTokens[pinToken] = {
             psid: senderPsid,
             service: 'data',
             phone: session.data.phone,
             network: session.data.network,
-            dataPlan: session.data.dataPlan,
+            dataPlan: session.data.dataPlan,                                                        
             amount: session.data.amount,
             expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
             attempts: 0
@@ -806,6 +878,126 @@ async function handleSessionFlow(senderPsid, text, session) {
 
         await sendMessengerButtonTemplate(senderPsid, {
             text: `Review Data Subscription:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nPlan ID: ${session.data.dataPlan}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+        });
+        return;                                                                             
+    }
+
+    if (session.step === 'CABLE_PROVIDER') {
+        const provMap = { '1': 'dstv', '2': 'gotv', '3': 'startimes' };
+        session.data.cableProvider = provMap[text.trim()] || text.trim().toLowerCase();
+        session.step = 'CABLE_SMARTCARD';
+        await sendMessengerReply(senderPsid, { text: "Enter Smartcard / IUC Number:" });
+        return;
+    }
+    if (session.step === 'CABLE_SMARTCARD') {
+        session.data.smartcard = text.trim();
+        session.step = 'CABLE_PLAN';
+        await sendMessengerReply(senderPsid, { text: "Enter Cable Plan Code/Name:" });
+        return;
+    }
+    if (session.step === 'CABLE_PLAN') {
+        session.data.cablePlan = text.trim();
+        session.step = 'CABLE_AMOUNT';
+        await sendMessengerReply(senderPsid, { text: "Enter package amount (NGN):" });
+        return;
+    }
+    if (session.step === 'CABLE_AMOUNT') {
+        session.data.amount = text.trim();
+        delete userSessions[senderPsid];
+
+        const pinToken = crypto.randomBytes(32).toString('hex');
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'cable',
+            cableProvider: session.data.cableProvider,
+            smartcard: session.data.smartcard,
+            cablePlan: session.data.cablePlan,
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+            attempts: 0
+        };
+
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Cable Subscription:\nProvider: ${session.data.cableProvider.toUpperCase()}\nSmartcard: ${session.data.smartcard}\nPlan: ${session.data.cablePlan}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+        });
+        return;
+    }
+
+    if (session.step === 'ELECTRICITY_DISCO') {
+        session.data.disco = text.trim().toLowerCase();
+        session.step = 'ELECTRICITY_METER';
+        await sendMessengerReply(senderPsid, { text: "Enter Meter Number:" });
+        return;
+    }
+    if (session.step === 'ELECTRICITY_METER') {
+        session.data.meterNumber = text.trim();
+        session.step = 'ELECTRICITY_AMOUNT';
+        await sendMessengerReply(senderPsid, { text: "Enter amount for electricity token (NGN):" });
+        return;
+    }
+    if (session.step === 'ELECTRICITY_AMOUNT') {
+        session.data.amount = text.trim();
+        delete userSessions[senderPsid];
+
+        const pinToken = crypto.randomBytes(32).toString('hex');
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'electricity',
+            disco: session.data.disco,
+            meterNumber: session.data.meterNumber,
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+            attempts: 0
+        };
+
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Electricity Token:\nDISCO: ${session.data.disco.toUpperCase()}\nMeter: ${session.data.meterNumber}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+        });
+        return;
+    }
+
+    if (session.step === 'BULKSMS_RECIPIENTS') {
+        session.data.recipients = text.trim();
+        session.step = 'BULKSMS_SENDER';
+        await sendMessengerReply(senderPsid, { text: "Enter Sender ID (Max 11 characters):" });
+        return;
+    }
+    if (session.step === 'BULKSMS_SENDER') {
+        session.data.senderId = text.trim();
+        session.step = 'BULKSMS_MESSAGE';
+        await sendMessengerReply(senderPsid, { text: "Enter your text message content:" });
+        return;
+    }
+    if (session.step === 'BULKSMS_MESSAGE') {
+        session.data.message = text;
+        session.step = 'BULKSMS_AMOUNT';
+        await sendMessengerReply(senderPsid, { text: "Enter total cost/amount for SMS (NGN):" });
+        return;
+    }
+    if (session.step === 'BULKSMS_AMOUNT') {
+        session.data.amount = text.trim();
+        delete userSessions[senderPsid];
+
+        const pinToken = crypto.randomBytes(32).toString('hex');
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'bulksms',
+            recipients: session.data.recipients,
+            senderId: session.data.senderId,
+            message: session.data.message,
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+            attempts: 0
+        };
+
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Bulk SMS Dispatch:\nSender ID: ${session.data.senderId}\nRecipients: ${session.data.recipients}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
             buttonText: "🔐 Enter PIN Securely",
             url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
         });
@@ -852,8 +1044,7 @@ async function linkAccount(senderPsid, email) {
 
         if (!snapshot.exists()) {
             return `No account found with ${cleanEmail}. Select option 2 to create a new account.`;
-        }
-
+        }                                                                               
         let userId = null;
         snapshot.forEach((childSnapshot) => {
             userId = childSnapshot.key;
@@ -865,9 +1056,8 @@ async function linkAccount(senderPsid, email) {
             linkedAt: new Date().toISOString()
         });
 
-        await admin.database().ref(`users/${userId}/messenger_psid`).set(senderPsid);
-
-        return "Account Logged In & Linked Successfully! Type 'balance' or 'menu' to view your options.";
+        await admin.database().ref(`users/${userId}/messenger_psid`).set(senderPsid);   
+        return "Account Logged In & Linked Successfully! Type 'balance' or 'menu' to view your options.";                                                                           
     } catch (error) {
         return "An error occurred while linking. Please try again.";
     }
@@ -877,7 +1067,7 @@ async function logoutAccount(senderPsid) {
     try {
         const linkRef = admin.database().ref(`messenger_links/${senderPsid}`);
         const linkSnap = await linkRef.once('value');
-        
+
         if (!linkSnap.exists()) {
             return "ℹ️ You are not currently logged into any account on Messenger.";
         }
@@ -890,39 +1080,38 @@ async function logoutAccount(senderPsid) {
 
         return "🔒 Successfully logged out of your Dnezerlinks account on Messenger. Type 'menu' or select option 1 to log back in.";
     } catch (error) {
-        return "❌ Error logging out. Please try again.";
+        return "❌ Error logging out. Please try again.";                                   
     }
-}
+}                                                                                                                                                                               
 
-async function getLinkedUserId(senderPsid) {
+async function getLinkedUserId(senderPsid) {                                                
     try {
         const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
         if (linkSnap.exists() && linkSnap.val().userId) {
-            return linkSnap.val().userId;
-        }
-        return null;
-    } catch (e) {
-        return null;
-    }
+            return linkSnap.val().userId;                                                       
+        }                                                                                       
+        return null;                                                                        
+    } catch (e) {                                                                               
+        return null;                                                                        
+    }                                                                                   
 }
 
-async function checkBalance(senderPsid) {
+async function checkBalance(senderPsid) {                                                   
     try {
-        const userId = await getLinkedUserId(senderPsid);
+        const userId = await getLinkedUserId(senderPsid);                                       
         if (!userId) {
             return "❌ Account Not Linked. Select option 1 to Login or option 2 to Create Account.";
         }
-
+                                                                                                
         const userSnap = await admin.database().ref(`users/${userId}`).once('value');
         if (!userSnap.exists()) {
             return "❌ User record not found.";
         }
-
+                                                                                                
         const userData = userSnap.val();
-        const balance = userData.balance !== undefined ? userData.balance : 0;
-
+        const balance = userData.balance !== undefined ? userData.balance : 0;          
         return `💰 Dnezerlinks Wallet Balance\n\nName: ${userData.name || 'User'}\nBalance: NGN ${Number(balance).toLocaleString()}`;
-    } catch (error) {
+    } catch (error) {                                                                           
         return "❌ Failed to retrieve balance.";
     }
 }
@@ -961,7 +1150,7 @@ async function sendMessengerReply(senderPsid, response) {
                 message: response
             }
         );
-    } catch (err) {
+    } catch (err) {                                                                             
         console.log("Error sending message to Facebook Graph API.");
     }
 }
@@ -969,30 +1158,30 @@ async function sendMessengerReply(senderPsid, response) {
 async function sendMessengerButtonTemplate(senderPsid, payload) {
     try {
         await axios.post(
-            `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,                                                                                               
             {
                 recipient: { id: senderPsid },
-                message: {
+                message: {                                                                                  
                     attachment: {
                         type: "template",
                         payload: {
                             template_type: "button",
                             text: payload.text,
-                            buttons: [
+                            buttons: [                                                                                  
                                 {
                                     type: "web_url",
                                     url: payload.url,
-                                    title: payload.buttonText,
+                                    title: payload.buttonText,                                                              
                                     webview_height_ratio: "compact"
                                 }
-                            ]
+                            ]                                                                                   
                         }
-                    }
+                    }                                                                                   
                 }
             }
         );
     } catch (err) {
-        console.log("Error sending button template:", err.response?.data || err.message);
+        console.log("Error sending button template:", err.response?.data || err.message);                                                                                           
     }
 }
 
