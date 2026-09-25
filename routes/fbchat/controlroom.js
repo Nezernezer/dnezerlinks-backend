@@ -313,7 +313,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const resData = response.data;
 
             if (resData && resData.success) {
-                // Successful transaction closes webview with no pop-up, and outputs success message to chat interface
                 await sendMessengerReply(psid, {
                     text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}`
                 });
@@ -344,7 +343,7 @@ async function handleUserMessage(senderPsid, text) {
     if (airtimeChat.getAirtimeSession && airtimeChat.getAirtimeSession(senderPsid)) {
         const session = airtimeChat.getAirtimeSession(senderPsid);
         
-        // Intercept when airtime flow finishes amount/details input to dispatch secure webview token button
+        // Intercept when airtime flow is waiting for the amount
         if (session.step === 'AIRTIME_AMOUNT') {
             const amountNum = parseFloat(text.trim());
             if (isNaN(amountNum) || amountNum < 100) {
@@ -361,7 +360,7 @@ async function handleUserMessage(senderPsid, text) {
             }
             
             const userId = linkSnap.val().userId;
-            airtimeChat.clearAirtimeSession(senderPsid);
+            airtimeChat.clearAirtimeSession(senderPsid); // Clear session before generating token
 
             // Generate 3-minute expiring webview token
             const pinToken = crypto.randomBytes(32).toString('hex');
@@ -378,14 +377,16 @@ async function handleUserMessage(senderPsid, text) {
 
             const webviewUrl = `${APP_URL}/secure-pin-portal?token=${pinToken}`;
 
+            // Send the button template directly to the chat interface
             await sendMessengerButtonTemplate(senderPsid, {
-                text: `Review Airtime Details:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: ₦${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
+                text: `Review Airtime Details:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: ${session.data.phone}\n• Amount: ₦${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
                 buttonText: "🔐 Enter PIN Securely",
                 url: webviewUrl
             });
             return;
         }
 
+        // Handle earlier steps of the airtime conversation (Network, Phone)
         const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
         await sendMessengerReply(senderPsid, reply);
         return;
