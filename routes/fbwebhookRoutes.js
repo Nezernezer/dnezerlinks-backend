@@ -4,8 +4,8 @@ const axios = require('axios');
 const admin = require('firebase-admin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const VTUNAIJA_API_KEY = process.env.VTUNAIJA_API_KEY;
-const VTUNAIJA_AIRTIME_URL = process.env.VTUNAIJA_AIRTIME_URL || 'https://vtunaija.com/api/airtime/';
+// Points to your backend URL (e.g., https://dnezerlinks-backend.onrender.com or http://localhost:10000)
+const APP_URL = process.env.APP_URL || 'http://localhost:10000'; 
 
 // In-memory session store for multi-step transaction flows
 const userSessions = {};
@@ -147,7 +147,7 @@ async function handleUserMessage(senderPsid, text) {
     });
 }
 
-// Handle multi-step conversational wizards with strict PIN validation & server feedback
+// Handle multi-step conversational wizards
 async function handleSessionFlow(senderPsid, text, session) {
     const lowerText = text.toLowerCase();
 
@@ -194,10 +194,10 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
     if (session.step === 'AIRTIME_NETWORK') {
-        const netMap = { '1': 'MTN', '2': 'Glo', '3': '9mobile', '4': 'Airtel' };
-        session.data.network = netMap[text.trim()] || text.trim();
+        const netMap = { '1': 'mtn', '2': 'glo', '3': '9mobile', '4': 'airtel' };
+        session.data.network = netMap[text.trim()] || text.trim().toLowerCase();
         session.step = 'AIRTIME_AMOUNT';
-        await sendMessengerReply(senderPsid, { text: "Enter amount:" });
+        await sendMessengerReply(senderPsid, { text: "Enter amount (Min ₦100):" });
         return;
     }
     if (session.step === 'AIRTIME_AMOUNT') {
@@ -210,13 +210,13 @@ async function handleSessionFlow(senderPsid, text, session) {
         session.data.pin = text.trim();
         session.step = 'AIRTIME_CONFIRM';
         await sendMessengerReply(senderPsid, { 
-            text: `Review Airtime Transaction:\nNetwork: ${session.data.network}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nProceed to process?\n1. Yes\n2. No` 
+            text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nProceed to process?\n1. Yes\n2. No` 
         });
         return;
     }
     if (session.step === 'AIRTIME_CONFIRM') {
         if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Validating transaction PIN and processing real-time airtime top-up..." });
+            await sendMessengerReply(senderPsid, { text: "Processing airtime top-up..." });
             const resultMsg = await processTransaction(senderPsid, session.data);
             await sendMessengerReply(senderPsid, { text: resultMsg });
         } else {
@@ -226,163 +226,11 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 4. DATA BUNDLE FLOW
-    if (session.step === 'DATA_PHONE') {
-        session.data.phone = text.trim();
-        session.step = 'DATA_NETWORK';
-        await sendMessengerReply(senderPsid, { text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" });
-        return;
-    }
-    if (session.step === 'DATA_NETWORK') {
-        const netMap = { '1': 'MTN', '2': 'Glo', '3': '9mobile', '4': 'Airtel' };
-        session.data.network = netMap[text.trim()] || text.trim();
-        session.step = 'DATA_PLAN';
-        await sendMessengerReply(senderPsid, { text: "Enter data plan code or description (e.g. 1GB SME):" });
-        return;
-    }
-    if (session.step === 'DATA_PLAN') {
-        session.data.plan = text.trim();
-        session.step = 'DATA_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'DATA_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'DATA_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Data Transaction:\nNetwork: ${session.data.network}\nPhone: ${session.data.phone}\nPlan: ${session.data.plan}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'DATA_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and processing data bundle..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 5. CABLE TV FLOW
-    if (session.step === 'CABLE_PROVIDER') {
-        const provMap = { '1': 'DSTV', '2': 'GOTV', '3': 'Startimes' };
-        session.data.provider = provMap[text.trim()] || text.trim();
-        session.step = 'CABLE_SMARTCARD';
-        await sendMessengerReply(senderPsid, { text: "Enter Smartcard / IUC Number:" });
-        return;
-    }
-    if (session.step === 'CABLE_SMARTCARD') {
-        session.data.smartcard = text.trim();
-        session.step = 'CABLE_PACKAGE';
-        await sendMessengerReply(senderPsid, { text: "Enter Package / Bouquet name or code:" });
-        return;
-    }
-    if (session.step === 'CABLE_PACKAGE') {
-        session.data.package = text.trim();
-        session.step = 'CABLE_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'CABLE_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'CABLE_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Cable TV Subscription:\nProvider: ${session.data.provider}\nIUC: ${session.data.smartcard}\nPackage: ${session.data.package}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'CABLE_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and processing cable subscription..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 6. ELECTRICITY BILL FLOW
-    if (session.step === 'ELECTRICITY_DISCO') {
-        session.data.disco = text.trim();
-        session.step = 'ELECTRICITY_METER';
-        await sendMessengerReply(senderPsid, { text: "Enter Meter Number:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_METER') {
-        session.data.meter = text.trim();
-        session.step = 'ELECTRICITY_AMOUNT';
-        await sendMessengerReply(senderPsid, { text: "Enter Amount:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_AMOUNT') {
-        session.data.amount = text.trim();
-        session.step = 'ELECTRICITY_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'ELECTRICITY_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Electricity Bill:\nDisco: ${session.data.disco}\nMeter: ${session.data.meter}\nAmount: NGN ${session.data.amount}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'ELECTRICITY_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and generating token..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
-    // 7. BULK SMS FLOW
-    if (session.step === 'BULKSMS_RECIPIENTS') {
-        session.data.recipients = text.trim();
-        session.step = 'BULKSMS_MESSAGE';
-        await sendMessengerReply(senderPsid, { text: "Enter SMS Message text:" });
-        return;
-    }
-    if (session.step === 'BULKSMS_MESSAGE') {
-        session.data.messageText = text.trim();
-        session.step = 'BULKSMS_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'BULKSMS_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'BULKSMS_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Bulk SMS:\nRecipients: ${session.data.recipients}\nMessage: ${session.data.messageText}\n\nProceed?\n1. Yes\n2. No` 
-        });
-        return;
-    }
-    if (session.step === 'BULKSMS_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Verifying PIN and broadcasting SMS..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled." });
-        }
-        delete userSessions[senderPsid];
-        return;
-    }
-
     delete userSessions[senderPsid];
     await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
 }
 
-// Strict Transaction Execution, Wallet Check & Real-time VTUNAIJA API integration for Airtime
+// Process transaction by routing airtime requests to your internal /api/airtime/buy endpoint
 async function processTransaction(senderPsid, transactionData) {
     try {
         const userId = await getLinkedUserId(senderPsid);
@@ -390,93 +238,47 @@ async function processTransaction(senderPsid, transactionData) {
             return "❌ Error: Account not linked. Please login (Option 1) first.";
         }
 
-        const userRef = admin.database().ref(`users/${userId}`);
-        const userSnap = await userRef.once('value');
-        if (!userSnap.exists()) {
-            return "❌ Error: User record not found.";
-        }
-
-        const userData = userSnap.val();
-        
-        // Strict PIN Verification
-        if (!userData.pin) {
-            return "❌ Transaction Denied: You have not created a transaction PIN. Please update your profile or re-register with a PIN.";
-        }
-
-        if (String(userData.pin).trim() !== String(transactionData.pin).trim()) {
-            return "❌ Transaction Failed: Incorrect transaction PIN provided. Access denied.";
-        }
-
-        // ==========================================
-        // REAL AIRTIME PROCESSING VIA VTUNAIJA API
-        // ==========================================
         if (transactionData.service === 'airtime') {
             const amount = parseFloat(transactionData.amount);
-            const currentBalance = Number(userData.balance !== undefined ? userData.balance : (userData.wallet_balance !== undefined ? userData.wallet_balance : 0));
 
-            if (isNaN(amount) || amount <= 0) {
-                return "❌ Transaction Failed: Invalid airtime amount specified.";
+            if (isNaN(amount) || amount < 100) {
+                return "❌ Transaction Failed: Minimum airtime amount is NGN 100.";
             }
 
-            if (currentBalance < amount) {
-                return `❌ Transaction Failed: Insufficient wallet balance.\n\nYour Balance: NGN ${currentBalance.toLocaleString()}\nAmount Required: NGN ${amount.toLocaleString()}\n\nPlease fund your wallet to proceed.`;
-            }
+            // Match network ID mappings used on your frontend airtime index.html
+            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
+            const networkID = networkMap[transactionData.network.toLowerCase()] || transactionData.network;
 
-            // Map network name to VTUNAIJA Network IDs (1: MTN, 2: GLO, 3: 9MOBILE, 4: AIRTEL - adjust if needed)
-            const networkMap = { 'MTN': '1', 'GLO': '2', '9MOBILE': '3', 'AIRTEL': '4' };
-            const networkId = networkMap[transactionData.network.toUpperCase()] || transactionData.network;
+            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
 
-            console.log(`📡 Sending Airtime request to VTUNAIJA API for User ${userId} | Network: ${networkId} | Phone: ${transactionData.phone} | Amount: ${amount}`);
+            console.log(`📡 Routing Messenger airtime request to internal endpoint: ${airtimeEndpoint} for UID: ${userId}`);
 
-            try {
-                // Real HTTP POST request to VTUNAIJA airtime endpoint
-                const vtuResponse = await axios.post(VTUNAIJA_AIRTIME_URL, {
-                    network: networkId,
-                    phone: transactionData.phone,
-                    amount: amount,
-                    network_id: networkId,
-                    datatype: 'airtime'
-                }, {
-                    headers: {
-                        'Authorization': `Bearer ${VTUNAIJA_API_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    timeout: 30000 // 30 seconds timeout
-                });
+            // Forward payload to your airtimeRoutes.js endpoint
+            const response = await axios.post(airtimeEndpoint, {
+                uid: userId,
+                phone: transactionData.phone,
+                amount: amount,
+                networkID: networkID,
+                pin: transactionData.pin
+            }, {
+                timeout: 55000
+            });
 
-                const resData = vtuResponse.data;
+            const resData = response.data;
 
-                // Check API success status (adjust condition based on VTUNAIJA API response schema)
-                if (resData && (resData.status === 'success' || resData.status === true || resData.code === '200' || resData.success === true)) {
-                    // Deduct balance from Firebase user wallet
-                    const newBalance = currentBalance - amount;
-                    await userRef.update({
-                        balance: newBalance,
-                        wallet_balance: newBalance
-                    });
-
-                    console.log(`✅ Airtime successful. New wallet balance for ${userId}: ${newBalance}`);
-                    return `✅ Airtime Purchase Successful!\n\nNetwork: ${transactionData.network}\nPhone: ${transactionData.phone}\nAmount: NGN ${amount.toLocaleString()}\nNew Wallet Balance: NGN ${newBalance.toLocaleString()}`;
-                } else {
-                    const errorMsg = resData?.message || resData?.msg || 'Gateway transaction failed.';
-                    console.error("VTUNAIJA API Rejection:", resData);
-                    return `❌ Airtime Failed: ${errorMsg}`;
-                }
-
-            } catch (apiError) {
-                console.error("VTUNAIJA API Connection Error:", apiError.response?.data || apiError.message);
-                return "❌ Gateway Error: Unable to complete airtime request with VTUNAIJA at the moment. Please try again later.";
+            if (resData && resData.success) {
+                return `✅ Airtime Purchase Successful!\n\nNetwork: ${transactionData.network.toUpperCase()}\nPhone: ${transactionData.phone}\nAmount: NGN ${amount.toLocaleString()}`;
+            } else {
+                return `❌ Airtime Failed: ${resData.error || 'Transaction could not be completed.'}`;
             }
         }
 
-        // Placeholder fallback for other services if needed
-        console.log(`Processing ${transactionData.service} for user ${userId} with verified PIN.`);
-        return `✅ Success! Your ${transactionData.service} request has been processed successfully by the server.`;
+        return `✅ Success! Your ${transactionData.service} request has been recorded.`;
 
     } catch (error) {
-        console.error("Transaction Processing Error:", error);
-        return "❌ Server Error: Failed to process transaction.";
+        console.error("Internal Airtime Route Routing Error:", error.response?.data || error.message);
+        const errorMsg = error.response?.data?.error || error.message || "Failed to process airtime.";
+        return `❌ Airtime Failed: ${errorMsg}`;
     }
 }
 
@@ -499,8 +301,8 @@ async function registerAccount(senderPsid, name, email, password, pin) {
             email: email,
             password: password,
             pin: pin,
+            transaction_pin: pin, // support both fields
             balance: 0,
-            wallet_balance: 0,
             messenger_psid: senderPsid,
             createdAt: new Date().toISOString()
         });
@@ -574,7 +376,7 @@ async function checkBalance(senderPsid) {
         }
 
         const userData = userSnap.val();
-        const balance = userData.balance !== undefined ? userData.balance : (userData.wallet_balance !== undefined ? userData.wallet_balance : 0);
+        const balance = userData.balance !== undefined ? userData.balance : 0;
 
         return `💰 Dnezerlinks Wallet Balance\n\nName: ${userData.name || 'User'}\nBalance: NGN ${Number(balance).toLocaleString()}`;
     } catch (error) {
