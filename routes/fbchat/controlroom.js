@@ -6,7 +6,14 @@ const crypto = require('crypto');
 const airtimeChat = require('./airtime');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const APP_URL = process.env.APP_URL || 'https://dnezerlinks-backend.onrender.com';
+
+// ========== SAFE APP_URL HANDLING ==========
+let APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
+APP_URL = APP_URL.trim().replace(/\/+$/, ''); // remove trailing slashes
+if (!APP_URL.startsWith('http')) {
+    APP_URL = 'https://' + APP_URL;
+}
+// ==========================================
 
 const pendingPinTokens = {};
 const PIN_TOKEN_EXPIRY_MS = 3 * 60 * 1000; // 3 minutes
@@ -49,12 +56,11 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                 }
             }
         );
-        console.log("✅ Button template sent successfully");
+        console.log("✅ Button template sent successfully →", payload.url);
     } catch (err) {
         const fbError = err.response?.data?.error || err.message;
         console.error("❌ Error sending button template:", fbError);
 
-        // Show real error to user so we can debug
         await sendMessengerReply(senderPsid, {
             text: `⚠️ Could not open secure PIN page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
         });
@@ -384,7 +390,7 @@ async function handleUserMessage(senderPsid, text) {
                 attempts: 0
             };
 
-            // ✅ CORRECT URL
+            // ✅ Correct URL
             const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
 
             await sendMessengerButtonTemplate(senderPsid, {
@@ -406,12 +412,7 @@ async function handleUserMessage(senderPsid, text) {
             sendMessengerButtonTemplate
         );
 
-        // If the reply is a button template, send it properly
-        if (reply.attachment) {
-            await sendMessengerReply(senderPsid, reply);
-        } else {
-            await sendMessengerReply(senderPsid, reply);
-        }
+        await sendMessengerReply(senderPsid, reply);
         return;
     }
 
