@@ -4,7 +4,6 @@ const axios = require('axios');
 const admin = require('firebase-admin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-// Points to your backend URL (e.g., https://dnezerlinks-backend.onrender.com or http://localhost:10000)
 const APP_URL = process.env.APP_URL || 'http://localhost:10000'; 
 
 // In-memory session store for multi-step transaction flows
@@ -42,7 +41,7 @@ router.post('/', async (req, res) => {
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
                     const incomingText = webhookEvent.message.text.trim();
-                    console.log(`📩 Messenger Message from ${senderPsid}: ${incomingText}`);
+                    console.log(`📩 Messenger Message from ${senderPsid} received.`);
                     
                     await handleUserMessage(senderPsid, incomingText);
                 }
@@ -53,12 +52,143 @@ router.post('/', async (req, res) => {
     }
 });
 
+// 3. GET /secure-pin-portal -> Serves the secure webview form for masked PIN entry
+router.get('/secure-pin-portal', (req, res) => {
+    const { psid, service, phone, network, amount } = req.query;
+
+    if (!psid || !phone || !amount) {
+        return res.status(400).send("<h3>❌ Invalid transaction session parameters. Please close this window and try again.</h3>");
+    }
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Dnezerlinks Secure PIN Authorization</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                .card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; }
+                h3 { color: #1e293b; margin-bottom: 8px; }
+                p { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+                .summary { background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: left; font-size: 13px; color: #334155; }
+                .summary b { color: #0f172a; }
+                input[type="password"] { width: 100%; padding: 12px; font-size: 18px; text-align: center; letter-spacing: 4px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; margin-bottom: 16px; outline: none; }
+                input[type="password"]:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+                button { background: #2563eb; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; }
+                button:hover { background: #1d4ed8; }
+                .loader { display: none; margin-top: 10px; font-size: 14px; color: #2563eb; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h3>🔒 Authorize Transaction</h3>
+                <p>Enter your 4-digit transaction PIN securely</p>
+                
+                <div class="summary">
+                    <div><b>Service:</b> ${service ? service.toUpperCase() : 'VTU'}</div>
+                    <div><b>Network:</b> ${network ? network.toUpperCase() : 'N/A'}</div>
+                    <div><b>Phone:</b> ${phone}</div>
+                    <div><b>Amount:</b> NGN ${Number(amount).toLocaleString()}</div>
+                </div>
+
+                <form id="pinForm" action="./secure-pin-portal-submit" method="POST">
+                    <input type="hidden" name="psid" value="${psid}">
+                    <input type="hidden" name="service" value="${service}">
+                    <input type="hidden" name="phone" value="${phone}">
+                    <input type="hidden" name="network" value="${network}">
+                    <input type="hidden" name="amount" value="${amount}">
+                    
+                    <input type="password" name="pin" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required autocomplete="current-password" autofocus>
+                    <button type="submit" id="submitBtn">Authorize & Pay</button>
+                    <div class="loader" id="loader">Processing transaction securely...</div>
+                </form>
+            </div>
+
+            <script>
+                document.getElementById('pinForm').addEventListener('submit', function() {
+                    document.getElementById('submitBtn').disabled = true;
+                    document.getElementById('submitBtn').style.opacity = '0.6';
+                    document.getElementById('loader').style.display = 'block';
+                });
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// 4. POST /secure-pin-portal-submit -> Processes transaction after receiving masked PIN from webview
+router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }), async (req, res) => {
+    const { psid, service, phone, network, amount, pin } = req.body;
+
+    if (!psid || !pin || !amount) {
+        return res.send("<h3>❌ Authorization Failed: Missing parameters.</h3>");
+    }
+
+    try {
+        const userId = await getLinkedUserId(psid);
+        if (!userId) {
+            return res.send("<h3>❌ Account Not Linked. Please log in on Messenger first.</h3>");
+        }
+
+        if (service === 'airtime') {
+            const parsedAmount = parseFloat(amount);
+            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
+            const networkID = networkMap[network?.toLowerCase()] || network;
+
+            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
+            console.log(`📡 Processing secure webview airtime request for UID: ${userId}`);
+
+            const response = await axios.post(airtimeEndpoint, {
+                uid: userId,
+                phone: phone,
+                amount: parsedAmount,
+                networkID: networkID,
+                pin: pin
+            }, { timeout: 55000 });
+
+            const resData = response.data;
+
+            if (resData && resData.success) {
+                // Notify user on Messenger chat
+                await sendMessengerReply(psid, { 
+                    text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
+                });
+
+                return res.send(`
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Success</title>
+                    <style>body{font-family:sans-serif;text-align:center;padding:40px;background:#f8fafc;color:#1e293b;}</style></head>
+                    <body>
+                        <h2 style="color:#16a34a;">✅ Airtime Successful!</h2>
+                        <p>Your transaction was processed successfully. You can close this window and return to Messenger.</p>
+                    </body>
+                    </html>
+                `);
+            } else {
+                const errReason = resData.error || 'Transaction could not be completed.';
+                await sendMessengerReply(psid, { text: `❌ Airtime Failed: ${errReason}` });
+                return res.send(`<h3>❌ Transaction Failed</h3><p>${errReason}</p>`);
+            }
+        }
+
+        return res.send(`<h3>✅ Request Recorded Successfully.</h3>`);
+
+    } catch (error) {
+        const errReason = error.response?.data?.error || error.message || "Server error processing transaction.";
+        console.error("Webview PIN submission error.");
+        await sendMessengerReply(psid, { text: `❌ Transaction Failed: ${errReason}` });
+        return res.send(`<h3>❌ Transaction Failed</h3><p>${errReason}</p>`);
+    }
+});
+
 // Handle incoming user commands and multi-step conversational flows
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
     const currentSession = userSessions[senderPsid];
 
-    // Global reset / main menu triggers
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help' || lowerText === 'hi' || lowerText === 'hello') {
         delete userSessions[senderPsid];
         const welcomeMenu = 
@@ -79,13 +209,11 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // Check if user is in an active multi-step session
     if (currentSession) {
         await handleSessionFlow(senderPsid, text, currentSession);
         return;
     }
 
-    // Top-level menu routing
     if (text === '1') {
         userSessions[senderPsid] = { step: 'LOGIN_EMAIL' };
         await sendMessengerReply(senderPsid, { text: "Please enter your account email address (Example: user@gmail.com):" });
@@ -151,7 +279,6 @@ async function handleUserMessage(senderPsid, text) {
 async function handleSessionFlow(senderPsid, text, session) {
     const lowerText = text.toLowerCase();
 
-    // 1. LOGIN FLOW
     if (session.step === 'LOGIN_EMAIL') {
         delete userSessions[senderPsid];
         const replyText = await linkAccount(senderPsid, text.trim());
@@ -159,7 +286,6 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 2. REGISTRATION FLOW
     if (session.step === 'REGISTER_NAME') {
         session.data.name = text.trim();
         session.step = 'REGISTER_EMAIL';
@@ -186,7 +312,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 3. AIRTIME PURCHASE FLOW
+    // AIRTIME PURCHASE FLOW (Transitions to secure webview button for PIN)
     if (session.step === 'AIRTIME_PHONE') {
         session.data.phone = text.trim();
         session.step = 'AIRTIME_NETWORK';
@@ -202,84 +328,19 @@ async function handleSessionFlow(senderPsid, text, session) {
     }
     if (session.step === 'AIRTIME_AMOUNT') {
         session.data.amount = text.trim();
-        session.step = 'AIRTIME_PIN';
-        await sendMessengerReply(senderPsid, { text: "Enter your 4-digit transaction PIN:" });
-        return;
-    }
-    if (session.step === 'AIRTIME_PIN') {
-        session.data.pin = text.trim();
-        session.step = 'AIRTIME_CONFIRM';
-        await sendMessengerReply(senderPsid, { 
-            text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nProceed to process?\n1. Yes\n2. No` 
+        delete userSessions[senderPsid]; // Clear chat session as we transition to secure web portal
+
+        // Send a secure button that opens a masked HTML input form inside Messenger
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely:`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?psid=${senderPsid}&service=airtime&phone=${session.data.phone}&network=${session.data.network}&amount=${session.data.amount}`
         });
-        return;
-    }
-    if (session.step === 'AIRTIME_CONFIRM') {
-        if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Processing airtime top-up..." });
-            const resultMsg = await processTransaction(senderPsid, session.data);
-            await sendMessengerReply(senderPsid, { text: resultMsg });
-        } else {
-            await sendMessengerReply(senderPsid, { text: "Transaction cancelled. Type 'menu' to start over." });
-        }
-        delete userSessions[senderPsid];
         return;
     }
 
     delete userSessions[senderPsid];
     await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
-}
-
-// Process transaction by routing airtime requests to your internal /api/airtime/buy endpoint
-async function processTransaction(senderPsid, transactionData) {
-    try {
-        const userId = await getLinkedUserId(senderPsid);
-        if (!userId) {
-            return "❌ Error: Account not linked. Please login (Option 1) first.";
-        }
-
-        if (transactionData.service === 'airtime') {
-            const amount = parseFloat(transactionData.amount);
-
-            if (isNaN(amount) || amount < 100) {
-                return "❌ Transaction Failed: Minimum airtime amount is NGN 100.";
-            }
-
-            // Match network ID mappings used on your frontend airtime index.html
-            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
-            const networkID = networkMap[transactionData.network.toLowerCase()] || transactionData.network;
-
-            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
-
-            console.log(`📡 Routing Messenger airtime request to internal endpoint: ${airtimeEndpoint} for UID: ${userId}`);
-
-            // Forward payload to your airtimeRoutes.js endpoint
-            const response = await axios.post(airtimeEndpoint, {
-                uid: userId,
-                phone: transactionData.phone,
-                amount: amount,
-                networkID: networkID,
-                pin: transactionData.pin
-            }, {
-                timeout: 55000
-            });
-
-            const resData = response.data;
-
-            if (resData && resData.success) {
-                return `✅ Airtime Purchase Successful!\n\nNetwork: ${transactionData.network.toUpperCase()}\nPhone: ${transactionData.phone}\nAmount: NGN ${amount.toLocaleString()}`;
-            } else {
-                return `❌ Airtime Failed: ${resData.error || 'Transaction could not be completed.'}`;
-            }
-        }
-
-        return `✅ Success! Your ${transactionData.service} request has been recorded.`;
-
-    } catch (error) {
-        console.error("Internal Airtime Route Routing Error:", error.response?.data || error.message);
-        const errorMsg = error.response?.data?.error || error.message || "Failed to process airtime.";
-        return `❌ Airtime Failed: ${errorMsg}`;
-    }
 }
 
 // Helper: Register new user with PIN
@@ -301,7 +362,7 @@ async function registerAccount(senderPsid, name, email, password, pin) {
             email: email,
             password: password,
             pin: pin,
-            transaction_pin: pin, // support both fields
+            transaction_pin: pin,
             balance: 0,
             messenger_psid: senderPsid,
             createdAt: new Date().toISOString()
@@ -313,9 +374,9 @@ async function registerAccount(senderPsid, name, email, password, pin) {
             linkedAt: new Date().toISOString()
         });
 
-        return `Account Created & Linked Successfully!\nName: ${name}\nEmail: ${email}\nPIN Secured: Yes\nBalance: NGN 0.00\n\nType 'balance' anytime to check your wallet.`;
+        return `Account Created & Linked Successfully!\nName: ${name}\nEmail: ${email}\nPIN Secured: [HIDDEN]\nBalance: NGN 0.00\n\nType 'balance' anytime to check your wallet.`;
     } catch (error) {
-        console.error("Registration Error:", error);
+        console.error("Registration Error.");
         return "Registration failed. Please try again.";
     }
 }
@@ -395,7 +456,38 @@ async function sendMessengerReply(senderPsid, response) {
             }
         );
     } catch (err) {
-        console.log("Error sending message to Facebook Graph API:", err.response?.data || err.message);
+        console.log("Error sending message to Facebook Graph API.");
+    }
+}
+
+// Helper: Send Facebook Button Template (Secure Webview Pop-up)
+async function sendMessengerButtonTemplate(senderPsid, payload) {
+    try {
+        await axios.post(
+            `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            {
+                recipient: { id: senderPsid },
+                message: {
+                    attachment: {
+                        type: "template",
+                        payload: {
+                            template_type: "button",
+                            text: payload.text,
+                            buttons: [
+                                {
+                                    type: "web_url",
+                                    url: payload.url,
+                                    title: payload.buttonText,
+                                    webview_height_ratio: "compact" // Opens as a clean masked secure modal inside Messenger
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        );
+    } catch (err) {
+        console.log("Error sending button template:", err.response?.data || err.message);
     }
 }
 
