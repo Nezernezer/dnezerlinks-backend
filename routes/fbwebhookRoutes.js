@@ -242,7 +242,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             return res.json({ 
                 success: false, 
-                message: `❌ Invalid PIN. Try again (${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} left).`, 
+                message: `❌ Invalid PIN. Try again (\( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} left).`, 
                 closeWindow: false 
             });
         }
@@ -349,6 +349,8 @@ router.get('/secure-auth-portal', (req, res) => {
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${title}</title>
         <script src="https://connect.facebook.net/en_US/messenger.Extensions.js" crossorigin="anonymous"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
             .card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; box-sizing: border-box; }
@@ -366,26 +368,52 @@ router.get('/secure-auth-portal', (req, res) => {
                 <div class="loader" id="loader">Processing securely...</div>
             </div>
             <script>
-                function closeWindow() { if (typeof MessengerExtensions !== 'undefined') { MessengerExtensions.requestCloseBrowser(() => {}, () => window.close()); } else { window.close(); } }
+                // Your real Firebase config
+                const firebaseConfig = {
+                    apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+                    authDomain: "dnezerlinks.firebaseapp.com",
+                    databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+                    projectId: "dnezerlinks-vtu"
+                };
+                firebase.initializeApp(firebaseConfig);
+
+                function closeWindow() { 
+                    if (typeof MessengerExtensions !== 'undefined') { 
+                        MessengerExtensions.requestCloseBrowser(() => {}, () => window.close()); 
+                    } else { 
+                        window.close(); 
+                    } 
+                }
+
                 document.getElementById('authForm').addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const token = "${token}";
                     const action = "${action}";
                     const email = document.getElementById('email')?.value.trim();
                     const password = document.getElementById('password')?.value;
-                    const name = document.getElementById('name')?.value.trim();
-                    const phone = document.getElementById('phone')?.value.trim();
-                    const address = document.getElementById('address')?.value.trim();
-                    const pin = document.getElementById('pin')?.value.trim();
+                    const name = document.getElementById('name')?.value?.trim();
+                    const phone = document.getElementById('phone')?.value?.trim();
+                    const address = document.getElementById('address')?.value?.trim();
+                    const pin = document.getElementById('pin')?.value?.trim();
 
                     const btn = document.getElementById('submitBtn'), loader = document.getElementById('loader'), err = document.getElementById('errorMsg');
                     btn.disabled = true; loader.style.display = 'block'; err.style.display = 'none';
 
                     try {
+                        let body = { token, action, email, password, name, phone, address, pin };
+
+                        // Only for login: authenticate with Firebase Auth on the client
+                        if (action === 'login') {
+                            const userCred = await firebase.auth().signInWithEmailAndPassword(email, password);
+                            const idToken = await userCred.user.getIdToken();
+                            body.idToken = idToken;
+                            delete body.password; // never send the real password
+                        }
+
                         const res = await fetch('./secure-auth-portal-submit', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token, action, email, password, name, phone, address, pin })
+                            body: JSON.stringify(body)
                         });
                         const result = await res.json();
                         if (result.success) {
@@ -399,7 +427,13 @@ router.get('/secure-auth-portal', (req, res) => {
                     } catch(ex) {
                         loader.style.display = 'none';
                         btn.disabled = false;
-                        err.innerText = "Network error. Please try again.";
+                        const msg = (ex.code === 'auth/wrong-password' || 
+                                     ex.code === 'auth/user-not-found' || 
+                                     ex.code === 'auth/invalid-credential' || 
+                                     ex.code === 'auth/invalid-login-credentials')
+                                    ? '❌ Incorrect password.'
+                                    : (ex.message || 'Network / Auth error. Please try again.');
+                        err.innerText = msg;
                         err.style.display = 'block';
                     }
                 });
@@ -410,7 +444,7 @@ router.get('/secure-auth-portal', (req, res) => {
 
 // 6. POST /secure-auth-portal-submit -> AJAX JSON endpoint handling Login/Register/Recovery webview actions
 router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
-    const { token, action, email, password, name, phone, address, pin } = req.body;
+    const { token, action, email, password, name, phone, address, pin, idToken } = req.body;
     if (!token || !pendingAuthTokens[token]) return res.json({ success: false, message: "❌ Link expired or invalid." });
     const sessionData = pendingAuthTokens[token];
     if (Date.now() > sessionData.expiresAt) { delete pendingAuthTokens[token]; return res.json({ success: false, message: "❌ Link expired." }); }
@@ -420,28 +454,45 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
 
     try {
         if (action === 'login') {
-            const usersRef = admin.database().ref('users');
-            const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
-
-            if (!snapshot.exists()) return res.json({ success: false, message: "❌ No account found with this email." });
-
-            let userId = null;
-            let userData = null;
-            snapshot.forEach((child) => { userId = child.key; userData = child.val(); });
-
-            const storedPassword = userData.password ? String(userData.password).trim() : '';
-            const inputPassword = password ? String(password).trim() : '';
-
-            if (storedPassword !== inputPassword) {
-                return res.json({ success: false, message: "❌ Incorrect password." });
+            if (!idToken) {
+                return res.json({ success: false, message: "❌ Missing authentication token." });
             }
 
-            await admin.database().ref(`messenger_links/${psid}`).set({ userId, email: cleanEmail, linkedAt: new Date().toISOString() });
-            await admin.database().ref(`users/${userId}/messenger_psid`).set(psid);
+            try {
+                // Verify the ID token issued by Firebase Auth
+                const decoded = await admin.auth().verifyIdToken(idToken);
+                const authEmail = (decoded.email || '').toLowerCase();
 
-            delete pendingAuthTokens[token];
-            await sendMessengerReply(psid, { text: `✅ Successfully Logged In & Linked to ${cleanEmail}!` });
-            return res.json({ success: true });
+                if (authEmail !== cleanEmail) {
+                    return res.json({ success: false, message: "❌ Email mismatch." });
+                }
+
+                // Find the matching record in Realtime Database
+                const usersRef = admin.database().ref('users');
+                const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
+
+                if (!snapshot.exists()) {
+                    return res.json({ success: false, message: "❌ No account found with this email." });
+                }
+
+                let userId = null;
+                snapshot.forEach((child) => { userId = child.key; });
+
+                // Link Messenger PSID
+                await admin.database().ref(`messenger_links/${psid}`).set({ 
+                    userId, 
+                    email: cleanEmail, 
+                    linkedAt: new Date().toISOString() 
+                });
+                await admin.database().ref(`users/${userId}/messenger_psid`).set(psid);
+
+                delete pendingAuthTokens[token];
+                await sendMessengerReply(psid, { text: `✅ Successfully Logged In & Linked to ${cleanEmail}!` });
+                return res.json({ success: true });
+
+            } catch (authErr) {
+                return res.json({ success: false, message: "❌ Incorrect password." });
+            }
         } 
         
         if (action === 'register') {
@@ -536,7 +587,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "🔐 Click below to log in securely through our protected web portal (Link expires in 5 minutes):",
             buttonText: "🔐 Open Secure Login",
-            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
+            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
         });
         return;
     }
@@ -546,7 +597,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "📝 Click below to register your account securely (Link expires in 5 minutes):",
             buttonText: "📝 Open Secure Registration",
-            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
+            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
         });
         return;
     }
@@ -594,7 +645,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "🔄 Click below to recover your password securely (Link expires in 5 minutes):",
             buttonText: "🔄 Reset Password",
-            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
+            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
         });
         return;
     }
@@ -644,7 +695,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
             buttonText: "🔐 Enter PIN Securely",
-            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+            url: `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`
         });
         return;
     }
