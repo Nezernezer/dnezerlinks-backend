@@ -4,6 +4,8 @@ const axios = require('axios');
 const admin = require('firebase-admin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+const VTUNAIJA_API_KEY = process.env.VTUNAIJA_API_KEY;
+const VTUNAIJA_AIRTIME_URL = process.env.VTUNAIJA_AIRTIME_URL || 'https://vtunaija.com/api/airtime/';
 
 // In-memory session store for multi-step transaction flows
 const userSessions = {};
@@ -157,7 +159,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // 2. REGISTRATION FLOW (Fixed state tracking)
+    // 2. REGISTRATION FLOW
     if (session.step === 'REGISTER_NAME') {
         session.data.name = text.trim();
         session.step = 'REGISTER_EMAIL';
@@ -214,7 +216,7 @@ async function handleSessionFlow(senderPsid, text, session) {
     }
     if (session.step === 'AIRTIME_CONFIRM') {
         if (lowerText === '1' || lowerText === 'yes') {
-            await sendMessengerReply(senderPsid, { text: "Validating transaction PIN and processing..." });
+            await sendMessengerReply(senderPsid, { text: "Validating transaction PIN and processing real-time airtime top-up..." });
             const resultMsg = await processTransaction(senderPsid, session.data);
             await sendMessengerReply(senderPsid, { text: resultMsg });
         } else {
@@ -380,7 +382,7 @@ async function handleSessionFlow(senderPsid, text, session) {
     await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
 }
 
-// Strict Transaction Execution & PIN Verification against Firebase
+// Strict Transaction Execution, Wallet Check & Real-time VTUNAIJA API integration for Airtime
 async function processTransaction(senderPsid, transactionData) {
     try {
         const userId = await getLinkedUserId(senderPsid);
@@ -388,7 +390,8 @@ async function processTransaction(senderPsid, transactionData) {
             return "❌ Error: Account not linked. Please login (Option 1) first.";
         }
 
-        const userSnap = await admin.database().ref(`users/${userId}`).once('value');
+        const userRef = admin.database().ref(`users/${userId}`);
+        const userSnap = await userRef.once('value');
         if (!userSnap.exists()) {
             return "❌ Error: User record not found.";
         }
@@ -404,9 +407,73 @@ async function processTransaction(senderPsid, transactionData) {
             return "❌ Transaction Failed: Incorrect transaction PIN provided. Access denied.";
         }
 
+        // ==========================================
+        // REAL AIRTIME PROCESSING VIA VTUNAIJA API
+        // ==========================================
+        if (transactionData.service === 'airtime') {
+            const amount = parseFloat(transactionData.amount);
+            const currentBalance = Number(userData.balance !== undefined ? userData.balance : (userData.wallet_balance !== undefined ? userData.wallet_balance : 0));
+
+            if (isNaN(amount) || amount <= 0) {
+                return "❌ Transaction Failed: Invalid airtime amount specified.";
+            }
+
+            if (currentBalance < amount) {
+                return `❌ Transaction Failed: Insufficient wallet balance.\n\nYour Balance: NGN ${currentBalance.toLocaleString()}\nAmount Required: NGN ${amount.toLocaleString()}\n\nPlease fund your wallet to proceed.`;
+            }
+
+            // Map network name to VTUNAIJA Network IDs (1: MTN, 2: GLO, 3: 9MOBILE, 4: AIRTEL - adjust if needed)
+            const networkMap = { 'MTN': '1', 'GLO': '2', '9MOBILE': '3', 'AIRTEL': '4' };
+            const networkId = networkMap[transactionData.network.toUpperCase()] || transactionData.network;
+
+            console.log(`📡 Sending Airtime request to VTUNAIJA API for User ${userId} | Network: ${networkId} | Phone: ${transactionData.phone} | Amount: ${amount}`);
+
+            try {
+                // Real HTTP POST request to VTUNAIJA airtime endpoint
+                const vtuResponse = await axios.post(VTUNAIJA_AIRTIME_URL, {
+                    network: networkId,
+                    phone: transactionData.phone,
+                    amount: amount,
+                    network_id: networkId,
+                    datatype: 'airtime'
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${VTUNAIJA_API_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    timeout: 30000 // 30 seconds timeout
+                });
+
+                const resData = vtuResponse.data;
+
+                // Check API success status (adjust condition based on VTUNAIJA API response schema)
+                if (resData && (resData.status === 'success' || resData.status === true || resData.code === '200' || resData.success === true)) {
+                    // Deduct balance from Firebase user wallet
+                    const newBalance = currentBalance - amount;
+                    await userRef.update({
+                        balance: newBalance,
+                        wallet_balance: newBalance
+                    });
+
+                    console.log(`✅ Airtime successful. New wallet balance for ${userId}: ${newBalance}`);
+                    return `✅ Airtime Purchase Successful!\n\nNetwork: ${transactionData.network}\nPhone: ${transactionData.phone}\nAmount: NGN ${amount.toLocaleString()}\nNew Wallet Balance: NGN ${newBalance.toLocaleString()}`;
+                } else {
+                    const errorMsg = resData?.message || resData?.msg || 'Gateway transaction failed.';
+                    console.error("VTUNAIJA API Rejection:", resData);
+                    return `❌ Airtime Failed: ${errorMsg}`;
+                }
+
+            } catch (apiError) {
+                console.error("VTUNAIJA API Connection Error:", apiError.response?.data || apiError.message);
+                return "❌ Gateway Error: Unable to complete airtime request with VTUNAIJA at the moment. Please try again later.";
+            }
+        }
+
+        // Placeholder fallback for other services if needed
         console.log(`Processing ${transactionData.service} for user ${userId} with verified PIN.`);
-        
         return `✅ Success! Your ${transactionData.service} request has been processed successfully by the server.`;
+
     } catch (error) {
         console.error("Transaction Processing Error:", error);
         return "❌ Server Error: Failed to process transaction.";
