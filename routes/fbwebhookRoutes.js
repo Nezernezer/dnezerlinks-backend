@@ -9,7 +9,7 @@ const APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
 
 const userSessions = {};
 const pendingPinTokens = {}; 
-const pendingAuthTokens = {}; // Handles secure login/signup/reset webview tokens
+const pendingAuthTokens = {}; // Handles secure login/signup/reset/funding webview tokens
 
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes inactivity timeout
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;  // 5 minutes webview token expiry
@@ -80,7 +80,7 @@ router.get('/secure-pin-portal', (req, res) => {
         return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");
     }
 
-    const { service, phone, network, amount } = sessionData;
+    const { service, phone, network, amount, dataPlan } = sessionData;
 
     res.send(`
         <!DOCTYPE html>
@@ -112,8 +112,9 @@ router.get('/secure-pin-portal', (req, res) => {
                 
                 <div class="summary">
                     <div><b>Service:</b> ${service.toUpperCase()}</div>
-                    <div><b>Network:</b> ${network.toUpperCase()}</div>
-                    <div><b>Phone:</b> ${phone}</div>
+                    ${network ? `<div><b>Network:</b> ${network.toUpperCase()}</div>` : ''}
+                    ${phone ? `<div><b>Phone:</b> ${phone}</div>` : ''}
+                    ${dataPlan ? `<div><b>Plan ID:</b> ${dataPlan}</div>` : ''}
                     <div><b>Amount:</b> NGN ${Number(amount).toLocaleString()}</div>
                 </div>
 
@@ -200,7 +201,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         return res.json({ success: false, message: "❌ Link has expired. Please restart your transaction.", closeWindow: true });
     }
 
-    const { psid, service, phone, network, amount } = sessionData;
+    const { psid, service, phone, network, amount, dataPlan } = sessionData;
 
     try {
         const userId = await getLinkedUserId(psid);
@@ -227,9 +228,9 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                 delete userSessions[psid]; 
 
                 const failureMenuText = 
-                    "❌ Incorrect PIN entered 3 times. Transaction failed and cancelled for security.\n\n" +
+                    "❌ Incorrect PIN entered 3 times. Action failed and cancelled for security.\n\n" +
                     "Welcome back to Dnezerlinks! Type 'menu' or select an option to restart:\n\n" +
-                    "1. Login (Secure Web Portal)\n2. Create Account (Secure Sign Up)\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password / Reset";
+                    "1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Logout\n12. Fund Wallet\n13. Transaction History";
 
                 await sendMessengerReply(psid, { text: failureMenuText });
 
@@ -279,12 +280,66 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             }
         }
 
+        if (service === 'data') {
+            const parsedAmount = parseFloat(amount);
+            const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
+            const networkID = networkMap[network?.toLowerCase()] || network;
+
+            const dataEndpoint = `${APP_URL}/api/data/buy`;
+            const response = await axios.post(dataEndpoint, {
+                uid: userId,
+                phone: phone,
+                dataPlan: String(dataPlan),
+                networkID: networkID,
+                amount: parsedAmount,
+                pin: pin
+            }, { timeout: 55000 });
+
+            const resData = response.data;
+
+            if (resData && resData.success) {
+                await sendMessengerReply(psid, { 
+                    text: `✅ Data Subscription Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nPlan ID: ${dataPlan}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
+                });
+
+                return res.json({ success: true });
+            } else {
+                const errReason = resData.error || 'Data subscription could not be completed.';
+                await sendMessengerReply(psid, { text: `❌ Data Purchase Failed: ${errReason}` });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
+
+        if (service === 'fund_wallet') {
+            const parsedAmount = parseFloat(amount);
+            const currentBalance = Number(userData.balance || 0);
+            const newBalance = currentBalance + parsedAmount;
+
+            await admin.database().ref(`users/${userId}`).update({
+                balance: newBalance,
+                updatedAt: new Date().toISOString()
+            });
+
+            await admin.database().ref(`users/${userId}/transactions`).push({
+                type: 'wallet_funding',
+                amount: parsedAmount,
+                status: 'success',
+                date: new Date().toISOString()
+            });
+
+            await sendMessengerReply(psid, { 
+                text: `✅ Wallet Funded Successfully!\n\nAmount Added: NGN ${parsedAmount.toLocaleString()}\nNew Balance: NGN ${newBalance.toLocaleString()}` 
+            });
+
+            return res.json({ success: true });
+        }
+
         return res.json({ success: true });
 
     } catch (error) {
         delete pendingPinTokens[token];
-        const errReason = error.response?.data?.error || error.message || "Server error processing transaction.";
-        await sendMessengerReply(psid, { text: `❌ Transaction Failed: ${errReason}` });
+        const errReason = error.response?.data?.error || error.message || "Server error processing action.";
+        await sendMessengerReply(psid, { text: `❌ Action Failed: ${errReason}` });
         return res.json({ success: false, closeWindow: true });
     }
 });
@@ -565,7 +620,10 @@ async function handleUserMessage(senderPsid, text) {
             "7. Bulk SMS\n" +
             "8. Check Wallet Balance\n" +
             "9. Check Account Status\n" +
-            "10. Forgot Password / Reset";
+            "10. Forgot Password / Reset\n" +
+            "11. Logout\n" +
+            "12. Fund Wallet\n" +
+            "13. Transaction History";
 
         await sendMessengerReply(senderPsid, { text: welcomeMenu });
         return;
@@ -644,6 +702,21 @@ async function handleUserMessage(senderPsid, text) {
         });
         return;
     }
+    if (text === '11' || lowerText === 'logout') {
+        const replyText = await logoutAccount(senderPsid);
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
+    if (text === '12' || lowerText === 'fund' || lowerText === 'fund wallet') {
+        userSessions[senderPsid] = { step: 'FUND_WALLET_AMOUNT', data: { service: 'fund_wallet' }, lastActive: now };
+        await sendMessengerReply(senderPsid, { text: "Enter amount you want to add to your wallet (Min ₦100):" });
+        return;
+    }
+    if (text === '13' || lowerText === 'history' || lowerText === 'transactions') {
+        const replyText = await getTransactionHistory(senderPsid);
+        await sendMessengerReply(senderPsid, { text: replyText });
+        return;
+    }
 
     if (lowerText.startsWith('login ') || lowerText.startsWith('link ')) {
         const email = text.split(' ')[1]?.trim();
@@ -695,6 +768,78 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
+    if (session.step === 'DATA_PHONE') {
+        session.data.phone = text.trim();
+        session.step = 'DATA_NETWORK';
+        await sendMessengerReply(senderPsid, { text: "Select network:\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel" });
+        return;
+    }
+    if (session.step === 'DATA_NETWORK') {
+        const netMap = { '1': 'mtn', '2': 'glo', '3': '9mobile', '4': 'airtel' };
+        session.data.network = netMap[text.trim()] || text.trim().toLowerCase();
+        session.step = 'DATA_PLAN';
+        await sendMessengerReply(senderPsid, { text: "Enter Data Plan ID (e.g., 500 for 500MB / 1000 for 1GB):" });
+        return;
+    }
+    if (session.step === 'DATA_PLAN') {
+        session.data.dataPlan = text.trim();
+        session.step = 'DATA_AMOUNT';
+        await sendMessengerReply(senderPsid, { text: "Enter subscription amount (NGN):" });
+        return;
+    }
+    if (session.step === 'DATA_AMOUNT') {
+        session.data.amount = text.trim();
+        delete userSessions[senderPsid];
+
+        const pinToken = crypto.randomBytes(32).toString('hex');
+
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'data',
+            phone: session.data.phone,
+            network: session.data.network,
+            dataPlan: session.data.dataPlan,
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+            attempts: 0
+        };
+
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Data Subscription:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nPlan ID: ${session.data.dataPlan}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+        });
+        return;
+    }
+
+    if (session.step === 'FUND_WALLET_AMOUNT') {
+        const amount = text.trim();
+        if (isNaN(amount) || Number(amount) < 100) {
+            await sendMessengerReply(senderPsid, { text: "❌ Invalid amount. Minimum funding is NGN 100. Please enter a valid amount:" });
+            return;
+        }
+
+        session.data.amount = amount;
+        delete userSessions[senderPsid];
+
+        const pinToken = crypto.randomBytes(32).toString('hex');
+
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'fund_wallet',
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+            attempts: 0
+        };
+
+        await sendMessengerButtonTemplate(senderPsid, {
+            text: `Review Wallet Funding:\nAmount: NGN ${Number(session.data.amount).toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+            buttonText: "🔐 Enter PIN Securely",
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
+        });
+        return;
+    }
+
     delete userSessions[senderPsid];
     await sendMessengerReply(senderPsid, { text: "Session reset. Type 'menu' to view options." });
 }
@@ -728,6 +873,27 @@ async function linkAccount(senderPsid, email) {
     }
 }
 
+async function logoutAccount(senderPsid) {
+    try {
+        const linkRef = admin.database().ref(`messenger_links/${senderPsid}`);
+        const linkSnap = await linkRef.once('value');
+        
+        if (!linkSnap.exists()) {
+            return "ℹ️ You are not currently logged into any account on Messenger.";
+        }
+
+        const userId = linkSnap.val().userId;
+        if (userId) {
+            await admin.database().ref(`users/${userId}/messenger_psid`).remove();
+        }
+        await linkRef.remove();
+
+        return "🔒 Successfully logged out of your Dnezerlinks account on Messenger. Type 'menu' or select option 1 to log back in.";
+    } catch (error) {
+        return "❌ Error logging out. Please try again.";
+    }
+}
+
 async function getLinkedUserId(senderPsid) {
     try {
         const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
@@ -758,6 +924,31 @@ async function checkBalance(senderPsid) {
         return `💰 Dnezerlinks Wallet Balance\n\nName: ${userData.name || 'User'}\nBalance: NGN ${Number(balance).toLocaleString()}`;
     } catch (error) {
         return "❌ Failed to retrieve balance.";
+    }
+}
+
+async function getTransactionHistory(senderPsid) {
+    try {
+        const userId = await getLinkedUserId(senderPsid);
+        if (!userId) {
+            return "❌ Account Not Linked. Select option 1 to Login or option 2 to Create Account.";
+        }
+
+        const txSnap = await admin.database().ref(`users/${userId}/transactions`).limitToLast(5).once('value');
+        if (!txSnap.exists()) {
+            return "📜 No recent transaction history found.";
+        }
+
+        let historyMessage = "📜 Recent Transactions:\n\n";
+        txSnap.forEach((childSnap) => {
+            const tx = childSnap.val();
+            const dateStr = tx.date ? new Date(tx.date).toLocaleString() : 'Recent';
+            historyMessage += `- [${tx.status?.toUpperCase() || 'SUCCESS'}] ${tx.type || 'Transaction'}: NGN ${Number(tx.amount || 0).toLocaleString()} (${dateStr})\n`;
+        });
+
+        return historyMessage;
+    } catch (error) {
+        return "❌ Failed to retrieve transaction history.";
     }
 }
 
