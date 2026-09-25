@@ -2,12 +2,17 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const admin = require('firebase-admin');
+const crypto = require('crypto'); // Built-in Node.js module for generating random tokens
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const APP_URL = process.env.APP_URL || 'http://localhost:10000'; 
+const APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng'; 
 
-// In-memory session store for multi-step transaction flows
+// In-memory session store with inactivity tracking & expiring tokens
 const userSessions = {};
+const pendingPinTokens = {}; // Stores temporary, single-use transaction tokens { tokenValue: { data, expiresAt } }
+
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes inactivity timeout
+const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;  // 5 minutes webview token expiry
 
 // 1. GET /webhook -> Used by Facebook to verify your URL
 router.get('/', (req, res) => {
@@ -52,13 +57,33 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 3. GET /secure-pin-portal -> Serves the secure webview form for masked PIN entry
+// 3. GET /secure-pin-portal -> Serves the secure webview form using a one-time token
 router.get('/secure-pin-portal', (req, res) => {
-    const { psid, service, phone, network, amount } = req.query;
+    const { token } = req.query;
 
-    if (!psid || !phone || !amount) {
-        return res.status(400).send("<h3>❌ Invalid transaction session parameters. Please close this window and try again.</h3>");
+    if (!token || !pendingPinTokens[token]) {
+        return res.status(400).send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Expired Link</title>
+            <style>body{font-family:sans-serif;text-align:center;padding:50px;background:#f8fafc;color:#1e293b;}</style></head>
+            <body>
+                <h2 style="color:#dc2626;">❌ Link Expired or Invalid</h2>
+                <p>This transaction link has already been used, expired after 5 minutes, or is invalid. Please start a new request in Messenger.</p>
+            </body>
+            </html>
+        `);
     }
+
+    const sessionData = pendingPinTokens[token];
+
+    // Check if token expired
+    if (Date.now() > sessionData.expiresAt) {
+        delete pendingPinTokens[token];
+        return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");
+    }
+
+    const { service, phone, network, amount } = sessionData;
 
     res.send(`
         <!DOCTYPE html>
@@ -87,18 +112,14 @@ router.get('/secure-pin-portal', (req, res) => {
                 <p>Enter your 4-digit transaction PIN securely</p>
                 
                 <div class="summary">
-                    <div><b>Service:</b> ${service ? service.toUpperCase() : 'VTU'}</div>
-                    <div><b>Network:</b> ${network ? network.toUpperCase() : 'N/A'}</div>
+                    <div><b>Service:</b> ${service.toUpperCase()}</div>
+                    <div><b>Network:</b> ${network.toUpperCase()}</div>
                     <div><b>Phone:</b> ${phone}</div>
                     <div><b>Amount:</b> NGN ${Number(amount).toLocaleString()}</div>
                 </div>
 
                 <form id="pinForm" action="./secure-pin-portal-submit" method="POST">
-                    <input type="hidden" name="psid" value="${psid}">
-                    <input type="hidden" name="service" value="${service}">
-                    <input type="hidden" name="phone" value="${phone}">
-                    <input type="hidden" name="network" value="${network}">
-                    <input type="hidden" name="amount" value="${amount}">
+                    <input type="hidden" name="token" value="${token}">
                     
                     <input type="password" name="pin" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required autocomplete="current-password" autofocus>
                     <button type="submit" id="submitBtn">Authorize & Pay</button>
@@ -118,13 +139,25 @@ router.get('/secure-pin-portal', (req, res) => {
     `);
 });
 
-// 4. POST /secure-pin-portal-submit -> Processes transaction after receiving masked PIN from webview
+// 4. POST /secure-pin-portal-submit -> Processes transaction and invalidates token permanently
 router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }), async (req, res) => {
-    const { psid, service, phone, network, amount, pin } = req.body;
+    const { token, pin } = req.body;
 
-    if (!psid || !pin || !amount) {
-        return res.send("<h3>❌ Authorization Failed: Missing parameters.</h3>");
+    // Strict validation: Token must exist and be valid
+    if (!token || !pendingPinTokens[token] || !pin) {
+        return res.send(`<h3>❌ Authorization Failed: Link is invalid or has already been used.</h3>`);
     }
+
+    const sessionData = pendingPinTokens[token];
+
+    // Immediately delete the token so it cannot be reused (One-Time Use Enforcement)
+    delete pendingPinTokens[token];
+
+    if (Date.now() > sessionData.expiresAt) {
+        return res.send(`<h3>❌ Authorization Failed: Link has expired. Please restart your transaction.</h3>`);
+    }
+
+    const { psid, service, phone, network, amount } = sessionData;
 
     try {
         const userId = await getLinkedUserId(psid);
@@ -138,7 +171,7 @@ router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }),
             const networkID = networkMap[network?.toLowerCase()] || network;
 
             const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
-            console.log(`📡 Processing secure webview airtime request for UID: ${userId}`);
+            console.log(`📡 Processing secure one-time token airtime request for UID: ${userId}`);
 
             const response = await axios.post(airtimeEndpoint, {
                 uid: userId,
@@ -151,7 +184,6 @@ router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }),
             const resData = response.data;
 
             if (resData && resData.success) {
-                // Notify user on Messenger chat
                 await sendMessengerReply(psid, { 
                     text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
                 });
@@ -163,7 +195,7 @@ router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }),
                     <style>body{font-family:sans-serif;text-align:center;padding:40px;background:#f8fafc;color:#1e293b;}</style></head>
                     <body>
                         <h2 style="color:#16a34a;">✅ Airtime Successful!</h2>
-                        <p>Your transaction was processed successfully. You can close this window and return to Messenger.</p>
+                        <p>Your transaction was processed successfully. This link is now permanently expired. You can close this window and return to Messenger.</p>
                     </body>
                     </html>
                 `);
@@ -184,11 +216,27 @@ router.post('/secure-pin-portal-submit', express.urlencoded({ extended: true }),
     }
 });
 
-// Handle incoming user commands and multi-step conversational flows
+// Handle incoming user commands with session timeout checks
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
-    const currentSession = userSessions[senderPsid];
+    const now = Date.now();
+    let currentSession = userSessions[senderPsid];
 
+    // Check for Inactivity Timeout
+    if (currentSession && (now - currentSession.lastActive > SESSION_TIMEOUT_MS)) {
+        delete userSessions[senderPsid];
+        await sendMessengerReply(senderPsid, { 
+            text: "⏳ Your previous session timed out due to inactivity. All pending actions have been cancelled safely. Please type 'menu' to start over whenever you're ready!" 
+        });
+        return;
+    }
+
+    // Update active timestamp for current session
+    if (currentSession) {
+        currentSession.lastActive = now;
+    }
+
+    // Global reset / main menu triggers
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'help' || lowerText === 'hi' || lowerText === 'hello') {
         delete userSessions[senderPsid];
         const welcomeMenu = 
@@ -214,38 +262,39 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
+    // Top-level menu routing (Initialize with timestamp)
     if (text === '1') {
-        userSessions[senderPsid] = { step: 'LOGIN_EMAIL' };
+        userSessions[senderPsid] = { step: 'LOGIN_EMAIL', lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Please enter your account email address (Example: user@gmail.com):" });
         return;
     }
     if (text === '2') {
-        userSessions[senderPsid] = { step: 'REGISTER_NAME' };
+        userSessions[senderPsid] = { step: 'REGISTER_NAME', lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Let's create your account. Please enter your Full Name:" });
         return;
     }
     if (text === '3') {
-        userSessions[senderPsid] = { step: 'AIRTIME_PHONE', data: { service: 'airtime' } };
+        userSessions[senderPsid] = { step: 'AIRTIME_PHONE', data: { service: 'airtime' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Enter phone number for airtime recharge:" });
         return;
     }
     if (text === '4') {
-        userSessions[senderPsid] = { step: 'DATA_PHONE', data: { service: 'data' } };
+        userSessions[senderPsid] = { step: 'DATA_PHONE', data: { service: 'data' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Enter phone number for data bundle:" });
         return;
     }
     if (text === '5') {
-        userSessions[senderPsid] = { step: 'CABLE_PROVIDER', data: { service: 'cable' } };
+        userSessions[senderPsid] = { step: 'CABLE_PROVIDER', data: { service: 'cable' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Select Cable TV Provider:\n1. DSTV\n2. GOTV\n3. Startimes" });
         return;
     }
     if (text === '6') {
-        userSessions[senderPsid] = { step: 'ELECTRICITY_DISCO', data: { service: 'electricity' } };
+        userSessions[senderPsid] = { step: 'ELECTRICITY_DISCO', data: { service: 'electricity' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Enter Electricity Distribution Company (e.g., AEDC, Ikeja Electric, Eko, PHED):" });
         return;
     }
     if (text === '7') {
-        userSessions[senderPsid] = { step: 'BULKSMS_RECIPIENTS', data: { service: 'bulksms' } };
+        userSessions[senderPsid] = { step: 'BULKSMS_RECIPIENTS', data: { service: 'bulksms' }, lastActive: now };
         await sendMessengerReply(senderPsid, { text: "Enter recipient phone number(s) separated by commas:" });
         return;
     }
@@ -312,7 +361,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
 
-    // AIRTIME PURCHASE FLOW (Transitions to secure webview button for PIN)
+    // AIRTIME PURCHASE FLOW (Generates secure random token that expires in 5 minutes)
     if (session.step === 'AIRTIME_PHONE') {
         session.data.phone = text.trim();
         session.step = 'AIRTIME_NETWORK';
@@ -328,13 +377,26 @@ async function handleSessionFlow(senderPsid, text, session) {
     }
     if (session.step === 'AIRTIME_AMOUNT') {
         session.data.amount = text.trim();
-        delete userSessions[senderPsid]; // Clear chat session as we transition to secure web portal
+        delete userSessions[senderPsid]; // Clear chat session as we transition to secure web token portal
 
-        // Send a secure button that opens a masked HTML input form inside Messenger
+        // Generate a cryptographically strong random token
+        const pinToken = crypto.randomBytes(32).toString('hex');
+
+        // Store transaction payload securely on server with 5-minute expiry
+        pendingPinTokens[pinToken] = {
+            psid: senderPsid,
+            service: 'airtime',
+            phone: session.data.phone,
+            network: session.data.network,
+            amount: session.data.amount,
+            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS
+        };
+
+        // Send a secure button containing only the random token parameter (No sensitive parameters in URL)
         await sendMessengerButtonTemplate(senderPsid, {
-            text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely:`,
+            text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
             buttonText: "🔐 Enter PIN Securely",
-            url: `${APP_URL}/webhook/secure-pin-portal?psid=${senderPsid}&service=airtime&phone=${session.data.phone}&network=${session.data.network}&amount=${session.data.amount}`
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
         });
         return;
     }
@@ -478,7 +540,7 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                                     type: "web_url",
                                     url: payload.url,
                                     title: payload.buttonText,
-                                    webview_height_ratio: "compact" // Opens as a clean masked secure modal inside Messenger
+                                    webview_height_ratio: "compact"
                                 }
                             ]
                         }
