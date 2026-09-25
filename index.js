@@ -48,7 +48,7 @@ app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 app.use('/api/account', require('./routes/accountRoutes'));
 app.use('/api/sendmoney', require('./routes/sendmoneyRoutes'));
-app.use('/webhook', require('./routes/fbwebhookRoutes'));
+app.use('/webhook', require('./routes/fbchat/controlroom'));
 
 // Security gatekeeper for authenticated user actions
 const securityGatekeeper = async (req, res, next) => {
