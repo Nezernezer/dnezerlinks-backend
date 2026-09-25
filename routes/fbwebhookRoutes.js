@@ -242,7 +242,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             return res.json({ 
                 success: false, 
-                message: `❌ Invalid PIN. Try again (\( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} left).`, 
+                message: `❌ Invalid PIN. Try again (${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} left).`, 
                 closeWindow: false 
             });
         }
@@ -368,7 +368,6 @@ router.get('/secure-auth-portal', (req, res) => {
                 <div class="loader" id="loader">Processing securely...</div>
             </div>
             <script>
-                // Your real Firebase config
                 const firebaseConfig = {
                     apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
                     authDomain: "dnezerlinks.firebaseapp.com",
@@ -402,12 +401,11 @@ router.get('/secure-auth-portal', (req, res) => {
                     try {
                         let body = { token, action, email, password, name, phone, address, pin };
 
-                        // Only for login: authenticate with Firebase Auth on the client
                         if (action === 'login') {
                             const userCred = await firebase.auth().signInWithEmailAndPassword(email, password);
                             const idToken = await userCred.user.getIdToken();
                             body.idToken = idToken;
-                            delete body.password; // never send the real password
+                            delete body.password; 
                         }
 
                         const res = await fetch('./secure-auth-portal-submit', {
@@ -459,7 +457,6 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             }
 
             try {
-                // Verify the ID token issued by Firebase Auth
                 const decoded = await admin.auth().verifyIdToken(idToken);
                 const authEmail = (decoded.email || '').toLowerCase();
 
@@ -467,7 +464,6 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
                     return res.json({ success: false, message: "❌ Email mismatch." });
                 }
 
-                // Find the matching record in Realtime Database
                 const usersRef = admin.database().ref('users');
                 const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
 
@@ -478,7 +474,6 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
                 let userId = null;
                 snapshot.forEach((child) => { userId = child.key; });
 
-                // Link Messenger PSID
                 await admin.database().ref(`messenger_links/${psid}`).set({ 
                     userId, 
                     email: cleanEmail, 
@@ -587,7 +582,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "🔐 Click below to log in securely through our protected web portal (Link expires in 5 minutes):",
             buttonText: "🔐 Open Secure Login",
-            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
+            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
         });
         return;
     }
@@ -597,7 +592,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "📝 Click below to register your account securely (Link expires in 5 minutes):",
             buttonText: "📝 Open Secure Registration",
-            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
+            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
         });
         return;
     }
@@ -645,7 +640,7 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: "🔄 Click below to recover your password securely (Link expires in 5 minutes):",
             buttonText: "🔄 Reset Password",
-            url: `\( {APP_URL}/webhook/secure-auth-portal?token= \){authToken}`
+            url: `${APP_URL}/webhook/secure-auth-portal?token=${authToken}`
         });
         return;
     }
@@ -695,7 +690,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         await sendMessengerButtonTemplate(senderPsid, {
             text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
             buttonText: "🔐 Enter PIN Securely",
-            url: `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`
+            url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`
         });
         return;
     }
