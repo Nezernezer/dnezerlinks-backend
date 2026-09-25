@@ -159,7 +159,6 @@ router.get('/secure-pin-portal', (req, res) => {
                         const result = await response.json();
 
                         if (result.success || result.closeWindow) {
-                            // Close window instantly without any pop-up alerts
                             closeMessengerWindow();
                         } else {
                             loader.style.display = 'none';
@@ -223,7 +222,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const attemptsLeft = 3 - sessionData.attempts;
 
             if (sessionData.attempts >= 3) {
-                // Permanently expire/delete token on 3rd failure & send menu back to chat
                 delete pendingPinTokens[token];
                 delete userSessions[psid]; 
 
@@ -269,7 +267,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const resData = response.data;
 
             if (resData && resData.success) {
-                // Success response pushed to chat instantly while page closes silently
                 await sendMessengerReply(psid, { 
                     text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
                 });
@@ -386,7 +383,7 @@ async function handleUserMessage(senderPsid, text) {
 
     if (lowerText.startsWith('login ') || lowerText.startsWith('link ')) {
         const email = text.split(' ')[1]?.trim();
-        const replyText = email ? await linkAccount(senderPsid, email) : "Please provide your email. Example: login user@gmail.com";
+        const replyText = email ? await verifyAndLoginAccount(senderPsid, email, null) : "Please provide your email. Example: login user@gmail.com";
         await sendMessengerReply(senderPsid, { text: replyText });
         return;
     }
@@ -398,8 +395,17 @@ async function handleUserMessage(senderPsid, text) {
 
 async function handleSessionFlow(senderPsid, text, session) {
     if (session.step === 'LOGIN_EMAIL') {
+        session.data = { email: text.trim().toLowerCase() };
+        session.step = 'LOGIN_PASSWORD';
+        await sendMessengerReply(senderPsid, { text: "Please enter your account password:" });
+        return;
+    }
+
+    if (session.step === 'LOGIN_PASSWORD') {
+        const email = session.data.email;
+        const password = text.trim();
         delete userSessions[senderPsid];
-        const replyText = await linkAccount(senderPsid, text.trim());
+        const replyText = await verifyAndLoginAccount(senderPsid, email, password);
         await sendMessengerReply(senderPsid, { text: replyText });
         return;
     }
@@ -411,7 +417,7 @@ async function handleSessionFlow(senderPsid, text, session) {
         return;
     }
     if (session.step === 'REGISTER_EMAIL') {
-        session.data.email = text.trim();
+        session.data.email = text.trim().toLowerCase();
         session.step = 'REGISTER_PASSWORD';
         await sendMessengerReply(senderPsid, { text: "Now enter your secure account password:" });
         return;
@@ -473,11 +479,12 @@ async function handleSessionFlow(senderPsid, text, session) {
 
 async function registerAccount(senderPsid, name, email, password, pin) {
     try {
+        const cleanEmail = email.toLowerCase();
         const usersRef = admin.database().ref('users');
-        const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
+        const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
 
         if (snapshot.exists()) {
-            return `An account with ${email} already exists. Type 'login ${email}' to connect it instead.`;
+            return `An account with ${cleanEmail} already exists. Type 'login' or use option 1 to connect it instead.`;
         }
 
         const newUserRef = usersRef.push();
@@ -486,7 +493,7 @@ async function registerAccount(senderPsid, name, email, password, pin) {
         await newUserRef.set({
             userId: userId,
             name: name,
-            email: email,
+            email: cleanEmail,
             password: password,
             pin: pin,
             transaction_pin: pin,
@@ -497,41 +504,48 @@ async function registerAccount(senderPsid, name, email, password, pin) {
 
         await admin.database().ref(`messenger_links/${senderPsid}`).set({
             userId: userId,
-            email: email,
+            email: cleanEmail,
             linkedAt: new Date().toISOString()
         });
 
-        return `Account Created & Linked Successfully!\nName: ${name}\nEmail: ${email}\nPIN Secured: [HIDDEN]\nBalance: NGN 0.00\n\nType 'balance' anytime to check your wallet.`;
+        return `Account Created & Linked Successfully!\nName: ${name}\nEmail: ${cleanEmail}\nPIN Secured: [HIDDEN]\nBalance: NGN 0.00\n\nType 'balance' anytime to check your wallet.`;
     } catch (error) {
         return "Registration failed. Please try again.";
     }
 }
 
-async function linkAccount(senderPsid, email) {
+async function verifyAndLoginAccount(senderPsid, email, password) {
     try {
+        const cleanEmail = email.toLowerCase();
         const usersRef = admin.database().ref('users');
-        const snapshot = await usersRef.orderByChild('email').equalTo(email).once('value');
+        const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
 
         if (!snapshot.exists()) {
-            return `No account found with ${email}. Select option 2 to create a new account.`;
+            return `❌ No account found with ${cleanEmail}. Select option 2 to create a new account.`;
         }
 
         let userId = null;
+        let userData = null;
         snapshot.forEach((childSnapshot) => {
             userId = childSnapshot.key;
+            userData = childSnapshot.val();
         });
+
+        if (password && userData.password !== password) {
+            return "❌ Incorrect password. Please type 'menu' and select option 1 to try logging in again.";
+        }
 
         await admin.database().ref(`messenger_links/${senderPsid}`).set({
             userId: userId,
-            email: email,
+            email: cleanEmail,
             linkedAt: new Date().toISOString()
         });
 
         await admin.database().ref(`users/${userId}/messenger_psid`).set(senderPsid);
 
-        return "Account Logged In & Linked Successfully! Type 'balance' or 'menu' to view your options.";
+        return "✅ Account Logged In & Linked Successfully! Type 'balance' or 'menu' to view your options.";
     } catch (error) {
-        return "An error occurred while linking. Please try again.";
+        return "❌ An error occurred while logging in. Please try again.";
     }
 }
 
