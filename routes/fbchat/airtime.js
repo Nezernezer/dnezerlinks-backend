@@ -21,11 +21,10 @@ function clearAirtimeSession(senderPsid) {
 }
 
 /**
- * Handles the conversational steps for airtime.
- * When the amount is entered, it generates a secure token and returns
- * a button template payload (the main file will send it).
+ * Handles only the early steps (phone + network).
+ * The amount step is handled directly in controlroom.js for reliability.
  */
-async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PIN_TOKEN_EXPIRY_MS, APP_URL) {
+async function handleAirtimeFlow(senderPsid, text, session) {
     const cleanText = text.trim();
 
     switch (session.step) {
@@ -53,56 +52,6 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
             session.step = 'AIRTIME_AMOUNT';
             session.lastActive = Date.now();
             return { text: "💵 Enter the amount to recharge (Minimum ₦100):" };
-
-        case 'AIRTIME_AMOUNT':
-            const amountNum = parseFloat(cleanText);
-            if (isNaN(amountNum) || amountNum < 100) {
-                return { text: "❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:" };
-            }
-
-            session.data.amount = amountNum;
-
-            // Check if account is linked
-            const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
-            if (!linkSnap.exists()) {
-                clearAirtimeSession(senderPsid);
-                return { text: "❌ Your account is not linked. Please log in first (option 1)." };
-            }
-
-            // Clear conversational session
-            clearAirtimeSession(senderPsid);
-
-            // Generate secure 5-minute token
-            const pinToken = crypto.randomBytes(32).toString('hex');
-
-            pendingPinTokens[pinToken] = {
-                psid: senderPsid,
-                service: 'airtime',
-                phone: session.data.phone,
-                network: session.data.network,
-                amount: session.data.amount,
-                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
-                attempts: 0
-            };
-
-            // Return button template payload (main file will send it)
-            return {
-                attachment: {
-                    type: "template",
-                    payload: {
-                        template_type: "button",
-                        text: `Review Airtime Transaction:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
-                        buttons: [
-                            {
-                                type: "web_url",
-                                url: `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`,
-                                title: "🔐 Enter PIN Securely",
-                                webview_height_ratio: "compact"
-                            }
-                        ]
-                    }
-                }
-            };
 
         default:
             clearAirtimeSession(senderPsid);

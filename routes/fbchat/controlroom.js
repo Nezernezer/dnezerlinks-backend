@@ -65,13 +65,14 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                 }
             }
         );
-        console.log('✅ Button template sent →', payload.url);
+        console.log('✅ Button sent successfully →', payload.url);
     } catch (err) {
         const fbError = err.response?.data?.error || err.message;
-        console.error('❌ Button template error:', fbError);
+        console.error('❌ Button error:', JSON.stringify(fbError, null, 2));
 
+        // Always show the real error in the chat
         await sendMessengerReply(senderPsid, {
-            text: `⚠️ Could not open secure page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
+            text: `⚠️ Could not open the secure PIN page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
         });
     }
 }
@@ -129,7 +130,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 3. Secure PIN Portal
+// 3. Secure PIN Portal (GET)
 router.get('/secure-pin-portal', (req, res) => {
     const { token } = req.query;
 
@@ -347,35 +348,82 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
 
-    // Active airtime session
+    // ========== ACTIVE AIRTIME SESSION ==========
     const session = airtimeChat.getAirtimeSession(senderPsid);
-    if (session) {
-        const reply = await airtimeChat.handleAirtimeFlow(
-            senderPsid,
-            text,
-            session,
-            pendingPinTokens,
-            PIN_TOKEN_EXPIRY_MS,
-            APP_URL
-        );
 
-        // If reply contains an attachment (button), send it as a full message
-        if (reply.attachment) {
+    if (session) {
+        // Special reliable handling for the amount step
+        if (session.step === 'AIRTIME_AMOUNT') {
+            const amountNum = parseFloat(text.trim());
+
+            if (isNaN(amountNum) || amountNum < 100) {
+                await sendMessengerReply(senderPsid, {
+                    text: "❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:"
+                });
+                return;
+            }
+
+            session.data.amount = amountNum;
+
+            // Check if linked
+            const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
+            if (!linkSnap.exists()) {
+                airtimeChat.clearAirtimeSession(senderPsid);
+                await sendMessengerReply(senderPsid, {
+                    text: "❌ Your account is not linked. Please log in first (option 1)."
+                });
+                return;
+            }
+
+            // Clear session
+            airtimeChat.clearAirtimeSession(senderPsid);
+
+            // Generate token
+            const pinToken = crypto.randomBytes(32).toString('hex');
+
+            pendingPinTokens[pinToken] = {
+                psid: senderPsid,
+                service: 'airtime',
+                phone: session.data.phone,
+                network: session.data.network,
+                amount: session.data.amount,
+                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+                attempts: 0
+            };
+
+            // Send button the same reliable way the old working code did
+            const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
+
+            await sendMessengerButtonTemplate(senderPsid, {
+                text: `Review Airtime Transaction:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+                buttonText: "🔐 Enter PIN Securely",
+                url: webviewUrl
+            });
+
+            return;
+        }
+
+        // Handle earlier steps (phone / network)
+        try {
+            const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
             await sendMessengerReply(senderPsid, reply);
-        } else {
-            await sendMessengerReply(senderPsid, reply);
+        } catch (err) {
+            console.error("Airtime flow error:", err);
+            await sendMessengerReply(senderPsid, {
+                text: "❌ Something went wrong. Please type 'menu' and try again."
+            });
         }
         return;
     }
 
-    // Start Airtime
+    // ========== START AIRTIME ==========
     if (text === '3' || lowerText.includes('airtime')) {
         const initialReply = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initialReply);
         return;
     }
 
-    // Menu
+    // ========== MENU ==========
     if (lowerText.includes('menu') || lowerText.includes('start') || lowerText.includes('hi') || lowerText.includes('hello')) {
         await sendMessengerReply(senderPsid, {
             text: "Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Log Out\n12. Fund Wallet\n13. Transaction History\n\nReply with a number."
