@@ -4,10 +4,6 @@ const crypto = require('crypto');
 
 const airtimeSessions = {};
 
-// Note: Ensure your main router or pinWebview module exports pendingPinTokens and APP_URL, 
-// or manage them as shared state/imports depending on your directory structure.
-// Here we replicate the exact token generation pattern from your fbwebhookRoutes.js style:
-
 async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PIN_TOKEN_EXPIRY_MS, APP_URL, sendMessengerButtonTemplate) {
     const cleanText = text.trim();
 
@@ -18,8 +14,8 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
             }
             session.data.phone = cleanText;
             session.step = 'AIRTIME_NETWORK';
-            return { 
-                text: "📶 Select network provider:\n\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel\n\n(Reply with the number or name)" 
+            return {
+                text: "📶 Select network provider:\n\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel\n\n(Reply with the number or name)"
             };
 
         case 'AIRTIME_NETWORK':
@@ -42,17 +38,17 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
             }
 
             session.data.amount = amountNum;
-            
-            // Verify link status via Firebase matching fbwebhookRoutes logic
+
+            // Check if account is linked
             const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
             if (!linkSnap.exists()) {
                 delete airtimeSessions[senderPsid];
                 return { text: "❌ Your account is not linked. Please log in first." };
             }
-            
-            delete airtimeSessions[senderPsid]; // Clear local session state flow
 
-            // Generate secure 5-minute token webview link matching your main architecture
+            delete airtimeSessions[senderPsid];
+
+            // Generate secure token
             const pinToken = crypto.randomBytes(32).toString('hex');
 
             pendingPinTokens[pinToken] = {
@@ -65,17 +61,17 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
                 attempts: 0
             };
 
-            // Return button template payload matching your fbwebhookRoutes template format
+            // Return button template (correct URL with /webhook)
             return {
                 attachment: {
                     type: "template",
                     payload: {
                         template_type: "button",
-                        text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
+                        text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
                         buttons: [
                             {
                                 type: "web_url",
-                                url: `${APP_URL}/webhook/secure-pin-portal?token=${pinToken}`,
+                                url: `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`,
                                 title: "🔐 Enter PIN Securely",
                                 webview_height_ratio: "compact"
                             }

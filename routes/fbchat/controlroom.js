@@ -9,9 +9,10 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const APP_URL = process.env.APP_URL || 'https://dnezerlinks-backend.onrender.com';
 
 const pendingPinTokens = {};
-const PIN_TOKEN_EXPIRY_MS = 3 * 60 * 1000; // 3 minutes expiration
+const PIN_TOKEN_EXPIRY_MS = 3 * 60 * 1000; // 3 minutes
 
-// Helper function to send messages back to Facebook Messenger
+// ========== HELPERS ==========
+
 async function sendMessengerReply(senderPsid, responseMessage) {
     try {
         await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
@@ -23,36 +24,43 @@ async function sendMessengerReply(senderPsid, responseMessage) {
     }
 }
 
-// Helper function to send Messenger Button Templates (Webview triggers)
 async function sendMessengerButtonTemplate(senderPsid, payload) {
     try {
-        await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-            recipient: { id: senderPsid },
-            message: {
-                attachment: {
-                    type: "template",
-                    payload: {
-                        template_type: "button",
-                        text: payload.text,
-                        buttons: [
-                            {
-                                type: "web_url",
-                                url: payload.url,
-                                title: payload.buttonText,
-                                messenger_extensions: true,
-                                webview_height_ratio: "compact"
-                            }
-                        ]
+        await axios.post(
+            `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            {
+                recipient: { id: senderPsid },
+                message: {
+                    attachment: {
+                        type: "template",
+                        payload: {
+                            template_type: "button",
+                            text: payload.text,
+                            buttons: [
+                                {
+                                    type: "web_url",
+                                    url: payload.url,
+                                    title: payload.buttonText,
+                                    webview_height_ratio: "compact"
+                                }
+                            ]
+                        }
                     }
                 }
             }
-        });
+        );
+        console.log("✅ Button template sent successfully");
     } catch (err) {
-        console.error("Error sending button template:", err.response?.data || err.message);
+        const fbError = err.response?.data?.error || err.message;
+        console.error("❌ Error sending button template:", fbError);
+
+        // Show real error to user so we can debug
+        await sendMessengerReply(senderPsid, {
+            text: `⚠️ Could not open secure PIN page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
+        });
     }
 }
 
-// Helper to get linked user ID from Firebase
 async function getLinkedUserId(senderPsid) {
     try {
         const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
@@ -65,7 +73,9 @@ async function getLinkedUserId(senderPsid) {
     }
 }
 
-// 1. GET /webhook (Facebook Webhook Verification)
+// ========== WEBHOOK ROUTES ==========
+
+// 1. GET /webhook - Verification
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -82,7 +92,7 @@ router.get('/', (req, res) => {
     return res.sendStatus(400);
 });
 
-// 2. POST /webhook (Incoming Messenger Events)
+// 2. POST /webhook - Incoming messages
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -91,7 +101,7 @@ router.post('/', async (req, res) => {
 
         for (const entry of body.entry) {
             if (!entry.messaging) continue;
-            
+
             for (const webhookEvent of entry.messaging) {
                 if (webhookEvent.message && webhookEvent.message.text && !webhookEvent.message.is_echo) {
                     const senderPsid = webhookEvent.sender.id;
@@ -105,7 +115,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 3. GET /secure-pin-portal -> Serves the secure webview PIN interface
+// 3. GET /secure-pin-portal
 router.get('/secure-pin-portal', (req, res) => {
     const { token } = req.query;
 
@@ -235,7 +245,7 @@ router.get('/secure-pin-portal', (req, res) => {
     `);
 });
 
-// 4. POST /secure-pin-portal-submit -> AJAX JSON endpoint handling PIN validation, 3 attempts limit, and execution
+// 4. POST /secure-pin-portal-submit
 router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     const { token, pin } = req.body;
 
@@ -272,11 +282,10 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             sessionData.attempts = (sessionData.attempts || 0) + 1;
             const attemptsLeft = 3 - sessionData.attempts;
 
-            // On 3rd failed attempt, close window silently and drop error message to chat interface
             if (sessionData.attempts >= 3) {
                 delete pendingPinTokens[token];
-                await sendMessengerReply(psid, { 
-                    text: "❌ Transaction cancelled: Too many incorrect PIN attempts (3/3). Please try again." 
+                await sendMessengerReply(psid, {
+                    text: "❌ Transaction cancelled: Too many incorrect PIN attempts (3/3). Please try again."
                 });
 
                 return res.json({
@@ -288,12 +297,12 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             return res.json({
                 success: false,
-                message: `❌ Incorrect PIN. ${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} remaining.`,
+                message: `❌ Incorrect PIN. \( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} remaining.`,
                 closeWindow: false
             });
         }
 
-        // Correct PIN -> Clear token and proceed with fulfillment
+        // Correct PIN
         delete pendingPinTokens[token];
 
         if (service === 'airtime') {
@@ -335,15 +344,16 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     }
 });
 
-// Handle incoming user messages asynchronously
+// ========== MESSAGE HANDLER ==========
+
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
 
-    // 1. Check if user is currently inside an active airtime conversational flow session
+    // 1. Active airtime session
     if (airtimeChat.getAirtimeSession && airtimeChat.getAirtimeSession(senderPsid)) {
         const session = airtimeChat.getAirtimeSession(senderPsid);
-        
-        // Intercept when airtime flow is waiting for the amount
+
+        // Special handling for amount step (to send button)
         if (session.step === 'AIRTIME_AMOUNT') {
             const amountNum = parseFloat(text.trim());
             if (isNaN(amountNum) || amountNum < 100) {
@@ -358,11 +368,10 @@ async function handleUserMessage(senderPsid, text) {
                 await sendMessengerReply(senderPsid, { text: "❌ Your account is not linked. Please log in first." });
                 return;
             }
-            
-            const userId = linkSnap.val().userId;
-            airtimeChat.clearAirtimeSession(senderPsid); // Clear session before generating token
 
-            // Generate 3-minute expiring webview token
+            const userId = linkSnap.val().userId;
+            airtimeChat.clearAirtimeSession(senderPsid);
+
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
                 psid: senderPsid,
@@ -375,39 +384,53 @@ async function handleUserMessage(senderPsid, text) {
                 attempts: 0
             };
 
-            const webviewUrl = `${APP_URL}/secure-pin-portal?token=${pinToken}`;
+            // ✅ CORRECT URL
+            const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
 
-            // Send the button template directly to the chat interface
             await sendMessengerButtonTemplate(senderPsid, {
-                text: `Review Airtime Details:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: ${session.data.phone}\n• Amount: ₦${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
+                text: `Review Airtime Details:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
                 buttonText: "🔐 Enter PIN Securely",
                 url: webviewUrl
             });
             return;
         }
 
-        // Handle earlier steps of the airtime conversation (Network, Phone)
-        const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
-        await sendMessengerReply(senderPsid, reply);
+        // Handle earlier steps (phone / network)
+        const reply = await airtimeChat.handleAirtimeFlow(
+            senderPsid,
+            text,
+            session,
+            pendingPinTokens,
+            PIN_TOKEN_EXPIRY_MS,
+            APP_URL,
+            sendMessengerButtonTemplate
+        );
+
+        // If the reply is a button template, send it properly
+        if (reply.attachment) {
+            await sendMessengerReply(senderPsid, reply);
+        } else {
+            await sendMessengerReply(senderPsid, reply);
+        }
         return;
     }
 
-    // 2. Trigger Airtime Flow if option 3 or 'airtime' is selected
+    // 2. Start Airtime flow
     if (text === '3' || lowerText.includes('airtime')) {
         const initialReply = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initialReply);
         return;
     }
 
-    // 3. Main Menu / Fallback handler
+    // 3. Menu
     if (lowerText.includes('menu') || lowerText.includes('start') || lowerText.includes('hi') || lowerText.includes('hello')) {
-        await sendMessengerReply(senderPsid, { 
-            text: "Welcome to Dnezerlinks!\n\n1. Check Balance\n2. Buy Data\n3. Buy Airtime\n4. Cable TV\n\nReply with a number or option." 
+        await sendMessengerReply(senderPsid, {
+            text: "Welcome to Dnezerlinks!\n\n1. Check Balance\n2. Buy Data\n3. Buy Airtime\n4. Cable TV\n\nReply with a number or option."
         });
         return;
     }
 
-    // Default fallback
+    // Default
     await sendMessengerReply(senderPsid, { text: "I didn't quite get that. Type 'menu' to see available options." });
 }
 
