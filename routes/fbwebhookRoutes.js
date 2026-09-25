@@ -8,7 +8,7 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng'; 
 
 const userSessions = {};
-const pendingPinTokens = {}; // Stores { tokenValue: { psid, service, phone, network, amount, expiresAt, attempts } }
+const pendingPinTokens = {}; 
 
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes inactivity timeout
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;  // 5 minutes webview token expiry
@@ -158,8 +158,8 @@ router.get('/secure-pin-portal', (req, res) => {
 
                         const result = await response.json();
 
-                        if (result.success) {
-                            alert(result.message);
+                        if (result.success || result.closeWindow) {
+                            // Close window instantly without any pop-up alerts
                             closeMessengerWindow();
                         } else {
                             loader.style.display = 'none';
@@ -169,12 +169,6 @@ router.get('/secure-pin-portal', (req, res) => {
                             
                             errorMsg.innerText = result.message;
                             errorMsg.style.display = 'block';
-
-                            if (result.closeWindow) {
-                                setTimeout(() => {
-                                    closeMessengerWindow();
-                                }, 2500);
-                            }
                         }
                     } catch (err) {
                         loader.style.display = 'none';
@@ -190,7 +184,7 @@ router.get('/secure-pin-portal', (req, res) => {
     `);
 });
 
-// 4. POST /secure-pin-portal-submit -> AJAX JSON endpoint handling PIN validation & 3 attempts limit
+// 4. POST /secure-pin-portal-submit -> AJAX JSON endpoint handling PIN validation & silent closure
 router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     const { token, pin } = req.body;
 
@@ -214,7 +208,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             return res.json({ success: false, message: "❌ Account not linked. Please log in on Messenger.", closeWindow: true });
         }
 
-        // Fetch user PIN from database
         const userSnap = await admin.database().ref(`users/${userId}`).once('value');
         if (!userSnap.exists()) {
             delete pendingPinTokens[token];
@@ -230,9 +223,9 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const attemptsLeft = 3 - sessionData.attempts;
 
             if (sessionData.attempts >= 3) {
-                // Permanently expire/delete token on 3rd failure
+                // Permanently expire/delete token on 3rd failure & send menu back to chat
                 delete pendingPinTokens[token];
-                delete userSessions[psid]; // Clear chat session
+                delete userSessions[psid]; 
 
                 const failureMenuText = 
                     "❌ Incorrect PIN entered 3 times. Transaction failed and cancelled for security.\n\n" +
@@ -243,7 +236,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
                 return res.json({ 
                     success: false, 
-                    message: "❌ Invalid PIN. Maximum attempts reached. Returning to main menu...", 
+                    message: "Max attempts reached.", 
                     closeWindow: true 
                 });
             }
@@ -276,28 +269,26 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const resData = response.data;
 
             if (resData && resData.success) {
+                // Success response pushed to chat instantly while page closes silently
                 await sendMessengerReply(psid, { 
                     text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}` 
                 });
 
-                return res.json({ 
-                    success: true, 
-                    message: "✅ Transaction Authorized & Successful! Returning to Messenger..." 
-                });
+                return res.json({ success: true });
             } else {
                 const errReason = resData.error || 'Transaction could not be completed.';
                 await sendMessengerReply(psid, { text: `❌ Airtime Failed: ${errReason}` });
-                return res.json({ success: false, message: `❌ Failed: ${errReason}`, closeWindow: true });
+                return res.json({ success: false, closeWindow: true });
             }
         }
 
-        return res.json({ success: true, message: "✅ Request processed successfully." });
+        return res.json({ success: true });
 
     } catch (error) {
         delete pendingPinTokens[token];
         const errReason = error.response?.data?.error || error.message || "Server error processing transaction.";
         await sendMessengerReply(psid, { text: `❌ Transaction Failed: ${errReason}` });
-        return res.json({ success: false, message: `❌ Error: ${errReason}`, closeWindow: true });
+        return res.json({ success: false, closeWindow: true });
     }
 });
 
