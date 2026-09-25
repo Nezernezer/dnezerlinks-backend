@@ -6,7 +6,7 @@ const airtimeChat = require('./airtime');
 // Helper function to send messages back to Facebook Messenger
 async function sendMessengerReply(senderPsid, responseMessage) {
     try {
-        const accessToken = process.env.FB_PAGE_ACCESS_TOKEN;
+        const accessToken = process.env.PAGE_ACCESS_TOKEN;
         await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${accessToken}`, {
             recipient: { id: senderPsid },
             message: responseMessage
