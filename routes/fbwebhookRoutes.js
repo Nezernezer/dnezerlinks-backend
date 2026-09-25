@@ -218,7 +218,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         const userData = userSnap.val();
         const correctPin = userData.pin || userData.transaction_pin;
 
-        if (pin !== correctPin) {
+        if (String(pin).trim() !== String(correctPin).trim()) {
             sessionData.attempts = (sessionData.attempts || 0) + 1;
             const attemptsLeft = 3 - sessionData.attempts;
 
@@ -429,7 +429,6 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             let userData = null;
             snapshot.forEach((child) => { userId = child.key; userData = child.val(); });
 
-            // Ensure password matches correctly as plain strings or handle trims
             const storedPassword = userData.password ? String(userData.password).trim() : '';
             const inputPassword = password ? String(password).trim() : '';
 
@@ -474,7 +473,6 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
             if (!snapshot.exists()) return res.json({ success: false, message: "❌ No account matches this email address." });
 
-            // Generate reset link via Firebase Auth admin SDK and send strictly to email natively
             await admin.auth().generatePasswordResetLink(cleanEmail);
             
             delete pendingAuthTokens[token];
