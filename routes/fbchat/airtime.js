@@ -13,8 +13,8 @@ async function handleAirtimeFlow(senderPsid, text, session) {
             }
             session.data.phone = cleanText;
             session.step = 'AIRTIME_NETWORK';
-            return { 
-                text: "📶 Select network provider:\n\n1. MTN\n2. Glo\n3. Airtel\n4. 9mobile\n\n(Reply with the number or name)" 
+            return {
+                text: "📶 Select network provider:\n\n1. MTN\n2. Glo\n3. Airtel\n4. 9mobile\n\n(Reply with the number or name)"
             };
 
         case 'AIRTIME_NETWORK':
@@ -27,61 +27,9 @@ async function handleAirtimeFlow(senderPsid, text, session) {
             }
 
             session.data.network = selectedNetwork;
+            // Hand off control to controlroom.js by setting step to AIRTIME_AMOUNT
             session.step = 'AIRTIME_AMOUNT';
             return { text: "💵 Enter the amount to recharge (Minimum ₦100):" };
-
-        case 'AIRTIME_AMOUNT':
-            const amountNum = parseFloat(cleanText);
-            if (isNaN(amountNum) || amountNum < 100) {
-                return { text: "❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:" };
-            }
-
-            session.data.amount = amountNum;
-            session.step = 'AIRTIME_PIN';
-            return { text: "🔒 Enter your 4-digit transaction PIN to complete this purchase:" };
-
-        case 'AIRTIME_PIN':
-            const pin = cleanText;
-            if (pin.length !== 4 || isNaN(pin)) {
-                return { text: "❌ Invalid PIN format. Please enter your 4-digit transaction PIN:" };
-            }
-
-            session.data.pin = pin;
-
-            const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
-            if (!linkSnap.exists()) {
-                delete airtimeSessions[senderPsid];
-                return { text: "❌ Your account is not linked. Please log in first using option 1." };
-            }
-
-            const userId = linkSnap.val().userId;
-            const networkMap = { "mtn": "1", "glo": "2", "9mobile": "3", "airtel": "4" };
-
-            try {
-                const backendUrl = process.env.APP_URL || 'https://dnezerlinks-backend.onrender.com';
-                const response = await axios.post(`${backendUrl}/api/airtime/buy`, {
-                    uid: userId,
-                    phone: session.data.phone,
-                    amount: session.data.amount,
-                    networkID: networkMap[session.data.network],
-                    pin: session.data.pin
-                }, { timeout: 55000 });
-
-                delete airtimeSessions[senderPsid];
-
-                if (response.data && response.data.success) {
-                    return { 
-                        text: `✅ Airtime Purchase Successful!\n\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: ₦${session.data.amount.toLocaleString()}\n\nType 'menu' for more options.` 
-                    };
-                } else {
-                    return { text: `❌ Transaction Failed: ${response.data.error || 'Unknown error occurred.'}` };
-                }
-
-            } catch (error) {
-                delete airtimeSessions[senderPsid];
-                const errMsg = error.response?.data?.error || error.message || "Server connection failed.";
-                return { text: `❌ Airtime Failed: ${errMsg}` };
-            }
 
         default:
             delete airtimeSessions[senderPsid];
@@ -94,7 +42,7 @@ function startAirtimeFlow(senderPsid) {
         step: 'AIRTIME_PHONE',
         data: {}
     };
-    return { text: "📱 **Airtime Top-up**\n\nEnter the recipient phone number:" };
+    return { text: "📱 Airtime Top-up\n\nEnter the recipient phone number:" };
 }
 
 function getAirtimeSession(senderPsid) {
@@ -111,10 +59,3 @@ module.exports = {
     getAirtimeSession,
     clearAirtimeSession
 };
-
-
-
-
-
-
-
