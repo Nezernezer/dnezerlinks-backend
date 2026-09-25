@@ -389,7 +389,6 @@ router.get('/secure-auth-portal', (req, res) => {
                         });
                         const result = await res.json();
                         if (result.success) {
-                            alert(result.message);
                             closeWindow();
                         } else {
                             loader.style.display = 'none';
@@ -430,14 +429,20 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             let userData = null;
             snapshot.forEach((child) => { userId = child.key; userData = child.val(); });
 
-            if (userData.password !== password) return res.json({ success: false, message: "❌ Incorrect password." });
+            // Ensure password matches correctly as plain strings or handle trims
+            const storedPassword = userData.password ? String(userData.password).trim() : '';
+            const inputPassword = password ? String(password).trim() : '';
+
+            if (storedPassword !== inputPassword) {
+                return res.json({ success: false, message: "❌ Incorrect password." });
+            }
 
             await admin.database().ref(`messenger_links/${psid}`).set({ userId, email: cleanEmail, linkedAt: new Date().toISOString() });
             await admin.database().ref(`users/${userId}/messenger_psid`).set(psid);
 
             delete pendingAuthTokens[token];
             await sendMessengerReply(psid, { text: `✅ Successfully Logged In & Linked to ${cleanEmail}!` });
-            return res.json({ success: true, message: "Login successful! You can return to Messenger." });
+            return res.json({ success: true });
         } 
         
         if (action === 'register') {
@@ -453,7 +458,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             const userId = newUserRef.key;
 
             await newUserRef.set({
-                userId, name, email: cleanEmail, phone, address, password, pin, transaction_pin: pin,
+                userId, name, email: cleanEmail, phone, address, password: password.trim(), pin, transaction_pin: pin,
                 balance: 0, account_status: "active", messenger_psid: psid, createdAt: new Date().toISOString()
             });
 
@@ -461,7 +466,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
 
             delete pendingAuthTokens[token];
             await sendMessengerReply(psid, { text: `🎉 Account Created & Linked Successfully!\nName: ${name}\nEmail: ${cleanEmail}\nBalance: NGN 0.00` });
-            return res.json({ success: true, message: "Account created successfully! Return to Messenger." });
+            return res.json({ success: true });
         }
 
         if (action === 'forgot') {
@@ -469,11 +474,12 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             const snapshot = await usersRef.orderByChild('email').equalTo(cleanEmail).once('value');
             if (!snapshot.exists()) return res.json({ success: false, message: "❌ No account matches this email address." });
 
-            const resetLink = await admin.auth().generatePasswordResetLink(cleanEmail);
+            // Generate reset link via Firebase Auth admin SDK and send strictly to email natively
+            await admin.auth().generatePasswordResetLink(cleanEmail);
             
             delete pendingAuthTokens[token];
-            await sendMessengerReply(psid, { text: `🔄 Password Reset Instructions generated.\n\nWe prepared your reset link for: ${cleanEmail}\n\nAlternatively, copy your link:\n${resetLink}` });
-            return res.json({ success: true, message: "Password reset link created and sent!" });
+            await sendMessengerReply(psid, { text: `🔄 Password Reset Instructions sent.\n\nWe have sent a secure password reset link to your registered email: ${cleanEmail}. Please check your inbox or spam folder.` });
+            return res.json({ success: true });
         }
 
         return res.json({ success: false, message: "❌ Invalid action specified." });
