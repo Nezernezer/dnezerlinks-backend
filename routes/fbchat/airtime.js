@@ -1,19 +1,41 @@
-const axios = require('axios');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
 const airtimeSessions = {};
 
-async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PIN_TOKEN_EXPIRY_MS, APP_URL, sendMessengerButtonTemplate) {
+function startAirtimeFlow(senderPsid) {
+    airtimeSessions[senderPsid] = {
+        step: 'AIRTIME_PHONE',
+        data: { service: 'airtime' },
+        lastActive: Date.now()
+    };
+    return { text: "📱 **Airtime Top-up**\n\nEnter the recipient phone number:" };
+}
+
+function getAirtimeSession(senderPsid) {
+    return airtimeSessions[senderPsid];
+}
+
+function clearAirtimeSession(senderPsid) {
+    delete airtimeSessions[senderPsid];
+}
+
+/**
+ * Handles the conversational steps for airtime.
+ * When the amount is entered, it generates a secure token and returns
+ * a button template payload (the main file will send it).
+ */
+async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PIN_TOKEN_EXPIRY_MS, APP_URL) {
     const cleanText = text.trim();
 
     switch (session.step) {
         case 'AIRTIME_PHONE':
-            if (cleanText.length < 11) {
-                return { text: "❌ Please enter a valid 11-digit phone number for the airtime recharge:" };
+            if (cleanText.length < 10) {
+                return { text: "❌ Please enter a valid phone number for the airtime recharge:" };
             }
             session.data.phone = cleanText;
             session.step = 'AIRTIME_NETWORK';
+            session.lastActive = Date.now();
             return {
                 text: "📶 Select network provider:\n\n1. MTN\n2. Glo\n3. 9mobile\n4. Airtel\n\n(Reply with the number or name)"
             };
@@ -29,6 +51,7 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
 
             session.data.network = selectedNetwork;
             session.step = 'AIRTIME_AMOUNT';
+            session.lastActive = Date.now();
             return { text: "💵 Enter the amount to recharge (Minimum ₦100):" };
 
         case 'AIRTIME_AMOUNT':
@@ -42,13 +65,14 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
             // Check if account is linked
             const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
             if (!linkSnap.exists()) {
-                delete airtimeSessions[senderPsid];
-                return { text: "❌ Your account is not linked. Please log in first." };
+                clearAirtimeSession(senderPsid);
+                return { text: "❌ Your account is not linked. Please log in first (option 1)." };
             }
 
-            delete airtimeSessions[senderPsid];
+            // Clear conversational session
+            clearAirtimeSession(senderPsid);
 
-            // Generate secure token
+            // Generate secure 5-minute token
             const pinToken = crypto.randomBytes(32).toString('hex');
 
             pendingPinTokens[pinToken] = {
@@ -61,13 +85,13 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
                 attempts: 0
             };
 
-            // Return button template (correct URL with /webhook)
+            // Return button template payload (main file will send it)
             return {
                 attachment: {
                     type: "template",
                     payload: {
                         template_type: "button",
-                        text: `Review Airtime Transaction:\nNetwork: ${session.data.network.toUpperCase()}\nPhone: ${session.data.phone}\nAmount: NGN ${session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
+                        text: `Review Airtime Transaction:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
                         buttons: [
                             {
                                 type: "web_url",
@@ -81,25 +105,9 @@ async function handleAirtimeFlow(senderPsid, text, session, pendingPinTokens, PI
             };
 
         default:
-            delete airtimeSessions[senderPsid];
+            clearAirtimeSession(senderPsid);
             return { text: "Session expired. Type 'menu' to restart." };
     }
-}
-
-function startAirtimeFlow(senderPsid) {
-    airtimeSessions[senderPsid] = {
-        step: 'AIRTIME_PHONE',
-        data: { service: 'airtime' }
-    };
-    return { text: "📱 **Airtime Top-up**\n\nEnter the recipient phone number:" };
-}
-
-function getAirtimeSession(senderPsid) {
-    return airtimeSessions[senderPsid];
-}
-
-function clearAirtimeSession(senderPsid) {
-    delete airtimeSessions[senderPsid];
 }
 
 module.exports = {

@@ -7,27 +7,36 @@ const airtimeChat = require('./airtime');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// ========== SAFE APP_URL HANDLING ==========
+// ========== SAFE APP_URL ==========
 let APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
-APP_URL = APP_URL.trim().replace(/\/+$/, ''); // remove trailing slashes
+APP_URL = APP_URL.trim().replace(/\/+$/, '');
 if (!APP_URL.startsWith('http')) {
     APP_URL = 'https://' + APP_URL;
 }
-// ==========================================
+// ==================================
 
 const pendingPinTokens = {};
-const PIN_TOKEN_EXPIRY_MS = 3 * 60 * 1000; // 3 minutes
+const pendingAuthTokens = {};
+const pendingFundTokens = {};
+
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
+const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
+const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
+const FUND_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 
 // ========== HELPERS ==========
 
-async function sendMessengerReply(senderPsid, responseMessage) {
+async function sendMessengerReply(senderPsid, response) {
     try {
-        await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-            recipient: { id: senderPsid },
-            message: responseMessage
-        });
-    } catch (error) {
-        console.error('Error sending message to Facebook:', error.response?.data || error.message);
+        await axios.post(
+            `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            {
+                recipient: { id: senderPsid },
+                message: response
+            }
+        );
+    } catch (err) {
+        console.error('Error sending message:', err.response?.data || err.message);
     }
 }
 
@@ -56,13 +65,13 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                 }
             }
         );
-        console.log("✅ Button template sent successfully →", payload.url);
+        console.log('✅ Button template sent →', payload.url);
     } catch (err) {
         const fbError = err.response?.data?.error || err.message;
-        console.error("❌ Error sending button template:", fbError);
+        console.error('❌ Button template error:', fbError);
 
         await sendMessengerReply(senderPsid, {
-            text: `⚠️ Could not open secure PIN page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
+            text: `⚠️ Could not open secure page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
         });
     }
 }
@@ -81,7 +90,7 @@ async function getLinkedUserId(senderPsid) {
 
 // ========== WEBHOOK ROUTES ==========
 
-// 1. GET /webhook - Verification
+// 1. Verification
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -91,14 +100,13 @@ router.get('/', (req, res) => {
         if (mode === 'subscribe' && token === process.env.FB_VERIFY_TOKEN) {
             console.log('✅ Facebook Webhook Verified Successfully.');
             return res.status(200).send(challenge);
-        } else {
-            return res.sendStatus(403);
         }
+        return res.sendStatus(403);
     }
     return res.sendStatus(400);
 });
 
-// 2. POST /webhook - Incoming messages
+// 2. Incoming messages
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -121,7 +129,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 3. GET /secure-pin-portal
+// 3. Secure PIN Portal
 router.get('/secure-pin-portal', (req, res) => {
     const { token } = req.query;
 
@@ -130,10 +138,10 @@ router.get('/secure-pin-portal', (req, res) => {
             <!DOCTYPE html>
             <html lang="en">
             <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Expired Link</title>
-            <style>body{font-family:sans-serif;text-align:center;padding:50px;background:#0f172a;color:#fff;}</style></head>
+            <style>body{font-family:sans-serif;text-align:center;padding:50px;background:#f8fafc;color:#1e293b;}</style></head>
             <body>
-                <h2 style="color:#ef4444;">❌ Link Expired or Invalid</h2>
-                <p>This transaction link has already been used, expired (3-minute limit), or is invalid. Please start a new request in Messenger.</p>
+                <h2 style="color:#dc2626;">❌ Link Expired or Invalid</h2>
+                <p>This transaction link has already been used, expired, or is invalid. Please start a new request in Messenger.</p>
             </body>
             </html>
         `);
@@ -143,7 +151,7 @@ router.get('/secure-pin-portal', (req, res) => {
 
     if (Date.now() > sessionData.expiresAt) {
         delete pendingPinTokens[token];
-        return res.status(400).send("<h3>❌ Link has expired (3 minutes exceeded). Please restart the transaction in Messenger.</h3>");
+        return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");
     }
 
     const { service, phone, network, amount } = sessionData;
@@ -154,56 +162,49 @@ router.get('/secure-pin-portal', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Dnezerlinks Secure PIN Authorization</title>
+            <title>Dnezerlinks Secure PIN</title>
             <script src="https://connect.facebook.net/en_US/messenger.Extensions.js" crossorigin="anonymous"></script>
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
-                .card { background: #1e293b; padding: 24px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); width: 100%; max-width: 360px; text-align: center; }
-                h3 { color: #f8fafc; margin-bottom: 8px; }
-                p { color: #94a3b8; font-size: 14px; margin-bottom: 20px; }
-                .summary { background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: left; font-size: 13px; color: #cbd5e1; border: 1px solid #334155; }
-                .summary b { color: #ffffff; }
-                input[type="password"] { width: 100%; padding: 12px; font-size: 22px; text-align: center; letter-spacing: 8px; border: 1px solid #475569; border-radius: 8px; box-sizing: border-box; margin-bottom: 16px; outline: none; background: #0f172a; color: white; }
-                input[type="password"]:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                .card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; }
+                h3 { color: #1e293b; margin-bottom: 8px; }
+                p { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+                .summary { background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: left; font-size: 13px; color: #334155; }
+                .summary b { color: #0f172a; }
+                input[type="password"] { width: 100%; padding: 12px; font-size: 18px; text-align: center; letter-spacing: 4px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; margin-bottom: 16px; outline: none; }
+                input[type="password"]:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
                 button { background: #2563eb; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; }
                 button:hover { background: #1d4ed8; }
-                .loader { display: none; margin-top: 10px; font-size: 14px; color: #3b82f6; }
-                .error-msg { color: #ef4444; font-size: 13px; margin-bottom: 12px; font-weight: 500; display: none; }
+                .loader { display: none; margin-top: 10px; font-size: 14px; color: #2563eb; }
+                .error-msg { color: #dc2626; font-size: 13px; margin-bottom: 12px; font-weight: 500; display: none; }
             </style>
         </head>
         <body>
             <div class="card">
                 <h3>🔒 Authorize Transaction</h3>
                 <p>Enter your 4-digit transaction PIN securely</p>
-
                 <div class="summary">
                     <div><b>Service:</b> ${service.toUpperCase()}</div>
                     <div><b>Network:</b> ${network.toUpperCase()}</div>
                     <div><b>Phone:</b> ${phone}</div>
                     <div><b>Amount:</b> NGN ${Number(amount).toLocaleString()}</div>
                 </div>
-
                 <div id="errorMsg" class="error-msg"></div>
-
                 <form id="pinForm">
-                    <input type="hidden" name="token" id="tokenField" value="${token}">
-                    <input type="password" id="pinInput" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required autocomplete="current-password" autofocus>
+                    <input type="hidden" id="tokenField" value="${token}">
+                    <input type="password" id="pinInput" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required autofocus>
                     <button type="submit" id="submitBtn">Authorize & Pay</button>
                     <div class="loader" id="loader">Processing securely...</div>
                 </form>
             </div>
-
             <script>
                 function closeMessengerWindow() {
                     if (typeof MessengerExtensions !== 'undefined') {
-                        MessengerExtensions.requestCloseBrowser(function success() {}, function error(err) {
-                            window.close();
-                        });
+                        MessengerExtensions.requestCloseBrowser(() => {}, () => window.close());
                     } else {
                         window.close();
                     }
                 }
-
                 document.getElementById('pinForm').addEventListener('submit', async function(e) {
                     e.preventDefault();
                     const pin = document.getElementById('pinInput').value;
@@ -223,9 +224,7 @@ router.get('/secure-pin-portal', (req, res) => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ token, pin })
                         });
-
                         const result = await response.json();
-
                         if (result.success || result.closeWindow) {
                             closeMessengerWindow();
                         } else {
@@ -233,7 +232,6 @@ router.get('/secure-pin-portal', (req, res) => {
                             submitBtn.disabled = false;
                             submitBtn.style.opacity = '1';
                             document.getElementById('pinInput').value = '';
-
                             errorMsg.innerText = result.message;
                             errorMsg.style.display = 'block';
                         }
@@ -251,19 +249,19 @@ router.get('/secure-pin-portal', (req, res) => {
     `);
 });
 
-// 4. POST /secure-pin-portal-submit
+// 4. PIN Submit
 router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     const { token, pin } = req.body;
 
     if (!token || !pendingPinTokens[token]) {
-        return res.json({ success: false, message: "❌ Link is invalid or has expired.", closeWindow: true });
+        return res.json({ success: false, message: "❌ Link is invalid or has already expired.", closeWindow: true });
     }
 
     const sessionData = pendingPinTokens[token];
 
     if (Date.now() > sessionData.expiresAt) {
         delete pendingPinTokens[token];
-        return res.json({ success: false, message: "❌ Link has expired (3 minutes reached).", closeWindow: true });
+        return res.json({ success: false, message: "❌ Link has expired. Please restart your transaction.", closeWindow: true });
     }
 
     const { psid, service, phone, network, amount } = sessionData;
@@ -291,19 +289,14 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             if (sessionData.attempts >= 3) {
                 delete pendingPinTokens[token];
                 await sendMessengerReply(psid, {
-                    text: "❌ Transaction cancelled: Too many incorrect PIN attempts (3/3). Please try again."
+                    text: "❌ Incorrect PIN entered 3 times. Transaction cancelled for security.\n\nType 'menu' to start over."
                 });
-
-                return res.json({
-                    success: false,
-                    message: "Max attempts reached.",
-                    closeWindow: true
-                });
+                return res.json({ success: false, message: "Max attempts reached.", closeWindow: true });
             }
 
             return res.json({
                 success: false,
-                message: `❌ Incorrect PIN. \( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} remaining.`,
+                message: `❌ Invalid PIN. Try again (\( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} left).`,
                 closeWindow: false
             });
         }
@@ -331,8 +324,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                 await sendMessengerReply(psid, {
                     text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}`
                 });
-
-                return res.json({ success: true, closeWindow: true });
+                return res.json({ success: true });
             } else {
                 const errReason = resData.error || 'Transaction could not be completed.';
                 await sendMessengerReply(psid, { text: `❌ Airtime Failed: ${errReason}` });
@@ -340,7 +332,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             }
         }
 
-        return res.json({ success: true, closeWindow: true });
+        return res.json({ success: true });
 
     } catch (error) {
         delete pendingPinTokens[token];
@@ -355,84 +347,46 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
 
-    // 1. Active airtime session
-    if (airtimeChat.getAirtimeSession && airtimeChat.getAirtimeSession(senderPsid)) {
-        const session = airtimeChat.getAirtimeSession(senderPsid);
-
-        // Special handling for amount step (to send button)
-        if (session.step === 'AIRTIME_AMOUNT') {
-            const amountNum = parseFloat(text.trim());
-            if (isNaN(amountNum) || amountNum < 100) {
-                await sendMessengerReply(senderPsid, { text: "❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:" });
-                return;
-            }
-            session.data.amount = amountNum;
-
-            const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
-            if (!linkSnap.exists()) {
-                airtimeChat.clearAirtimeSession(senderPsid);
-                await sendMessengerReply(senderPsid, { text: "❌ Your account is not linked. Please log in first." });
-                return;
-            }
-
-            const userId = linkSnap.val().userId;
-            airtimeChat.clearAirtimeSession(senderPsid);
-
-            const pinToken = crypto.randomBytes(32).toString('hex');
-            pendingPinTokens[pinToken] = {
-                psid: senderPsid,
-                service: 'airtime',
-                userId,
-                phone: session.data.phone,
-                network: session.data.network,
-                amount: session.data.amount,
-                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
-                attempts: 0
-            };
-
-            // ✅ Correct URL
-            const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
-
-            await sendMessengerButtonTemplate(senderPsid, {
-                text: `Review Airtime Details:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 3 minutes):`,
-                buttonText: "🔐 Enter PIN Securely",
-                url: webviewUrl
-            });
-            return;
-        }
-
-        // Handle earlier steps (phone / network)
+    // Active airtime session
+    const session = airtimeChat.getAirtimeSession(senderPsid);
+    if (session) {
         const reply = await airtimeChat.handleAirtimeFlow(
             senderPsid,
             text,
             session,
             pendingPinTokens,
             PIN_TOKEN_EXPIRY_MS,
-            APP_URL,
-            sendMessengerButtonTemplate
+            APP_URL
         );
 
-        await sendMessengerReply(senderPsid, reply);
+        // If reply contains an attachment (button), send it as a full message
+        if (reply.attachment) {
+            await sendMessengerReply(senderPsid, reply);
+        } else {
+            await sendMessengerReply(senderPsid, reply);
+        }
         return;
     }
 
-    // 2. Start Airtime flow
+    // Start Airtime
     if (text === '3' || lowerText.includes('airtime')) {
         const initialReply = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initialReply);
         return;
     }
 
-    // 3. Menu
+    // Menu
     if (lowerText.includes('menu') || lowerText.includes('start') || lowerText.includes('hi') || lowerText.includes('hello')) {
         await sendMessengerReply(senderPsid, {
-            text: "Welcome to Dnezerlinks!\n\n1. Check Balance\n2. Buy Data\n3. Buy Airtime\n4. Cable TV\n\nReply with a number or option."
+            text: "Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Log Out\n12. Fund Wallet\n13. Transaction History\n\nReply with a number."
         });
         return;
     }
 
     // Default
-    await sendMessengerReply(senderPsid, { text: "I didn't quite get that. Type 'menu' to see available options." });
+    await sendMessengerReply(senderPsid, {
+        text: "I didn't quite get that. Type 'menu' to see available options."
+    });
 }
 
 module.exports = router;
