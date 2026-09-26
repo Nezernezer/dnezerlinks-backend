@@ -10,6 +10,7 @@ const dataChat = require('./data');
 const fundChat = require('./fundwallet');
 const cableChat = require('./cabletv');
 const electricityChat = require('./electricity');
+const bulksmsChat = require('./bulksms');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -98,6 +99,16 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Meter Type: ' + (extra.meterType || '') + '\n' +
             '• Meter No: ' + phone + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    } else if (extra.service === 'bulksms') {
+        reviewText =
+            'Review Bulk SMS:\n\n' +
+            '• Sender ID: ' + (extra.senderName || '') + '\n' +
+            '• Recipients: ' + (extra.recipientCount || 0) + '\n' +
+            '• Pages: ' + (extra.pages || 0) + ' (' + (extra.encoding || 'GSM') + ')\n' +
+            '• Rate: ₦' + (extra.rate || 0) + ' per page\n' +
+            '• Total Cost: ₦' + Number(amount).toLocaleString() + '\n\n' +
+            'Message Preview:\n"' + (extra.messagePreview || '') + '"\n\n' +
             '🔐 Enter your PIN securely (link expires in 5 minutes):';
     } else {
         reviewText =
@@ -497,6 +508,10 @@ router.get('/secure-pin-portal', (req, res) => {
     const meterType = sessionData.meterType || '';
     const customerName = sessionData.customerName || '';
     const iuc = sessionData.iuc || '';
+    const senderName = sessionData.senderName || '';
+    const recipientCount = sessionData.recipientCount || 0;
+    const pages = sessionData.pages || 0;
+    const encoding = sessionData.encoding || '';
 
     res.send(`
         <!DOCTYPE html>
@@ -526,6 +541,9 @@ router.get('/secure-pin-portal', (req, res) => {
                     ${meterType ? `<div><b>Meter Type:</b> ${meterType}</div>` : ''}
                     ${customerName ? `<div><b>Customer:</b> ${customerName}</div>` : ''}
                     ${iuc ? `<div><b>IUC:</b> ${iuc}</div>` : ''}
+                    ${senderName ? `<div><b>Sender ID:</b> ${senderName}</div>` : ''}
+                    ${recipientCount ? `<div><b>Recipients:</b> ${recipientCount}</div>` : ''}
+                    ${pages ? `<div><b>Pages:</b> \( {pages} ( \){encoding})</div>` : ''}
                     <div><b>Amount:</b> ₦${Number(amount).toLocaleString()}</div>
                 </div>
                 <div id="errorMsg" class="error"></div>
@@ -761,6 +779,38 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             }
         }
 
+        // ========== BULK SMS ==========
+        if (service === 'bulksms') {
+            try {
+                const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
+                    uid: userId,
+                    recipient: sessionData.recipients,
+                    message: sessionData.message,
+                    senderName: sessionData.senderName,
+                    pin: pin
+                }, { timeout: 65000 });
+
+                if (response.data && response.data.success) {
+                    let msg = '✅ Bulk SMS Sent Successfully!\n\n';
+                    msg += 'Sender: ' + sessionData.senderName + '\n';
+                    msg += 'Recipients: ' + sessionData.recipientCount + '\n';
+                    msg += 'Pages: ' + sessionData.pages + '\n';
+                    msg += 'Cost: ₦' + Number(sessionData.amount).toLocaleString();
+                    await sendMessengerReply(psid, { text: msg });
+                    return res.json({ success: true });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error')
+                    });
+                    return res.json({ success: false, closeWindow: true });
+                }
+            } catch (err) {
+                const errMsg = err.response?.data?.error || err.message || 'Server error';
+                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + errMsg });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
+
         return res.json({ success: true });
     } catch (error) {
         delete pendingPinTokens[token];
@@ -848,7 +898,7 @@ async function handleUserMessage(senderPsid, text) {
                 meterType: elecSession.data.meterType,
                 meterNumber: elecSession.data.meterNumber,
                 amount: elecSession.data.amount,
-                phone: elecSession.data.meterNumber,   // for display compatibility
+                phone: elecSession.data.meterNumber,
                 network: elecSession.data.disco,
                 expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
                 attempts: 0
@@ -864,6 +914,68 @@ async function handleUserMessage(senderPsid, text) {
                     service: 'electricity',
                     discoName: elecSession.data.discoName,
                     meterType: elecSession.data.meterType
+                }
+            );
+            return;
+        }
+
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
+        }
+        return;
+    }
+
+    // ===== ACTIVE BULK SMS SESSION =====
+    const bulksmsSession = bulksmsChat.getBulkSmsSession(senderPsid);
+    if (bulksmsSession) {
+        const result = await bulksmsChat.handleBulkSmsFlow(senderPsid, text, bulksmsSession);
+
+        if (result && result.step === 'READY_FOR_PIN') {
+            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+            if (!linkSnap.exists()) {
+                bulksmsChat.clearBulkSmsSession(senderPsid);
+                await sendMessengerReply(senderPsid, {
+                    text: '❌ Account not linked. Please login first (option 1).'
+                });
+                return;
+            }
+
+            bulksmsChat.clearBulkSmsSession(senderPsid);
+
+            const pinToken = crypto.randomBytes(32).toString('hex');
+            pendingPinTokens[pinToken] = {
+                psid: senderPsid,
+                service: 'bulksms',
+                senderName: result.data.senderName,
+                recipients: result.data.recipients,
+                recipientCount: result.data.recipientCount,
+                message: result.data.message,
+                pages: result.data.pages,
+                rate: result.data.rate,
+                amount: result.data.totalCost,
+                encoding: result.data.encoding,
+                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+                attempts: 0
+            };
+
+            const messagePreview = result.data.message.length > 80
+                ? result.data.message.substring(0, 80) + '...'
+                : result.data.message;
+
+            await sendSecurePinLink(
+                senderPsid,
+                '',
+                '',
+                result.data.totalCost,
+                pinToken,
+                {
+                    service: 'bulksms',
+                    senderName: result.data.senderName,
+                    recipientCount: result.data.recipientCount,
+                    pages: result.data.pages,
+                    rate: result.data.rate,
+                    encoding: result.data.encoding,
+                    messagePreview: messagePreview
                 }
             );
             return;
@@ -1052,6 +1164,13 @@ async function handleUserMessage(senderPsid, text) {
     // 6. Electricity
     if (text === '6' || lowerText.indexOf('electricity') !== -1 || lowerText.indexOf('disco') !== -1) {
         const initial = electricityChat.startElectricityFlow(senderPsid);
+        await sendMessengerReply(senderPsid, initial);
+        return;
+    }
+
+    // 7. Bulk SMS
+    if (text === '7' || lowerText.indexOf('bulk') !== -1 || lowerText.indexOf('sms') !== -1) {
+        const initial = bulksmsChat.startBulkSmsFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
