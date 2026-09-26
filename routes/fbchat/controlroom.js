@@ -7,8 +7,9 @@ const crypto = require('crypto');
 const airtimeChat = require('./airtime');
 const loginChat = require('./login');
 const dataChat = require('./data');
-const fundChat    = require('./fundwallet');
-const cableChat   = require('./cabletv'); 
+const fundChat = require('./fundwallet');
+const cableChat = require('./cabletv');
+const electricityChat = require('./electricity');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -81,12 +82,21 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
     const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
 
     let reviewText = '';
+
     if (extra.service === 'data') {
         reviewText =
             'Review Data Transaction:\n\n' +
             '• Network: ' + network.toUpperCase() + '\n' +
             '• Phone: ' + phone + '\n' +
             '• Plan: ' + (extra.planName || '') + '\n' +
+            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    } else if (extra.service === 'electricity') {
+        reviewText =
+            'Review Electricity Payment:\n\n' +
+            '• Disco: ' + (extra.discoName || network) + '\n' +
+            '• Meter Type: ' + (extra.meterType || '') + '\n' +
+            '• Meter No: ' + phone + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
             '🔐 Enter your PIN securely (link expires in 5 minutes):';
     } else {
@@ -184,7 +194,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// ========== SECURE AUTH PORTAL (Login / Register / Forgot) ==========
+// ========== SECURE AUTH PORTAL ==========
 router.get('/secure-auth-portal', (req, res) => {
     const token = req.query.token;
 
@@ -199,7 +209,6 @@ router.get('/secure-auth-portal', (req, res) => {
     }
 
     const action = sessionData.action;
-
     let title = 'Dnezerlinks Access';
     let htmlForm = '';
 
@@ -388,7 +397,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
                 }
 
                 let userId = null;
-                snapshot.forEach(function(child) { userId = child.key; });
+                snapshot.forEach(function (child) { userId = child.key; });
 
                 await admin.database().ref('messenger_links/' + psid).set({
                     userId: userId,
@@ -480,11 +489,14 @@ router.get('/secure-pin-portal', (req, res) => {
         return res.status(400).send('<h3>❌ Link has expired</h3>');
     }
 
-    const service = sessionData.service;
-    const phone = sessionData.phone;
-    const network = sessionData.network;
-    const amount = sessionData.amount;
+    const service = sessionData.service || '';
+    const phone = sessionData.phone || sessionData.meterNumber || '';
+    const network = sessionData.network || sessionData.disco || '';
+    const amount = sessionData.amount || 0;
     const planName = sessionData.planName || '';
+    const meterType = sessionData.meterType || '';
+    const customerName = sessionData.customerName || '';
+    const iuc = sessionData.iuc || '';
 
     res.send(`
         <!DOCTYPE html>
@@ -507,14 +519,15 @@ router.get('/secure-pin-portal', (req, res) => {
                 <h3>🔒 Authorize Transaction</h3>
                 <p>Enter your 4-digit PIN</p>
                 <div style="text-align:left;background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px">
-    <div><b>Service:</b> ${service.toUpperCase()}</div>
-    <div><b>Network:</b> ${network.toUpperCase()}</div>
-    <div><b>Phone:</b> ${phone}</div>
-    ${planName ? `<div><b>Plan:</b> ${planName}</div>` : ''}
-    ${sessionData.customerName ? `<div><b>Customer:</b> ${sessionData.customerName}</div>` : ''}
-    ${sessionData.iuc ? `<div><b>IUC:</b> ${sessionData.iuc}</div>` : ''}
-    <div><b>Amount:</b> ₦${Number(amount).toLocaleString()}</div>
-</div>
+                    <div><b>Service:</b> ${service.toUpperCase()}</div>
+                    ${network ? `<div><b>Network/Disco:</b> ${network.toUpperCase()}</div>` : ''}
+                    ${phone ? `<div><b>Phone/Meter:</b> ${phone}</div>` : ''}
+                    ${planName ? `<div><b>Plan:</b> ${planName}</div>` : ''}
+                    ${meterType ? `<div><b>Meter Type:</b> ${meterType}</div>` : ''}
+                    ${customerName ? `<div><b>Customer:</b> ${customerName}</div>` : ''}
+                    ${iuc ? `<div><b>IUC:</b> ${iuc}</div>` : ''}
+                    <div><b>Amount:</b> ₦${Number(amount).toLocaleString()}</div>
+                </div>
                 <div id="errorMsg" class="error"></div>
                 <form id="pinForm">
                     <input type="hidden" id="tokenField" value="${token}">
@@ -668,46 +681,85 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                 return res.json({ success: false, closeWindow: true });
             }
         }
-	// ========== CABLE TV ==========
-if (service === 'cable') {
-    const parsedAmount = parseFloat(amount);
-    const providerID = sessionData.providerID;
-    const planID = sessionData.planID;
-    const iuc = sessionData.iuc;
 
-    try {
-        const response = await axios.post(APP_URL + '/api/cabletv/pay', {
-            uid: userId,
-            iuc: iuc,
-            providerID: String(providerID),
-            planID: String(planID),
-            amount: parsedAmount,
-            pin: pin
-        }, { timeout: 60000 });
+        // ========== CABLE TV ==========
+        if (service === 'cable') {
+            const parsedAmount = parseFloat(amount);
+            const providerID = sessionData.providerID;
+            const planID = sessionData.planID;
+            const iuc = sessionData.iuc;
 
-        if (response.data && response.data.success) {
-            await sendMessengerReply(psid, {
-                text:
-                    '✅ Cable TV Subscription Successful!\n\n' +
-                    'Provider: ' + (sessionData.providerName || '') + '\n' +
-                    'Package: ' + (sessionData.planName || planID) + '\n' +
-                    'IUC: ' + iuc + '\n' +
-                    'Customer: ' + (sessionData.customerName || '') + '\n' +
-                    'Amount: ₦' + parsedAmount.toLocaleString()
-            });
-            return res.json({ success: true });
-        } else {
-            await sendMessengerReply(psid, {
-                text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error')
-            });
-            return res.json({ success: false, closeWindow: true });
+            try {
+                const response = await axios.post(APP_URL + '/api/cabletv/pay', {
+                    uid: userId,
+                    iuc: iuc,
+                    providerID: String(providerID),
+                    planID: String(planID),
+                    amount: parsedAmount,
+                    pin: pin
+                }, { timeout: 60000 });
+
+                if (response.data && response.data.success) {
+                    await sendMessengerReply(psid, {
+                        text:
+                            '✅ Cable TV Subscription Successful!\n\n' +
+                            'Provider: ' + (sessionData.providerName || '') + '\n' +
+                            'Package: ' + (sessionData.planName || planID) + '\n' +
+                            'IUC: ' + iuc + '\n' +
+                            'Customer: ' + (sessionData.customerName || '') + '\n' +
+                            'Amount: ₦' + parsedAmount.toLocaleString()
+                    });
+                    return res.json({ success: true });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error')
+                    });
+                    return res.json({ success: false, closeWindow: true });
+                }
+            } catch (err) {
+                const errMsg = err.response?.data?.error || err.message || 'Server error';
+                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + errMsg });
+                return res.json({ success: false, closeWindow: true });
+            }
         }
-    } catch (err) {
-        const errMsg = err.response?.data?.error || err.message || 'Server error';
-        await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + errMsg });
-        return res.json({ success: false, closeWindow: true });
-    }
-}
+
+        // ========== ELECTRICITY ==========
+        if (service === 'electricity') {
+            const parsedAmount = parseFloat(amount);
+
+            try {
+                const response = await axios.post(APP_URL + '/api/electricity/pay', {
+                    uid: userId,
+                    meterNumber: sessionData.meterNumber,
+                    amount: parsedAmount,
+                    tokenType: sessionData.meterType,
+                    disco: sessionData.disco,
+                    pin: pin
+                }, { timeout: 60000 });
+
+                if (response.data && response.data.success) {
+                    let msg = '✅ Electricity Payment Successful!\n\n';
+                    msg += 'Disco: ' + (sessionData.disco || '') + '\n';
+                    msg += 'Meter: ' + (sessionData.meterNumber || '') + '\n';
+                    msg += 'Type: ' + (sessionData.meterType || '') + '\n';
+                    msg += 'Amount: ₦' + parsedAmount.toLocaleString() + '\n';
+                    if (response.data.token) {
+                        msg += '\n🔑 Token: ' + response.data.token;
+                    }
+                    await sendMessengerReply(psid, { text: msg });
+                    return res.json({ success: true });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error')
+                    });
+                    return res.json({ success: false, closeWindow: true });
+                }
+            } catch (err) {
+                const errMsg = err.response?.data?.error || err.message || 'Server error';
+                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + errMsg });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
 
         return res.json({ success: true });
     } catch (error) {
@@ -770,96 +822,148 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-	// ===== ACTIVE CABLE TV SESSION =====
-const cableSession = cableChat.getCableSession(senderPsid);
-if (cableSession) {
-    const result = await cableChat.handleCableFlow(senderPsid, text, cableSession, APP_URL);
+    // ===== ACTIVE ELECTRICITY SESSION =====
+    const elecSession = electricityChat.getElectricitySession(senderPsid);
+    if (elecSession) {
+        const result = await electricityChat.handleElectricityFlow(senderPsid, text, elecSession);
 
-    if (result && result.type === 'READY_FOR_PIN') {
-        cableChat.clearCableSession(senderPsid);
+        if (result && result.step === 'READY_FOR_PIN') {
+            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+            if (!linkSnap.exists()) {
+                electricityChat.clearElectricitySession(senderPsid);
+                await sendMessengerReply(senderPsid, {
+                    text: '❌ Account not linked. Please login first (option 1).'
+                });
+                return;
+            }
 
-        const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-        if (!linkSnap.exists()) {
-            await sendMessengerReply(senderPsid, {
-                text: '❌ Account not linked. Please login first (option 1).'
-            });
+            electricityChat.clearElectricitySession(senderPsid);
+
+            const pinToken = crypto.randomBytes(32).toString('hex');
+            pendingPinTokens[pinToken] = {
+                psid: senderPsid,
+                service: 'electricity',
+                disco: elecSession.data.disco,
+                discoName: elecSession.data.discoName,
+                meterType: elecSession.data.meterType,
+                meterNumber: elecSession.data.meterNumber,
+                amount: elecSession.data.amount,
+                phone: elecSession.data.meterNumber,   // for display compatibility
+                network: elecSession.data.disco,
+                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+                attempts: 0
+            };
+
+            await sendSecurePinLink(
+                senderPsid,
+                elecSession.data.disco,
+                elecSession.data.meterNumber,
+                elecSession.data.amount,
+                pinToken,
+                {
+                    service: 'electricity',
+                    discoName: elecSession.data.discoName,
+                    meterType: elecSession.data.meterType
+                }
+            );
             return;
         }
 
-        const pinToken = crypto.randomBytes(32).toString('hex');
-        pendingPinTokens[pinToken] = {
-            psid: senderPsid,
-            service: 'cable',
-            providerID: result.data.providerID,
-            providerName: result.data.providerName,
-            planID: result.data.planID,
-            planName: result.data.planName,
-            amount: result.data.amount,
-            iuc: result.data.iuc,
-            customerName: result.data.customerName,
-            phone: result.data.iuc,          // for display compatibility
-            network: result.data.providerName,
-            expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
-            attempts: 0
-        };
-
-        // Build review text
-        const reviewText =
-            'Review Cable TV Transaction:\n\n' +
-            '• Provider: ' + result.data.providerName + '\n' +
-            '• Package: ' + result.data.planName + '\n' +
-            '• IUC: ' + result.data.iuc + '\n' +
-            '• Customer: ' + result.data.customerName + '\n' +
-            '• Amount: ₦' + Number(result.data.amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
-
-        const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
-
-        try {
-            await axios.post(
-                'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
-                {
-                    recipient: { id: senderPsid },
-                    message: {
-                        attachment: {
-                            type: 'template',
-                            payload: {
-                                template_type: 'button',
-                                text: reviewText,
-                                buttons: [{
-                                    type: 'web_url',
-                                    url: webviewUrl,
-                                    title: '🔐 Enter PIN Securely',
-                                    webview_height_ratio: 'compact'
-                                }]
-                            }
-                        }
-                    }
-                }
-            );
-        } catch (err) {
-            await sendMessengerReply(senderPsid, {
-                text: reviewText + '\n\n' + webviewUrl
-            });
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
         }
         return;
     }
 
-    if (result && result.text) {
-        await sendMessengerReply(senderPsid, result);
-    }
-    return;
-}
+    // ===== ACTIVE CABLE TV SESSION =====
+    const cableSession = cableChat.getCableSession(senderPsid);
+    if (cableSession) {
+        const result = await cableChat.handleCableFlow(senderPsid, text, cableSession, APP_URL);
 
-	// ===== ACTIVE FUND WALLET SESSION =====
-const fundSession = fundChat.getFundSession(senderPsid);
-if (fundSession) {
-    const result = await fundChat.handleFundWalletFlow(senderPsid, text, fundSession, APP_URL);
-    if (result && result.text) {
-        await sendMessengerReply(senderPsid, result);
+        if (result && result.type === 'READY_FOR_PIN') {
+            cableChat.clearCableSession(senderPsid);
+
+            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+            if (!linkSnap.exists()) {
+                await sendMessengerReply(senderPsid, {
+                    text: '❌ Account not linked. Please login first (option 1).'
+                });
+                return;
+            }
+
+            const pinToken = crypto.randomBytes(32).toString('hex');
+            pendingPinTokens[pinToken] = {
+                psid: senderPsid,
+                service: 'cable',
+                providerID: result.data.providerID,
+                providerName: result.data.providerName,
+                planID: result.data.planID,
+                planName: result.data.planName,
+                amount: result.data.amount,
+                iuc: result.data.iuc,
+                customerName: result.data.customerName,
+                phone: result.data.iuc,
+                network: result.data.providerName,
+                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+                attempts: 0
+            };
+
+            const reviewText =
+                'Review Cable TV Transaction:\n\n' +
+                '• Provider: ' + result.data.providerName + '\n' +
+                '• Package: ' + result.data.planName + '\n' +
+                '• IUC: ' + result.data.iuc + '\n' +
+                '• Customer: ' + result.data.customerName + '\n' +
+                '• Amount: ₦' + Number(result.data.amount).toLocaleString() + '\n\n' +
+                '🔐 Enter your PIN securely (link expires in 5 minutes):';
+
+            const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
+
+            try {
+                await axios.post(
+                    'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
+                    {
+                        recipient: { id: senderPsid },
+                        message: {
+                            attachment: {
+                                type: 'template',
+                                payload: {
+                                    template_type: 'button',
+                                    text: reviewText,
+                                    buttons: [{
+                                        type: 'web_url',
+                                        url: webviewUrl,
+                                        title: '🔐 Enter PIN Securely',
+                                        webview_height_ratio: 'compact'
+                                    }]
+                                }
+                            }
+                        }
+                    }
+                );
+            } catch (err) {
+                await sendMessengerReply(senderPsid, {
+                    text: reviewText + '\n\n' + webviewUrl
+                });
+            }
+            return;
+        }
+
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
+        }
+        return;
     }
-    return;
-}
+
+    // ===== ACTIVE FUND WALLET SESSION =====
+    const fundSession = fundChat.getFundSession(senderPsid);
+    if (fundSession) {
+        const result = await fundChat.handleFundWalletFlow(senderPsid, text, fundSession, APP_URL);
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
+        }
+        return;
+    }
 
     // ===== ACTIVE DATA SESSION =====
     const dataSession = dataChat.getDataSession(senderPsid);
@@ -937,12 +1041,20 @@ if (fundSession) {
         await sendMessengerReply(senderPsid, initial);
         return;
     }
-	// 5. Cable TV
-if (text === '5' || lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' || lowerText === 'gotv') {
-    const initial = cableChat.startCableFlow(senderPsid);
-    await sendMessengerReply(senderPsid, initial);
-    return;
-}
+
+    // 5. Cable TV
+    if (text === '5' || lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' || lowerText === 'gotv') {
+        const initial = cableChat.startCableFlow(senderPsid);
+        await sendMessengerReply(senderPsid, initial);
+        return;
+    }
+
+    // 6. Electricity
+    if (text === '6' || lowerText.indexOf('electricity') !== -1 || lowerText.indexOf('disco') !== -1) {
+        const initial = electricityChat.startElectricityFlow(senderPsid);
+        await sendMessengerReply(senderPsid, initial);
+        return;
+    }
 
     // 10. Forgot Password
     if (text === '10' || lowerText === 'forgot' || lowerText === 'reset') {
@@ -951,12 +1063,12 @@ if (text === '5' || lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' ||
         return;
     }
 
-	// 11. Fund Wallet
-if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
-    const initial = await fundChat.startFundWalletFlow(senderPsid);
-    await sendMessengerReply(senderPsid, initial);
-    return;
-}
+    // 11. Fund Wallet
+    if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
+        const initial = await fundChat.startFundWalletFlow(senderPsid);
+        await sendMessengerReply(senderPsid, initial);
+        return;
+    }
 
     // 12. Transaction History
     if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
