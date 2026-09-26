@@ -1174,6 +1174,88 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerReply(senderPsid, initial);
         return;
     }
+	
+	// 8. Check Wallet Balance
+if (text === '8' || lowerText === 'balance' || lowerText === 'wallet') {
+    try {
+        const userId = await getLinkedUserId(senderPsid);
+
+        if (!userId) {
+            await sendMessengerReply(senderPsid, {
+                text:
+                    "❌ Your Messenger is not linked to any Dnezerlinks account yet.\n\n" +
+                    "Please login first (option 1) or create an account (option 2) to view your wallet balance."
+            });
+            return;
+        }
+
+        const userSnap = await admin.database().ref('users/' + userId).once('value');
+
+        if (!userSnap.exists()) {
+            await sendMessengerReply(senderPsid, {
+                text: "❌ Account record not found. Please contact support."
+            });
+            return;
+        }
+
+        const userData = userSnap.val();
+        const balance = userData.balance !== undefined ? Number(userData.balance) : 0;
+        const name = userData.name || 'User';
+
+        await sendMessengerReply(senderPsid, {
+            text:
+                "💰 *Dnezerlinks Wallet Balance*\n\n" +
+                "Name: " + name + "\n" +
+                "Balance: ₦" + balance.toLocaleString() + "\n\n" +
+                "Type 'menu' to return to main options."
+        });
+    } catch (err) {
+        console.error("Balance check error:", err);
+        await sendMessengerReply(senderPsid, {
+            text: "❌ Unable to retrieve wallet balance at the moment. Please try again later."
+        });
+    }
+    return;
+}
+
+// 9. Check Account Status (Linked or Not)
+if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
+    try {
+        const userId = await getLinkedUserId(senderPsid);
+
+        if (userId) {
+            const userSnap = await admin.database().ref('users/' + userId).once('value');
+            const userData = userSnap.exists() ? userSnap.val() : {};
+            const name = userData.name || 'User';
+            const email = userData.email || 'Not available';
+
+            await sendMessengerReply(senderPsid, {
+                text:
+                    "✅ *Account Status*\n\n" +
+                    "Your Messenger is successfully linked to a Dnezerlinks account.\n\n" +
+                    "Name: " + name + "\n" +
+                    "Email: " + email + "\n\n" +
+                    "You can now use all services (Airtime, Data, Electricity, Bulk SMS, etc)."
+            });
+        } else {
+            await sendMessengerReply(senderPsid, {
+                text:
+                    "ℹ️ *Account Status*\n\n" +
+                    "Your Messenger is currently *not linked* to any Dnezerlinks account.\n\n" +
+                    "To enjoy full access to our services, please:\n\n" +
+                    "1️⃣ Type *1* to Login\n" +
+                    "2️⃣ Type *2* to Create a new Account\n\n" +
+                    "We look forward to serving you!"
+            });
+        }
+    } catch (err) {
+        console.error("Status check error:", err);
+        await sendMessengerReply(senderPsid, {
+            text: "❌ Unable to check account status right now. Please try again later."
+        });
+    }
+    return;
+}
 
     // 10. Forgot Password
     if (text === '10' || lowerText === 'forgot' || lowerText === 'reset') {
