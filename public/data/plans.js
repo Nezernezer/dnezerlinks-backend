@@ -235,7 +235,7 @@ const rawPlans = {
 
 
 // This function processes the plans to include the final price
-const addProfit = (price) => Math.ceil(price + (price * 0.18));
+const addProfit = (price) => Math.ceil(price + (price * 0.11));
 
 const processPlans = (data) => {
     let processed = {};
