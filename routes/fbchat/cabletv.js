@@ -2,10 +2,12 @@
 const path = require('path');
 const axios = require('axios');
 
-// ---- SAFE LOAD OF CABLE PLANS ----
+// ---- BULLETPROOF LOAD OF CABLE PLANS ----
 let localPlans = {};
 try {
-    const plansModule = require('../../public/cable/cable_plans');
+    // Construct absolute path using process.cwd() (the root of your project)
+    const absolutePlansPath = path.join(process.cwd(), 'public', 'cable', 'cable_plans');
+    const plansModule = require(absolutePlansPath);
 
     if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
         localPlans = plansModule.localPlans;
@@ -15,29 +17,11 @@ try {
         localPlans = {};
     }
 
-    console.log('✅ Cable plans loaded. Providers:', Object.keys(localPlans));
-    if (localPlans['1']) {
-        console.log('   GOTV plans count:', localPlans['1'].length);
-    }
-} catch (err1) {
-    try {
-        const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
-
-        if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
-            localPlans = plansModule.localPlans;
-        } else if (plansModule['1'] || plansModule['2'] || plansModule['3'] || plansModule['4']) {
-            localPlans = plansModule;
-        } else {
-            localPlans = {};
-        }
-
-        console.log('✅ Cable plans loaded via fallback. Providers:', Object.keys(localPlans));
-    } catch (err2) {
-        console.error('❌ CRITICAL: Could not load cable_plans.js');
-        console.error('Error 1:', err1.message);
-        console.error('Error 2:', err2.message);
-        localPlans = {};
-    }
+    console.log('✅ Cable plans loaded successfully. Providers found:', Object.keys(localPlans));
+} catch (err) {
+    console.error('❌ CRITICAL: Could not load cable_plans.js from root path.');
+    console.error('Error details:', err.message);
+    localPlans = {};
 }
 
 const cableSessions = {};
@@ -104,8 +88,8 @@ async function handleCableFlow(psid, text, session, APP_URL) {
 
             const plans = (localPlans && localPlans[provider.id]) ? localPlans[provider.id] : [];
 
-            console.log('Provider:', provider.id, '| Plans found:', plans.length);
-            console.log('Available keys in localPlans:', Object.keys(localPlans || {}));
+            console.log('Provider ID:', provider.id, '| Plans found count:', plans.length);
+            console.log('Loaded keys in localPlans:', Object.keys(localPlans || {}));
 
             if (!plans || plans.length === 0) {
                 clearCableSession(psid);
