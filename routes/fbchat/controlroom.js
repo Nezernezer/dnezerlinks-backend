@@ -11,6 +11,7 @@ const fundChat = require('./fundwallet');
 const cableChat = require('./cabletv');
 const electricityChat = require('./electricity');
 const bulksmsChat = require('./bulksms');
+const historyChat = require('./history'); 
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -1270,14 +1271,12 @@ if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
         await sendMessengerReply(senderPsid, initial);
         return;
     }
-
-    // 12. Transaction History
-    if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
-        await sendMessengerReply(senderPsid, {
-            text: '📜 Transaction History\n\nThis feature is coming soon. Check the web dashboard for now.'
-        });
-        return;
-    }
+	// 12. Transaction History
+if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
+    const result = await historyChat.getTransactionHistory(senderPsid);
+    await sendMessengerReply(senderPsid, result);
+    return;
+}
 
     // 13. Logout
     if (text === '13' || lowerText === 'logout') {
