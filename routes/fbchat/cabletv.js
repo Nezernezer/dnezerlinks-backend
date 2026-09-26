@@ -1,23 +1,44 @@
 // routes/fbchat/cabletv.js
 const path = require('path');
 const axios = require('axios');
+const fs = require('fs');
 
 // ---- SAFE LOAD OF CABLE PLANS ----
 let localPlans = {};
-try {
-    const plansModule = require('../../public/cable/cable_plans');
-    localPlans = plansModule.localPlans || plansModule || {};
-    console.log('✅ Cable plans loaded. Providers:', Object.keys(localPlans));
-} catch (err1) {
-    try {
-        const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
-        localPlans = plansModule.localPlans || plansModule || {};
-        console.log('✅ Cable plans loaded via fallback. Providers:', Object.keys(localPlans));
-    } catch (err2) {
-        console.error('❌ CRITICAL: Could not load cable_plans.js');
-        console.error(err1.message, err2.message);
-        localPlans = {};
+
+function tryLoadPlans() {
+    const possiblePaths = [
+        path.join(__dirname, '../../public/cable/cable_plans.js'),
+        path.join(__dirname, '../../../public/cable/cable_plans.js'),
+        path.join(process.cwd(), 'public/cable/cable_plans.js'),
+        path.join(process.cwd(), 'routes/../public/cable/cable_plans.js')
+    ];
+
+    for (let i = 0; i < possiblePaths.length; i++) {
+        const p = possiblePaths[i];
+        try {
+            if (fs.existsSync(p)) {
+                // Clear cache so we always get fresh data
+                delete require.cache[require.resolve(p)];
+                const mod = require(p);
+                const plans = mod.localPlans || mod || {};
+                if (plans && (plans['1'] || plans['2'] || plans[1] || plans[2])) {
+                    console.log('✅ Cable plans loaded from:', p);
+                    console.log('   Providers found:', Object.keys(plans));
+                    return plans;
+                }
+            }
+        } catch (e) {
+            console.log('⚠️ Failed path', p, '→', e.message);
+        }
     }
+    return null;
+}
+
+localPlans = tryLoadPlans() || {};
+
+if (!Object.keys(localPlans).length) {
+    console.error('❌ CRITICAL: cable_plans.js could not be loaded. Check file location and module.exports');
 }
 
 const cableSessions = {};
@@ -82,29 +103,35 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            if (!localPlans[provider.id] || localPlans[provider.id].length === 0) {
+            // Support both string and number keys
+            const plans = localPlans[provider.id] || localPlans[Number(provider.id)] || [];
+
+            console.log('Selected provider:', provider.id, '→ plans found:', plans.length);
+
+            if (!plans || plans.length === 0) {
                 clearCableSession(psid);
-                return { text: '❌ No packages available for this provider right now.' };
+                return {
+                    text:
+                        '❌ No packages available for this provider right now.\n\n' +
+                        'Available providers in system: ' + (Object.keys(localPlans).join(', ') || 'none') +
+                        '\n\nType "menu" to go back.'
+                };
             }
 
             session.data.providerID = provider.id;
             session.data.providerName = provider.name;
             session.step = 'CABLE_PLAN';
+            session.data.plans = plans;
 
-            const plans = localPlans[provider.id];
             let msg = 'Provider: ' + provider.name + '\n\nSelect Package:\n\n';
-
             plans.forEach(function (plan, i) {
-                // Clean name (remove original price if present)
                 var cleanName = (plan.name || '').split(' - ₦')[0].trim();
-                // Sometimes name already has price in different format, still clean
                 cleanName = cleanName.replace(/₦[\d,]+/g, '').trim();
                 var finalPrice = Number(plan.price).toLocaleString();
                 msg += (i + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the package.';
 
-            session.data.plans = plans;
             return { text: msg };
         }
 
@@ -123,7 +150,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             session.data.planID = selectedPlan.id;
             session.data.amount = selectedPlan.price;
 
-            // Clean plan name for display
             var cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
             cleanPlanName = cleanPlanName.replace(/₦[\d,]+/g, '').trim();
             session.data.planName = cleanPlanName;
@@ -146,7 +172,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
 
             session.data.iuc = iuc;
 
-            // Validate IUC with provider
             try {
                 const validateRes = await axios.post(
                     APP_URL + '/api/cabletv/validate',
@@ -168,7 +193,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 const customerName = validateRes.data.customerName || 'Customer';
                 session.data.customerName = customerName;
 
-                // Ready for PIN
                 return {
                     type: 'READY_FOR_PIN',
                     data: {
