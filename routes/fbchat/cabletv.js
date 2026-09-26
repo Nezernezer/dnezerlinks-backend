@@ -2,28 +2,25 @@
 const path = require('path');
 const axios = require('axios');
 
-// ---- SAFE LOAD OF CABLE PLANS ----
+// ---- CLEAN, INDEPENDENT CABLE PLANS LOADER ----
 let localPlans = {};
 try {
-    const absolutePlansPath = path.join(process.cwd(), 'public', 'cable', 'cable_plans');
-    const plansModule = require(absolutePlansPath);
-
-    if (plansModule && plansModule.localPlans) {
-        localPlans = plansModule.localPlans;
-    } else if (plansModule && (plansModule['1'] || plansModule['2'])) {
-        localPlans = plansModule;
-    }
-
-    console.log('✅ Cable plans loaded successfully. Available providers:', Object.keys(localPlans));
-} catch (err) {
-    console.error('❌ CRITICAL: Could not load cable_plans.js');
-    console.error('Error details:', err.stack || err.message);
+    // Directly require your cable plans file using a safe absolute path
+    const plansModule = require(path.join(process.cwd(), 'public', 'cable', 'cable_plans'));
+    
+    // Assign directly if localPlans exists, otherwise fallback to the module itself
+    localPlans = plansModule.localPlans || plansModule;
+    
+    console.log('✅ Cable plans loaded successfully. Providers found:', Object.keys(localPlans || {}));
+} catch (error) {
+    console.error('❌ Failed to load cable plans module:', error.message);
     localPlans = {};
 }
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
+// Provider mappings for standard inputs
 const PROVIDERS = {
     '1': { id: '1', name: 'GOTV' },
     '2': { id: '2', name: 'DSTV' },
@@ -72,7 +69,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
     try {
         const input = text.trim();
 
-        // ========== STEP 1: Provider ==========
+        // ========== STEP 1: Select Provider ==========
         if (session.step === 'CABLE_PROVIDER') {
             const key = input.toLowerCase();
             const provider = PROVIDERS[key] || PROVIDERS[input];
@@ -83,15 +80,8 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            // ---- BULLETPROOF PLAN LOOKUP ----
-            let plans = [];
-            if (localPlans) {
-                plans = localPlans[provider.id] || localPlans[Number(provider.id)] || localPlans[String(provider.id)] || [];
-            }
-
-            console.log('🔍 Target Provider ID:', provider.id);
-            console.log('🔍 Plans found count:', plans.length);
-            console.log('🔍 Available keys in localPlans:', Object.keys(localPlans || {}));
+            // Fetch plans safely using string or numeric keys
+            const plans = localPlans[provider.id] || localPlans[Number(provider.id)] || [];
 
             if (!plans || plans.length === 0) {
                 clearCableSession(psid);
@@ -109,33 +99,33 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             session.data.plans = plans;
 
             let msg = 'Provider: ' + provider.name + '\n\nSelect Package:\n\n';
-            plans.forEach(function (plan, i) {
-                var cleanName = (plan.name || '').split(' - ₦')[0].trim();
+            plans.forEach(function (plan, index) {
+                let cleanName = (plan.name || '').split(' - ₦')[0].trim();
                 cleanName = cleanName.replace(/₦[\d,]+/g, '').trim();
-                var finalPrice = Number(plan.price).toLocaleString();
-                msg += (i + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
+                let finalPrice = Number(plan.price).toLocaleString();
+                msg += (index + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the package.';
 
             return { text: msg };
         }
 
-        // ========== STEP 2: Plan ==========
+        // ========== STEP 2: Select Plan ==========
         if (session.step === 'CABLE_PLAN') {
             const plans = session.data.plans || [];
-            const idx = parseInt(input, 10) - 1;
+            const index = parseInt(input, 10) - 1;
 
-            if (isNaN(idx) || idx < 0 || idx >= plans.length) {
+            if (isNaN(index) || index < 0 || index >= plans.length) {
                 return {
-                    text: '❌ Invalid package. Please reply with a valid number from the list:'
+                    text: '❌ Invalid package choice. Please reply with a valid number from the list:'
                 };
             }
 
-            const selectedPlan = plans[idx];
+            const selectedPlan = plans[index];
             session.data.planID = selectedPlan.id;
             session.data.amount = selectedPlan.price;
 
-            var cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
+            let cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
             cleanPlanName = cleanPlanName.replace(/₦[\d,]+/g, '').trim();
             session.data.planName = cleanPlanName;
 
@@ -148,7 +138,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             };
         }
 
-        // ========== STEP 3: IUC + Validate ==========
+        // ========== STEP 3: Input IUC & Validate ==========
         if (session.step === 'CABLE_IUC') {
             const iuc = input.replace(/\s+/g, '');
             if (iuc.length < 8) {
@@ -191,8 +181,8 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                         customerName: customerName
                     }
                 };
-            } catch (valErr) {
-                console.error('Cable validate error:', valErr.message);
+            } catch (validationError) {
+                console.error('Cable validation API error:', validationError.message);
                 return {
                     text: '❌ Could not verify IUC right now. Please try again or type "menu".'
                 };
@@ -202,8 +192,8 @@ async function handleCableFlow(psid, text, session, APP_URL) {
         clearCableSession(psid);
         return { text: 'Session reset. Type "menu" to start over.' };
 
-    } catch (err) {
-        console.error('❌ handleCableFlow error:', err);
+    } catch (error) {
+        console.error('❌ Critical handleCableFlow error:', error);
         clearCableSession(psid);
         return {
             text: '❌ Something went wrong. Please type "menu" and try again.'
