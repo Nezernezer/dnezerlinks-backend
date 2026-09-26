@@ -1,5 +1,4 @@
 const admin = require('firebase-admin');
-const crypto = require('crypto');
 
 const airtimeSessions = {};
 
@@ -21,8 +20,8 @@ function clearAirtimeSession(senderPsid) {
 }
 
 /**
- * Handles only the early steps (phone + network).
- * The amount step is handled directly in controlroom.js for reliability.
+ * Handles only phone + network steps.
+ * Amount step is handled in controlroom.js for reliability.
  */
 async function handleAirtimeFlow(senderPsid, text, session) {
     const cleanText = text.trim();

@@ -19,7 +19,6 @@ const pendingPinTokens = {};
 const pendingAuthTokens = {};
 const pendingFundTokens = {};
 
-const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 const FUND_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
@@ -40,7 +39,21 @@ async function sendMessengerReply(senderPsid, response) {
     }
 }
 
-async function sendMessengerButtonTemplate(senderPsid, payload) {
+/**
+ * Tries to send a nice button first.
+ * If Facebook rejects it, automatically falls back to a plain text link.
+ */
+async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
+    const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
+
+    const reviewText =
+        `Review Airtime Transaction:\n\n` +
+        `• Network: ${network.toUpperCase()}\n` +
+        `• Phone: ${phone}\n` +
+        `• Amount: ₦${Number(amount).toLocaleString()}\n\n` +
+        `🔐 Enter your PIN securely (link expires in 5 minutes):`;
+
+    // 1. Try button template first
     try {
         await axios.post(
             `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -51,12 +64,12 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                         type: "template",
                         payload: {
                             template_type: "button",
-                            text: payload.text,
+                            text: reviewText,
                             buttons: [
                                 {
                                     type: "web_url",
-                                    url: payload.url,
-                                    title: payload.buttonText,
+                                    url: webviewUrl,
+                                    title: "🔐 Enter PIN Securely",
                                     webview_height_ratio: "compact"
                                 }
                             ]
@@ -65,16 +78,17 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
                 }
             }
         );
-        console.log('✅ Button sent successfully →', payload.url);
+        console.log("✅ Button template sent successfully");
+        return;
     } catch (err) {
-        const fbError = err.response?.data?.error || err.message;
-        console.error('❌ Button error:', JSON.stringify(fbError, null, 2));
-
-        // Always show the real error in the chat
-        await sendMessengerReply(senderPsid, {
-            text: `⚠️ Could not open the secure PIN page.\n\nError: ${typeof fbError === 'object' ? (fbError.message || JSON.stringify(fbError)) : fbError}`
-        });
+        console.log("Button failed → falling back to plain text link");
+        console.error("Button error:", err.response?.data || err.message);
     }
+
+    // 2. Fallback: plain text link (very reliable)
+    await sendMessengerReply(senderPsid, {
+        text: `\( {reviewText}\n\n \){webviewUrl}`
+    });
 }
 
 async function getLinkedUserId(senderPsid) {
@@ -352,7 +366,7 @@ async function handleUserMessage(senderPsid, text) {
     const session = airtimeChat.getAirtimeSession(senderPsid);
 
     if (session) {
-        // Special reliable handling for the amount step
+        // Reliable amount step
         if (session.step === 'AIRTIME_AMOUNT') {
             const amountNum = parseFloat(text.trim());
 
@@ -391,14 +405,14 @@ async function handleUserMessage(senderPsid, text) {
                 attempts: 0
             };
 
-            // Send button the same reliable way the old working code did
-            const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
-
-            await sendMessengerButtonTemplate(senderPsid, {
-                text: `Review Airtime Transaction:\n\n• Network: ${session.data.network.toUpperCase()}\n• Phone: \( {session.data.phone}\n• Amount: ₦ \){session.data.amount.toLocaleString()}\n\nClick below to enter your PIN securely (Link expires in 5 minutes):`,
-                buttonText: "🔐 Enter PIN Securely",
-                url: webviewUrl
-            });
+            // Send link (button first, text fallback)
+            await sendSecurePinLink(
+                senderPsid,
+                session.data.network,
+                session.data.phone,
+                session.data.amount,
+                pinToken
+            );
 
             return;
         }
