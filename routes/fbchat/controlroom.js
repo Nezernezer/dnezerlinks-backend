@@ -7,15 +7,12 @@ const airtimeChat = require('./airtime');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// ========== TEMPORARY HARD-CODED (for testing) ==========
+// ========== TEMPORARY HARD-CODED ==========
 const APP_URL = 'https://api.dlinks.name.ng';
 console.log('Forced APP_URL →', APP_URL);
-// =======================================================
+// =========================================
 
 const pendingPinTokens = {};
-const pendingAuthTokens = {};
-const pendingFundTokens = {};
-
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 
 // ========== HELPERS ==========
@@ -23,7 +20,7 @@ const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 async function sendMessengerReply(senderPsid, response) {
     try {
         await axios.post(
-            `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
             {
                 recipient: { id: senderPsid },
                 message: response
@@ -35,7 +32,8 @@ async function sendMessengerReply(senderPsid, response) {
 }
 
 async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
-    const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
+    // Safe string concatenation (no template literals)
+    const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
 
     console.log('====== DEBUG URL ======');
     console.log('APP_URL     →', APP_URL);
@@ -43,30 +41,30 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
     console.log('=======================');
 
     const reviewText =
-        `Review Airtime Transaction:\n\n` +
-        `• Network: ${network.toUpperCase()}\n` +
-        `• Phone: ${phone}\n` +
-        `• Amount: ₦${Number(amount).toLocaleString()}\n\n` +
-        `🔐 Enter your PIN securely (link expires in 5 minutes):`;
+        'Review Airtime Transaction:\n\n' +
+        '• Network: ' + network.toUpperCase() + '\n' +
+        '• Phone: ' + phone + '\n' +
+        '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+        '🔐 Enter your PIN securely (link expires in 5 minutes):';
 
     // 1. Try button first
     try {
         await axios.post(
-            `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
             {
                 recipient: { id: senderPsid },
                 message: {
                     attachment: {
-                        type: "template",
+                        type: 'template',
                         payload: {
-                            template_type: "button",
+                            template_type: 'button',
                             text: reviewText,
                             buttons: [
                                 {
-                                    type: "web_url",
+                                    type: 'web_url',
                                     url: webviewUrl,
-                                    title: "🔐 Enter PIN Securely",
-                                    webview_height_ratio: "compact"
+                                    title: '🔐 Enter PIN Securely',
+                                    webview_height_ratio: 'compact'
                                 }
                             ]
                         }
@@ -83,13 +81,13 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
 
     // 2. Fallback – plain text link
     await sendMessengerReply(senderPsid, {
-        text: `\( {reviewText}\n\n \){webviewUrl}`
+        text: reviewText + '\n\n' + webviewUrl
     });
 }
 
 async function getLinkedUserId(senderPsid) {
     try {
-        const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
+        const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
         if (linkSnap.exists() && linkSnap.val().userId) {
             return linkSnap.val().userId;
         }
@@ -140,7 +138,7 @@ router.post('/', async (req, res) => {
 
 // Secure PIN Portal
 router.get('/secure-pin-portal', (req, res) => {
-    const { token } = req.query;
+    const token = req.query.token;
 
     if (!token || !pendingPinTokens[token]) {
         return res.status(400).send(`
@@ -160,10 +158,13 @@ router.get('/secure-pin-portal', (req, res) => {
 
     if (Date.now() > sessionData.expiresAt) {
         delete pendingPinTokens[token];
-        return res.status(400).send("<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>");
+        return res.status(400).send('<h3>❌ Link has expired. Please restart the transaction in Messenger.</h3>');
     }
 
-    const { service, phone, network, amount } = sessionData;
+    const service = sessionData.service;
+    const phone = sessionData.phone;
+    const network = sessionData.network;
+    const amount = sessionData.amount;
 
     res.send(`
         <!DOCTYPE html>
@@ -209,7 +210,7 @@ router.get('/secure-pin-portal', (req, res) => {
             <script>
                 function closeMessengerWindow() {
                     if (typeof MessengerExtensions !== 'undefined') {
-                        MessengerExtensions.requestCloseBrowser(() => {}, () => window.close());
+                        MessengerExtensions.requestCloseBrowser(function() {}, function() { window.close(); });
                     } else {
                         window.close();
                     }
@@ -231,7 +232,7 @@ router.get('/secure-pin-portal', (req, res) => {
                         const response = await fetch('./secure-pin-portal-submit', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token, pin })
+                            body: JSON.stringify({ token: token, pin: pin })
                         });
                         const result = await response.json();
                         if (result.success || result.closeWindow) {
@@ -248,7 +249,7 @@ router.get('/secure-pin-portal', (req, res) => {
                         loader.style.display = 'none';
                         submitBtn.disabled = false;
                         submitBtn.style.opacity = '1';
-                        errorMsg.innerText = "Network error. Please try again.";
+                        errorMsg.innerText = 'Network error. Please try again.';
                         errorMsg.style.display = 'block';
                     }
                 });
@@ -260,32 +261,37 @@ router.get('/secure-pin-portal', (req, res) => {
 
 // PIN Submit
 router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
-    const { token, pin } = req.body;
+    const token = req.body.token;
+    const pin = req.body.pin;
 
     if (!token || !pendingPinTokens[token]) {
-        return res.json({ success: false, message: "❌ Link is invalid or has already expired.", closeWindow: true });
+        return res.json({ success: false, message: '❌ Link is invalid or has already expired.', closeWindow: true });
     }
 
     const sessionData = pendingPinTokens[token];
 
     if (Date.now() > sessionData.expiresAt) {
         delete pendingPinTokens[token];
-        return res.json({ success: false, message: "❌ Link has expired. Please restart your transaction.", closeWindow: true });
+        return res.json({ success: false, message: '❌ Link has expired. Please restart your transaction.', closeWindow: true });
     }
 
-    const { psid, service, phone, network, amount } = sessionData;
+    const psid = sessionData.psid;
+    const service = sessionData.service;
+    const phone = sessionData.phone;
+    const network = sessionData.network;
+    const amount = sessionData.amount;
 
     try {
         const userId = await getLinkedUserId(psid);
         if (!userId) {
             delete pendingPinTokens[token];
-            return res.json({ success: false, message: "❌ Account not linked. Please log in first.", closeWindow: true });
+            return res.json({ success: false, message: '❌ Account not linked. Please log in first.', closeWindow: true });
         }
 
-        const userSnap = await admin.database().ref(`users/${userId}`).once('value');
+        const userSnap = await admin.database().ref('users/' + userId).once('value');
         if (!userSnap.exists()) {
             delete pendingPinTokens[token];
-            return res.json({ success: false, message: "❌ User profile not found.", closeWindow: true });
+            return res.json({ success: false, message: '❌ User profile not found.', closeWindow: true });
         }
 
         const userData = userSnap.val();
@@ -298,14 +304,14 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             if (sessionData.attempts >= 3) {
                 delete pendingPinTokens[token];
                 await sendMessengerReply(psid, {
-                    text: "❌ Incorrect PIN entered 3 times. Transaction cancelled for security.\n\nType 'menu' to start over."
+                    text: '❌ Incorrect PIN entered 3 times. Transaction cancelled for security.\n\nType \'menu\' to start over.'
                 });
-                return res.json({ success: false, message: "Max attempts reached.", closeWindow: true });
+                return res.json({ success: false, message: 'Max attempts reached.', closeWindow: true });
             }
 
             return res.json({
                 success: false,
-                message: `❌ Invalid PIN. Try again (\( {attemptsLeft} attempt \){attemptsLeft > 1 ? 's' : ''} left).`,
+                message: '❌ Invalid PIN. Try again (' + attemptsLeft + ' attempt' + (attemptsLeft > 1 ? 's' : '') + ' left).',
                 closeWindow: false
             });
         }
@@ -315,9 +321,9 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         if (service === 'airtime') {
             const parsedAmount = parseFloat(amount);
             const networkMap = { 'mtn': '1', 'glo': '2', '9mobile': '3', 'airtel': '4' };
-            const networkID = networkMap[network?.toLowerCase()] || network;
+            const networkID = networkMap[network.toLowerCase()] || network;
 
-            const airtimeEndpoint = `${APP_URL}/api/airtime/buy`;
+            const airtimeEndpoint = APP_URL + '/api/airtime/buy';
             const response = await axios.post(airtimeEndpoint, {
                 uid: userId,
                 phone: phone,
@@ -330,12 +336,12 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             if (resData && resData.success) {
                 await sendMessengerReply(psid, {
-                    text: `✅ Airtime Purchase Successful!\n\nNetwork: ${network.toUpperCase()}\nPhone: ${phone}\nAmount: NGN ${parsedAmount.toLocaleString()}`
+                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nAmount: NGN ' + parsedAmount.toLocaleString()
                 });
                 return res.json({ success: true });
             } else {
                 const errReason = resData.error || 'Transaction could not be completed.';
-                await sendMessengerReply(psid, { text: `❌ Airtime Failed: ${errReason}` });
+                await sendMessengerReply(psid, { text: '❌ Airtime Failed: ' + errReason });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -344,8 +350,8 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
     } catch (error) {
         delete pendingPinTokens[token];
-        const errReason = error.response?.data?.error || error.message || "Server error processing transaction.";
-        await sendMessengerReply(psid, { text: `❌ Transaction Failed: ${errReason}` });
+        const errReason = (error.response && error.response.data && error.response.data.error) || error.message || 'Server error processing transaction.';
+        await sendMessengerReply(psid, { text: '❌ Transaction Failed: ' + errReason });
         return res.json({ success: false, closeWindow: true });
     }
 });
@@ -363,18 +369,18 @@ async function handleUserMessage(senderPsid, text) {
 
             if (isNaN(amountNum) || amountNum < 100) {
                 await sendMessengerReply(senderPsid, {
-                    text: "❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:"
+                    text: '❌ Invalid amount. Minimum airtime purchase is ₦100. Please enter a valid amount:'
                 });
                 return;
             }
 
             session.data.amount = amountNum;
 
-            const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
+            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
             if (!linkSnap.exists()) {
                 airtimeChat.clearAirtimeSession(senderPsid);
                 await sendMessengerReply(senderPsid, {
-                    text: "❌ Your account is not linked. Please log in first (option 1)."
+                    text: '❌ Your account is not linked. Please log in first (option 1).'
                 });
                 return;
             }
@@ -408,29 +414,29 @@ async function handleUserMessage(senderPsid, text) {
             const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
             await sendMessengerReply(senderPsid, reply);
         } catch (err) {
-            console.error("Airtime flow error:", err);
+            console.error('Airtime flow error:', err);
             await sendMessengerReply(senderPsid, {
-                text: "❌ Something went wrong. Please type 'menu' and try again."
+                text: '❌ Something went wrong. Please type \'menu\' and try again.'
             });
         }
         return;
     }
 
-    if (text === '3' || lowerText.includes('airtime')) {
+    if (text === '3' || lowerText.indexOf('airtime') !== -1) {
         const initialReply = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initialReply);
         return;
     }
 
-    if (lowerText.includes('menu') || lowerText.includes('start') || lowerText.includes('hi') || lowerText.includes('hello')) {
+    if (lowerText.indexOf('menu') !== -1 || lowerText.indexOf('start') !== -1 || lowerText.indexOf('hi') !== -1 || lowerText.indexOf('hello') !== -1) {
         await sendMessengerReply(senderPsid, {
-            text: "Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Log Out\n12. Fund Wallet\n13. Transaction History\n\nReply with a number."
+            text: 'Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Log Out\n12. Fund Wallet\n13. Transaction History\n\nReply with a number.'
         });
         return;
     }
 
     await sendMessengerReply(senderPsid, {
-        text: "I didn't quite get that. Type 'menu' to see available options."
+        text: 'I didn\'t quite get that. Type \'menu\' to see available options.'
     });
 }
 

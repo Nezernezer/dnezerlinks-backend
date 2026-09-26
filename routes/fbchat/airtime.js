@@ -19,10 +19,6 @@ function clearAirtimeSession(senderPsid) {
     delete airtimeSessions[senderPsid];
 }
 
-/**
- * Handles only phone + network steps.
- * Amount step is handled in controlroom.js for reliability.
- */
 async function handleAirtimeFlow(senderPsid, text, session) {
     const cleanText = text.trim();
 
