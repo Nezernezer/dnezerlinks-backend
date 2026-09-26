@@ -1,15 +1,3 @@
-async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
-    const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
-
-    // ===== TEMPORARY DEBUG =====
-    console.log("====== DEBUG URL ======");
-    console.log("APP_URL     →", JSON.stringify(APP_URL));
-    console.log("webviewUrl  →", webviewUrl);
-    console.log("=======================");
-    // ===========================
-
-    // ... rest of the function stays the same
-}
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -19,21 +7,16 @@ const airtimeChat = require('./airtime');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// ========== SAFE APP_URL ==========
-let APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
-APP_URL = APP_URL.trim().replace(/\/+$/, '');
-if (!APP_URL.startsWith('http')) {
-    APP_URL = 'https://' + APP_URL;
-}
-// ==================================
+// ========== TEMPORARY HARD-CODED (for testing) ==========
+const APP_URL = 'https://api.dlinks.name.ng';
+console.log('Forced APP_URL →', APP_URL);
+// =======================================================
 
 const pendingPinTokens = {};
 const pendingAuthTokens = {};
 const pendingFundTokens = {};
 
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
-const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
-const FUND_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 
 // ========== HELPERS ==========
 
@@ -51,12 +34,13 @@ async function sendMessengerReply(senderPsid, response) {
     }
 }
 
-/**
- * Tries to send a nice button first.
- * If Facebook rejects it, automatically falls back to a plain text link.
- */
 async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
     const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
+
+    console.log('====== DEBUG URL ======');
+    console.log('APP_URL     →', APP_URL);
+    console.log('webviewUrl  →', webviewUrl);
+    console.log('=======================');
 
     const reviewText =
         `Review Airtime Transaction:\n\n` +
@@ -65,7 +49,7 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
         `• Amount: ₦${Number(amount).toLocaleString()}\n\n` +
         `🔐 Enter your PIN securely (link expires in 5 minutes):`;
 
-    // 1. Try button template first
+    // 1. Try button first
     try {
         await axios.post(
             `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -90,14 +74,14 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
                 }
             }
         );
-        console.log("✅ Button template sent successfully");
+        console.log('✅ Button sent successfully');
         return;
     } catch (err) {
-        console.log("Button failed → falling back to plain text link");
-        console.error("Button error:", err.response?.data || err.message);
+        console.log('Button failed → falling back to plain text link');
+        console.error('Button error:', err.response?.data || err.message);
     }
 
-    // 2. Fallback: plain text link (very reliable)
+    // 2. Fallback – plain text link
     await sendMessengerReply(senderPsid, {
         text: `\( {reviewText}\n\n \){webviewUrl}`
     });
@@ -117,7 +101,6 @@ async function getLinkedUserId(senderPsid) {
 
 // ========== WEBHOOK ROUTES ==========
 
-// 1. Verification
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -133,7 +116,6 @@ router.get('/', (req, res) => {
     return res.sendStatus(400);
 });
 
-// 2. Incoming messages
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -156,7 +138,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 3. Secure PIN Portal (GET)
+// Secure PIN Portal
 router.get('/secure-pin-portal', (req, res) => {
     const { token } = req.query;
 
@@ -276,7 +258,7 @@ router.get('/secure-pin-portal', (req, res) => {
     `);
 });
 
-// 4. PIN Submit
+// PIN Submit
 router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     const { token, pin } = req.body;
 
@@ -328,7 +310,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             });
         }
 
-        // Correct PIN
         delete pendingPinTokens[token];
 
         if (service === 'airtime') {
@@ -374,11 +355,9 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
 
-    // ========== ACTIVE AIRTIME SESSION ==========
     const session = airtimeChat.getAirtimeSession(senderPsid);
 
     if (session) {
-        // Reliable amount step
         if (session.step === 'AIRTIME_AMOUNT') {
             const amountNum = parseFloat(text.trim());
 
@@ -391,7 +370,6 @@ async function handleUserMessage(senderPsid, text) {
 
             session.data.amount = amountNum;
 
-            // Check if linked
             const linkSnap = await admin.database().ref(`messenger_links/${senderPsid}`).once('value');
             if (!linkSnap.exists()) {
                 airtimeChat.clearAirtimeSession(senderPsid);
@@ -401,10 +379,8 @@ async function handleUserMessage(senderPsid, text) {
                 return;
             }
 
-            // Clear session
             airtimeChat.clearAirtimeSession(senderPsid);
 
-            // Generate token
             const pinToken = crypto.randomBytes(32).toString('hex');
 
             pendingPinTokens[pinToken] = {
@@ -417,7 +393,6 @@ async function handleUserMessage(senderPsid, text) {
                 attempts: 0
             };
 
-            // Send link (button first, text fallback)
             await sendSecurePinLink(
                 senderPsid,
                 session.data.network,
@@ -429,7 +404,6 @@ async function handleUserMessage(senderPsid, text) {
             return;
         }
 
-        // Handle earlier steps (phone / network)
         try {
             const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
             await sendMessengerReply(senderPsid, reply);
@@ -442,14 +416,12 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // ========== START AIRTIME ==========
     if (text === '3' || lowerText.includes('airtime')) {
         const initialReply = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initialReply);
         return;
     }
 
-    // ========== MENU ==========
     if (lowerText.includes('menu') || lowerText.includes('start') || lowerText.includes('hi') || lowerText.includes('hello')) {
         await sendMessengerReply(senderPsid, {
             text: "Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n11. Log Out\n12. Fund Wallet\n13. Transaction History\n\nReply with a number."
@@ -457,7 +429,6 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // Default
     await sendMessengerReply(senderPsid, {
         text: "I didn't quite get that. Type 'menu' to see available options."
     });
