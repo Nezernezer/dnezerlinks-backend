@@ -6,12 +6,13 @@ const crypto = require('crypto');
 
 const airtimeChat = require('./airtime');
 const loginChat = require('./login');
+const dataChat = require('./data');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
 // ========== SAFE APP_URL FROM RENDER ENVIRONMENT ==========
 let APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
-APP_URL = APP_URL.trim().replace(/\/+$/, ''); // remove trailing slash
+APP_URL = APP_URL.trim().replace(/\/+$/, '');
 if (!APP_URL.startsWith('http')) {
     APP_URL = 'https://' + APP_URL;
 }
@@ -68,27 +69,32 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
         console.log('✅ Button sent →', payload.url);
     } catch (err) {
         console.error('Button error:', err.response?.data || err.message);
-        // Fallback
         await sendMessengerReply(senderPsid, {
             text: payload.text + '\n\n' + payload.url
         });
     }
 }
 
-async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
+async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, extra = {}) {
     const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
 
-    console.log('====== DEBUG URL ======');
-    console.log('APP_URL     →', APP_URL);
-    console.log('webviewUrl  →', webviewUrl);
-    console.log('=======================');
-
-    const reviewText =
-        'Review Airtime Transaction:\n\n' +
-        '• Network: ' + network.toUpperCase() + '\n' +
-        '• Phone: ' + phone + '\n' +
-        '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-        '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    let reviewText = '';
+    if (extra.service === 'data') {
+        reviewText =
+            'Review Data Transaction:\n\n' +
+            '• Network: ' + network.toUpperCase() + '\n' +
+            '• Phone: ' + phone + '\n' +
+            '• Plan: ' + (extra.planName || '') + '\n' +
+            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    } else {
+        reviewText =
+            'Review Airtime Transaction:\n\n' +
+            '• Network: ' + network.toUpperCase() + '\n' +
+            '• Phone: ' + phone + '\n' +
+            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    }
 
     try {
         await axios.post(
@@ -476,6 +482,7 @@ router.get('/secure-pin-portal', (req, res) => {
     const phone = sessionData.phone;
     const network = sessionData.network;
     const amount = sessionData.amount;
+    const planName = sessionData.planName || '';
 
     res.send(`
         <!DOCTYPE html>
@@ -501,6 +508,7 @@ router.get('/secure-pin-portal', (req, res) => {
                     <div><b>Service:</b> ${service.toUpperCase()}</div>
                     <div><b>Network:</b> ${network.toUpperCase()}</div>
                     <div><b>Phone:</b> ${phone}</div>
+                    ${planName ? `<div><b>Plan:</b> ${planName}</div>` : ''}
                     <div><b>Amount:</b> ₦${Number(amount).toLocaleString()}</div>
                 </div>
                 <div id="errorMsg" class="error"></div>
@@ -599,6 +607,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
         delete pendingPinTokens[token];
 
+        // ========== AIRTIME ==========
         if (service === 'airtime') {
             const parsedAmount = parseFloat(amount);
             const networkMap = { mtn: '1', glo: '2', '9mobile': '3', airtel: '4' };
@@ -623,10 +632,44 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             }
         }
 
+        // ========== DATA ==========
+        if (service === 'data') {
+            const parsedAmount = parseFloat(amount);
+            const planId = sessionData.planId;
+            const networkID = sessionData.networkID || dataChat.NETWORK_ID_MAP[network.toLowerCase()] || network;
+
+            const response = await axios.post(APP_URL + '/api/data/buy', {
+                uid: userId,
+                phone: phone,
+                dataPlan: planId,
+                networkID: String(networkID),
+                amount: parsedAmount,
+                pin: pin
+            }, { timeout: 55000 });
+
+            if (response.data && response.data.success) {
+                await sendMessengerReply(psid, {
+                    text:
+                        '✅ Data Purchase Successful!\n\n' +
+                        'Network: ' + network.toUpperCase() + '\n' +
+                        'Phone: ' + phone + '\n' +
+                        'Plan: ' + (sessionData.planName || planId) + '\n' +
+                        'Amount: ₦' + parsedAmount.toLocaleString()
+                });
+                return res.json({ success: true });
+            } else {
+                await sendMessengerReply(psid, {
+                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error')
+                });
+                return res.json({ success: false, closeWindow: true });
+            }
+        }
+
         return res.json({ success: true });
     } catch (error) {
         delete pendingPinTokens[token];
-        await sendMessengerReply(psid, { text: '❌ Transaction Failed: ' + (error.message || 'Server error') });
+        const errMsg = error.response?.data?.error || error.message || 'Server error';
+        await sendMessengerReply(psid, { text: '❌ Transaction Failed: ' + errMsg });
         return res.json({ success: false, closeWindow: true });
     }
 });
@@ -636,17 +679,17 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 async function handleUserMessage(senderPsid, text) {
     const lowerText = text.toLowerCase();
 
-    // Active airtime session
-    const session = airtimeChat.getAirtimeSession(senderPsid);
-    if (session) {
-        if (session.step === 'AIRTIME_AMOUNT') {
+    // ===== ACTIVE AIRTIME SESSION =====
+    const airtimeSession = airtimeChat.getAirtimeSession(senderPsid);
+    if (airtimeSession) {
+        if (airtimeSession.step === 'AIRTIME_AMOUNT') {
             const amountNum = parseFloat(text.trim());
             if (isNaN(amountNum) || amountNum < 100) {
                 await sendMessengerReply(senderPsid, { text: '❌ Invalid amount. Minimum is ₦100:' });
                 return;
             }
 
-            session.data.amount = amountNum;
+            airtimeSession.data.amount = amountNum;
 
             const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
             if (!linkSnap.exists()) {
@@ -661,21 +704,76 @@ async function handleUserMessage(senderPsid, text) {
             pendingPinTokens[pinToken] = {
                 psid: senderPsid,
                 service: 'airtime',
-                phone: session.data.phone,
-                network: session.data.network,
-                amount: session.data.amount,
+                phone: airtimeSession.data.phone,
+                network: airtimeSession.data.network,
+                amount: airtimeSession.data.amount,
                 expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
                 attempts: 0
             };
 
-            await sendSecurePinLink(senderPsid, session.data.network, session.data.phone, session.data.amount, pinToken);
+            await sendSecurePinLink(
+                senderPsid,
+                airtimeSession.data.network,
+                airtimeSession.data.phone,
+                airtimeSession.data.amount,
+                pinToken
+            );
             return;
         }
 
-        const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, session);
+        const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, airtimeSession);
         await sendMessengerReply(senderPsid, reply);
         return;
     }
+
+    // ===== ACTIVE DATA SESSION =====
+    const dataSession = dataChat.getDataSession(senderPsid);
+    if (dataSession) {
+        const result = await dataChat.handleDataFlow(senderPsid, text, dataSession);
+
+        if (result && result.type === 'READY_FOR_PIN') {
+            dataChat.clearDataSession(senderPsid);
+
+            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+            if (!linkSnap.exists()) {
+                await sendMessengerReply(senderPsid, {
+                    text: '❌ Account not linked. Please login first (option 1).'
+                });
+                return;
+            }
+
+            const pinToken = crypto.randomBytes(32).toString('hex');
+            pendingPinTokens[pinToken] = {
+                psid: senderPsid,
+                service: 'data',
+                phone: result.data.phone,
+                network: result.data.network,
+                networkID: result.data.networkID,
+                planId: result.data.planId,
+                amount: result.data.amount,
+                planName: result.data.planName,
+                expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
+                attempts: 0
+            };
+
+            await sendSecurePinLink(
+                senderPsid,
+                result.data.network,
+                result.data.phone,
+                result.data.amount,
+                pinToken,
+                { service: 'data', planName: result.data.planName }
+            );
+            return;
+        }
+
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
+        }
+        return;
+    }
+
+    // ===== MENU OPTIONS =====
 
     // 1. Login
     if (text === '1' || lowerText === 'login') {
@@ -698,6 +796,13 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
+    // 4. Data Bundles
+    if (text === '4' || lowerText.indexOf('data') !== -1) {
+        const initial = dataChat.startDataFlow(senderPsid);
+        await sendMessengerReply(senderPsid, initial);
+        return;
+    }
+
     // 10. Forgot Password
     if (text === '10' || lowerText === 'forgot' || lowerText === 'reset') {
         const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
@@ -705,10 +810,56 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
+    // 11. Fund Wallet
+    if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
+        await sendMessengerReply(senderPsid, {
+            text: '💰 Fund Wallet\n\nThis feature is coming soon. You can currently fund via the web dashboard.'
+        });
+        return;
+    }
+
+    // 12. Transaction History
+    if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
+        await sendMessengerReply(senderPsid, {
+            text: '📜 Transaction History\n\nThis feature is coming soon. Check the web dashboard for now.'
+        });
+        return;
+    }
+
+    // 13. Logout
+    if (text === '13' || lowerText === 'logout') {
+        try {
+            await admin.database().ref('messenger_links/' + senderPsid).remove();
+            await sendMessengerReply(senderPsid, {
+                text: '✅ You have been logged out of Messenger.\nType "menu" to start again or "1" to login.'
+            });
+        } catch (e) {
+            await sendMessengerReply(senderPsid, {
+                text: '❌ Logout failed. Please try again.'
+            });
+        }
+        return;
+    }
+
     // Menu
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'hi' || lowerText === 'hello') {
         await sendMessengerReply(senderPsid, {
-            text: 'Welcome to Dnezerlinks!\n\n1. Login\n2. Create Account\n3. Airtime Top-up\n4. Data Bundles\n5. Cable TV\n6. Electricity Bills\n7. Bulk SMS\n8. Check Wallet Balance\n9. Check Account Status\n10. Forgot Password\n\nReply with a number.'
+            text:
+                'Welcome to Dnezerlinks!\n\n' +
+                '1. Login\n' +
+                '2. Create Account\n' +
+                '3. Airtime Top-up\n' +
+                '4. Data Bundles\n' +
+                '5. Cable TV\n' +
+                '6. Electricity Bills\n' +
+                '7. Bulk SMS\n' +
+                '8. Check Wallet Balance\n' +
+                '9. Check Account Status\n' +
+                '10. Forgot Password\n' +
+                '11. Fund Wallet\n' +
+                '12. Transaction History\n' +
+                '13. Logout\n\n' +
+                'Reply with a number.'
         });
         return;
     }
