@@ -17,20 +17,20 @@ const rechargePinChat = require('./rechargepin');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// ========== SAFE APP_URL FROM RENDER ENVIRONMENT ==========
 let APP_URL = process.env.APP_URL || 'https://api.dlinks.name.ng';
 APP_URL = APP_URL.trim().replace(/\/+$/, '');
 if (!APP_URL.startsWith('http')) {
     APP_URL = 'https://' + APP_URL;
 }
 console.log('Using APP_URL →', APP_URL);
-// ==========================================================
 
 const pendingPinTokens = {};
 const pendingAuthTokens = {};
 
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
+
+const MENU_FOOTER = '\n\nType 0 or menu for main menu.';
 
 // ========== HELPERS ==========
 
@@ -82,6 +82,72 @@ async function sendMessengerButtonTemplate(senderPsid, payload) {
     }
 }
 
+function clearAllSessions(psid) {
+    try { airtimeChat.clearAirtimeSession(psid); } catch (e) {}
+    try { dataChat.clearDataSession(psid); } catch (e) {}
+    try { cableChat.clearCableSession(psid); } catch (e) {}
+    try { electricityChat.clearElectricitySession(psid); } catch (e) {}
+    try { bulksmsChat.clearBulkSmsSession(psid); } catch (e) {}
+    try { fundChat.clearFundSession(psid); } catch (e) {}
+    try { examChat.clearExamSession(psid); } catch (e) {}
+    try { rechargePinChat.clearRechargePinSession(psid); } catch (e) {}
+}
+
+async function getLinkedUserId(senderPsid) {
+    try {
+        const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+        if (linkSnap.exists() && linkSnap.val().userId) {
+            return linkSnap.val().userId;
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function showMainMenu(senderPsid) {
+    clearAllSessions(senderPsid);
+    const linked = await loginChat.isLinked(senderPsid);
+    const option1 = linked ? '1. Logout' : '1. Login';
+
+    await sendMessengerReply(senderPsid, {
+        text:
+            'Welcome to Dnezerlinks!\n\n' +
+            option1 + '\n' +
+            '2. Create Account\n' +
+            '3. Airtime Top-up\n' +
+            '4. Data Bundles\n' +
+            '5. Cable TV\n' +
+            '6. Electricity Bills\n' +
+            '7. Bulk SMS\n' +
+            '8. Check Wallet Balance\n' +
+            '9. Check Account Status\n' +
+            '10. Forgot Password\n' +
+            '11. Fund Wallet\n' +
+            '12. Transaction History\n' +
+            '13. Exam PIN\n' +
+            '14. Recharge PIN\n\n' +
+            'Reply with a number.\n' +
+            '(During a transaction: * = back, 0 = menu, # / stop / cancel = abort)'
+    });
+}
+
+async function requireLink(senderPsid) {
+    const userId = await getLinkedUserId(senderPsid);
+    if (!userId) {
+        await sendMessengerReply(senderPsid, {
+            text:
+                'ℹ️ This service requires a linked account.\n\n' +
+                'Please:\n' +
+                '• Type 1 to Login\n' +
+                '• Type 2 to Create Account\n\n' +
+                'Type 0 for main menu.'
+        });
+        return false;
+    }
+    return true;
+}
+
 async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, extra = {}) {
     const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
 
@@ -94,7 +160,8 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Phone: ' + phone + '\n' +
             '• Plan: ' + (extra.planName || '') + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else if (extra.service === 'electricity') {
         reviewText =
             'Review Electricity Payment:\n\n' +
@@ -102,7 +169,8 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Meter Type: ' + (extra.meterType || '') + '\n' +
             '• Meter No: ' + phone + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else if (extra.service === 'bulksms') {
         reviewText =
             'Review Bulk SMS:\n\n' +
@@ -112,7 +180,8 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Rate: ₦' + (extra.rate || 0) + ' per page\n' +
             '• Total Cost: ₦' + Number(amount).toLocaleString() + '\n\n' +
             'Message Preview:\n"' + (extra.messagePreview || '') + '"\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else if (extra.service === 'cable') {
         reviewText =
             'Review Cable TV Transaction:\n\n' +
@@ -121,14 +190,16 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• IUC: ' + (extra.iuc || phone) + '\n' +
             '• Customer: ' + (extra.customerName || '') + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else if (extra.service === 'exampin') {
         reviewText =
             'Review Exam PIN Purchase:\n\n' +
             '• Exam: ' + (extra.examLabel || network) + '\n' +
             '• Quantity: ' + (extra.quantity || 1) + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else if (extra.service === 'rechargepin') {
         reviewText =
             'Review Recharge PIN:\n\n' +
@@ -137,14 +208,16 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Quantity: ' + (extra.qty || 1) + '\n' +
             '• Brand: ' + (extra.brandName || 'Dnezerlinks') + '\n' +
             '• Total: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     } else {
         reviewText =
             'Review Airtime Transaction:\n\n' +
             '• Network: ' + network.toUpperCase() + '\n' +
             '• Phone: ' + phone + '\n' +
             '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
+            '(Type # or cancel to abort)';
     }
 
     try {
@@ -180,18 +253,6 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
     await sendMessengerReply(senderPsid, {
         text: reviewText + '\n\n' + webviewUrl
     });
-}
-
-async function getLinkedUserId(senderPsid) {
-    try {
-        const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-        if (linkSnap.exists() && linkSnap.val().userId) {
-            return linkSnap.val().userId;
-        }
-        return null;
-    } catch (e) {
-        return null;
-    }
 }
 
 // ========== WEBHOOK ROUTES ==========
@@ -446,7 +507,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
                 await admin.database().ref('users/' + userId + '/messenger_psid').set(psid);
 
                 delete pendingAuthTokens[token];
-                await sendMessengerReply(psid, { text: '✅ Successfully Logged In & Linked to ' + cleanEmail + '!' });
+                await sendMessengerReply(psid, { text: '✅ Successfully Logged In & Linked to ' + cleanEmail + '!' + MENU_FOOTER });
                 return res.json({ success: true });
             } catch (authErr) {
                 return res.json({ success: false, message: '❌ Incorrect password.' });
@@ -489,7 +550,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
 
             delete pendingAuthTokens[token];
             await sendMessengerReply(psid, {
-                text: '🎉 Account Created & Linked Successfully!\nName: ' + name + '\nEmail: ' + cleanEmail + '\nBalance: ₦0.00'
+                text: '🎉 Account Created & Linked Successfully!\nName: ' + name + '\nEmail: ' + cleanEmail + '\nBalance: ₦0.00' + MENU_FOOTER
             });
             return res.json({ success: true });
         }
@@ -503,7 +564,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
             await admin.auth().generatePasswordResetLink(cleanEmail);
             delete pendingAuthTokens[token];
             await sendMessengerReply(psid, {
-                text: '🔄 Password Reset Instructions sent to ' + cleanEmail + '. Check your inbox/spam.'
+                text: '🔄 Password Reset Instructions sent to ' + cleanEmail + '. Check your inbox/spam.' + MENU_FOOTER
             });
             return res.json({ success: true });
         }
@@ -663,7 +724,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             if (sessionData.attempts >= 3) {
                 delete pendingPinTokens[token];
-                await sendMessengerReply(psid, { text: '❌ Too many wrong PIN attempts. Transaction cancelled.' });
+                await sendMessengerReply(psid, { text: '❌ Too many wrong PIN attempts. Transaction cancelled.' + MENU_FOOTER });
                 return res.json({ success: false, message: 'Max attempts', closeWindow: true });
             }
 
@@ -692,11 +753,11 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
             if (response.data && response.data.success) {
                 await sendMessengerReply(psid, {
-                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nAmount: ₦' + parsedAmount.toLocaleString()
+                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
                 });
                 return res.json({ success: true });
             } else {
-                await sendMessengerReply(psid, { text: '❌ Airtime Failed: ' + (response.data.error || 'Unknown error') });
+                await sendMessengerReply(psid, { text: '❌ Airtime Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -723,12 +784,12 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                         'Network: ' + network.toUpperCase() + '\n' +
                         'Phone: ' + phone + '\n' +
                         'Plan: ' + (sessionData.planName || planId) + '\n' +
-                        'Amount: ₦' + parsedAmount.toLocaleString()
+                        'Amount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
                 });
                 return res.json({ success: true });
             } else {
                 await sendMessengerReply(psid, {
-                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error')
+                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                 });
                 return res.json({ success: false, closeWindow: true });
             }
@@ -759,18 +820,18 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                             'Package: ' + (sessionData.planName || planID) + '\n' +
                             'IUC: ' + iuc + '\n' +
                             'Customer: ' + (sessionData.customerName || '') + '\n' +
-                            'Amount: ₦' + parsedAmount.toLocaleString()
+                            'Amount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
                     });
                     return res.json({ success: true });
                 } else {
                     await sendMessengerReply(psid, {
-                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error')
+                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                     });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
                 const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + errMsg });
+                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + errMsg + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -798,17 +859,18 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                     if (response.data.token) {
                         msg += '\n🔑 Token: ' + response.data.token;
                     }
+                    msg += MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
                     await sendMessengerReply(psid, {
-                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error')
+                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                     });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
                 const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + errMsg });
+                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + errMsg + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -830,17 +892,18 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                     msg += 'Recipients: ' + sessionData.recipientCount + '\n';
                     msg += 'Pages: ' + sessionData.pages + '\n';
                     msg += 'Cost: ₦' + Number(sessionData.amount).toLocaleString();
+                    msg += MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
                     await sendMessengerReply(psid, {
-                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error')
+                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                     });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
                 const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + errMsg });
+                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + errMsg + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -863,17 +926,18 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                     msg += 'PIN: ' + (response.data.pin || 'N/A') + '\n';
                     msg += 'Serial: ' + (response.data.serial || 'N/A') + '\n\n';
                     msg += 'Save this message securely.';
+                    msg += MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
                     await sendMessengerReply(psid, {
-                        text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error')
+                        text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                     });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
                 const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + errMsg });
+                await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + errMsg + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -905,18 +969,19 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
                         msg += '\n...and ' + (pins.length - 15) + ' more. Check web dashboard for full list.';
                     }
                     msg += '\n\nSave this message securely.';
+                    msg += MENU_FOOTER;
 
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
                     await sendMessengerReply(psid, {
-                        text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error')
+                        text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
                     });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
                 const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + errMsg });
+                await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + errMsg + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -925,7 +990,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
     } catch (error) {
         delete pendingPinTokens[token];
         const errMsg = error.response?.data?.error || error.message || 'Server error';
-        await sendMessengerReply(psid, { text: '❌ Transaction Failed: ' + errMsg });
+        await sendMessengerReply(psid, { text: '❌ Transaction Failed: ' + errMsg + MENU_FOOTER });
         return res.json({ success: false, closeWindow: true });
     }
 });
@@ -933,13 +998,74 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 // ========== MESSAGE HANDLER ==========
 
 async function handleUserMessage(senderPsid, text) {
-    const lowerText = text.toLowerCase();
+    const lowerText = text.toLowerCase().trim();
+    const raw = text.trim();
+
+    // 0 / menu / hi / hello → main menu
+    if (raw === '0' || lowerText === 'menu' || lowerText === 'start' || lowerText === 'hi' || lowerText === 'hello') {
+        await showMainMenu(senderPsid);
+        return;
+    }
+
+    // # / stop / cancel → abort
+    if (raw === '#' || lowerText === 'stop' || lowerText === 'cancel' || lowerText === 'abort') {
+        clearAllSessions(senderPsid);
+        await sendMessengerReply(senderPsid, { text: '🛑 Transaction cancelled.' + MENU_FOOTER });
+        await showMainMenu(senderPsid);
+        return;
+    }
+
+    // * → restart current flow or main menu
+    if (raw === '*') {
+        if (airtimeChat.getAirtimeSession(senderPsid)) {
+            airtimeChat.clearAirtimeSession(senderPsid);
+            await sendMessengerReply(senderPsid, airtimeChat.startAirtimeFlow(senderPsid));
+            return;
+        }
+        if (dataChat.getDataSession(senderPsid)) {
+            dataChat.clearDataSession(senderPsid);
+            await sendMessengerReply(senderPsid, dataChat.startDataFlow(senderPsid));
+            return;
+        }
+        if (cableChat.getCableSession(senderPsid)) {
+            cableChat.clearCableSession(senderPsid);
+            await sendMessengerReply(senderPsid, cableChat.startCableFlow(senderPsid));
+            return;
+        }
+        if (electricityChat.getElectricitySession(senderPsid)) {
+            electricityChat.clearElectricitySession(senderPsid);
+            await sendMessengerReply(senderPsid, electricityChat.startElectricityFlow(senderPsid));
+            return;
+        }
+        if (bulksmsChat.getBulkSmsSession(senderPsid)) {
+            bulksmsChat.clearBulkSmsSession(senderPsid);
+            await sendMessengerReply(senderPsid, bulksmsChat.startBulkSmsFlow(senderPsid));
+            return;
+        }
+        if (fundChat.getFundSession(senderPsid)) {
+            fundChat.clearFundSession(senderPsid);
+            await sendMessengerReply(senderPsid, await fundChat.startFundWalletFlow(senderPsid));
+            return;
+        }
+        if (examChat.getExamSession(senderPsid)) {
+            examChat.clearExamSession(senderPsid);
+            await sendMessengerReply(senderPsid, examChat.startExamFlow(senderPsid));
+            return;
+        }
+        if (rechargePinChat.getRechargePinSession(senderPsid)) {
+            rechargePinChat.clearRechargePinSession(senderPsid);
+            await sendMessengerReply(senderPsid, rechargePinChat.startRechargePinFlow(senderPsid));
+            return;
+        }
+        await showMainMenu(senderPsid);
+        return;
+    }
 
     // ===== ACTIVE AIRTIME SESSION =====
     const airtimeSession = airtimeChat.getAirtimeSession(senderPsid);
     if (airtimeSession) {
         if (airtimeSession.step === 'AIRTIME_AMOUNT') {
-            const amountNum = parseFloat(text.trim());
+            const amountNum = parseFloat(raw);
             if (isNaN(amountNum) || amountNum < 100) {
                 await sendMessengerReply(senderPsid, { text: '❌ Invalid amount. Minimum is ₦100:' });
                 return;
@@ -947,10 +1073,8 @@ async function handleUserMessage(senderPsid, text) {
 
             airtimeSession.data.amount = amountNum;
 
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
+            if (!(await requireLink(senderPsid))) {
                 airtimeChat.clearAirtimeSession(senderPsid);
-                await sendMessengerReply(senderPsid, { text: '❌ Account not linked. Please login first (option 1).' });
                 return;
             }
 
@@ -988,12 +1112,8 @@ async function handleUserMessage(senderPsid, text) {
         const result = await electricityChat.handleElectricityFlow(senderPsid, text, elecSession);
 
         if (result && result.step === 'READY_FOR_PIN') {
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
+            if (!(await requireLink(senderPsid))) {
                 electricityChat.clearElectricitySession(senderPsid);
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
                 return;
             }
 
@@ -1041,12 +1161,8 @@ async function handleUserMessage(senderPsid, text) {
         const result = await bulksmsChat.handleBulkSmsFlow(senderPsid, text, bulksmsSession);
 
         if (result && result.step === 'READY_FOR_PIN') {
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
+            if (!(await requireLink(senderPsid))) {
                 bulksmsChat.clearBulkSmsSession(senderPsid);
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
                 return;
             }
 
@@ -1105,13 +1221,7 @@ async function handleUserMessage(senderPsid, text) {
         if (result && result.type === 'READY_FOR_PIN') {
             cableChat.clearCableSession(senderPsid);
 
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
-                return;
-            }
+            if (!(await requireLink(senderPsid))) return;
 
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
@@ -1171,13 +1281,7 @@ async function handleUserMessage(senderPsid, text) {
         if (result && result.type === 'READY_FOR_PIN') {
             dataChat.clearDataSession(senderPsid);
 
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
-                return;
-            }
+            if (!(await requireLink(senderPsid))) return;
 
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
@@ -1218,13 +1322,7 @@ async function handleUserMessage(senderPsid, text) {
         if (result && result.type === 'READY_FOR_PIN') {
             examChat.clearExamSession(senderPsid);
 
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
-                return;
-            }
+            if (!(await requireLink(senderPsid))) return;
 
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
@@ -1269,13 +1367,7 @@ async function handleUserMessage(senderPsid, text) {
         if (result && result.type === 'READY_FOR_PIN') {
             rechargePinChat.clearRechargePinSession(senderPsid);
 
-            const linkSnap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
-            if (!linkSnap.exists()) {
-                await sendMessengerReply(senderPsid, {
-                    text: '❌ Account not linked. Please login first (option 1).'
-                });
-                return;
-            }
+            if (!(await requireLink(senderPsid))) return;
 
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
@@ -1316,16 +1408,16 @@ async function handleUserMessage(senderPsid, text) {
     // ===== MENU OPTIONS =====
 
     // 1. Login OR Logout (dynamic)
-    if (text === '1' || lowerText === 'login' || lowerText === 'logout') {
+    if (raw === '1' || lowerText === 'login' || lowerText === 'logout') {
         const linked = await loginChat.isLinked(senderPsid);
 
-        if (linked && (text === '1' || lowerText === 'logout')) {
+        if (linked && (raw === '1' || lowerText === 'logout')) {
             const result = await loginChat.doLogout(senderPsid);
-            await sendMessengerReply(senderPsid, result);
+            await sendMessengerReply(senderPsid, { text: result.text + MENU_FOOTER });
             return;
         }
 
-        if (!linked && (text === '1' || lowerText === 'login')) {
+        if (!linked && (raw === '1' || lowerText === 'login')) {
             const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
             await sendMessengerButtonTemplate(senderPsid, payload);
             return;
@@ -1333,80 +1425,95 @@ async function handleUserMessage(senderPsid, text) {
 
         if (linked && lowerText === 'login') {
             await sendMessengerReply(senderPsid, {
-                text: '✅ You are already logged in.\nType "1" to logout or "menu" for options.'
+                text: '✅ You are already logged in.\nType "1" to logout or "0" for menu.' + MENU_FOOTER
             });
             return;
         }
 
         if (!linked && lowerText === 'logout') {
             await sendMessengerReply(senderPsid, {
-                text: 'ℹ️ You are not logged in.\nType "1" to login.'
+                text: 'ℹ️ You are not logged in.\nType "1" to login.' + MENU_FOOTER
             });
             return;
         }
     }
 
     // 2. Create Account
-    if (text === '2' || lowerText === 'register' || lowerText === 'signup') {
+    if (raw === '2' || lowerText === 'register' || lowerText === 'signup') {
         const payload = loginChat.startRegisterFlow(senderPsid, pendingAuthTokens, APP_URL);
         await sendMessengerButtonTemplate(senderPsid, payload);
         return;
     }
 
+    // 10. Forgot Password (allowed without link)
+    if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
+        const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
+        await sendMessengerButtonTemplate(senderPsid, payload);
+        return;
+    }
+
+    // All other services require linked account
+    const serviceTriggers =
+        raw === '3' || raw === '4' || raw === '5' || raw === '6' || raw === '7' ||
+        raw === '8' || raw === '9' || raw === '11' || raw === '12' || raw === '13' || raw === '14' ||
+        lowerText.indexOf('airtime') !== -1 || lowerText.indexOf('data') !== -1 ||
+        lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' || lowerText === 'gotv' ||
+        lowerText.indexOf('electricity') !== -1 || lowerText.indexOf('disco') !== -1 ||
+        lowerText.indexOf('bulk') !== -1 || lowerText.indexOf('sms') !== -1 ||
+        lowerText === 'balance' || lowerText === 'wallet' || lowerText === 'status' ||
+        lowerText === 'fund' || lowerText === 'fund wallet' ||
+        lowerText === 'history' || lowerText === 'transactions' ||
+        lowerText.indexOf('exam') !== -1 || lowerText === 'waec' || lowerText === 'neco' ||
+        lowerText.indexOf('recharge pin') !== -1 || lowerText === 'rechargepin';
+
+    if (serviceTriggers) {
+        if (!(await requireLink(senderPsid))) return;
+    }
+
     // 3. Airtime
-    if (text === '3' || lowerText.indexOf('airtime') !== -1) {
+    if (raw === '3' || lowerText.indexOf('airtime') !== -1) {
         const initial = airtimeChat.startAirtimeFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 4. Data Bundles
-    if (text === '4' || lowerText.indexOf('data') !== -1) {
+    if (raw === '4' || lowerText.indexOf('data') !== -1) {
         const initial = dataChat.startDataFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 5. Cable TV
-    if (text === '5' || lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' || lowerText === 'gotv') {
+    if (raw === '5' || lowerText.indexOf('cable') !== -1 || lowerText === 'dstv' || lowerText === 'gotv') {
         const initial = cableChat.startCableFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 6. Electricity
-    if (text === '6' || lowerText.indexOf('electricity') !== -1 || lowerText.indexOf('disco') !== -1) {
+    if (raw === '6' || lowerText.indexOf('electricity') !== -1 || lowerText.indexOf('disco') !== -1) {
         const initial = electricityChat.startElectricityFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 7. Bulk SMS
-    if (text === '7' || lowerText.indexOf('bulk') !== -1 || lowerText.indexOf('sms') !== -1) {
+    if (raw === '7' || lowerText.indexOf('bulk') !== -1 || lowerText.indexOf('sms') !== -1) {
         const initial = bulksmsChat.startBulkSmsFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 8. Check Wallet Balance
-    if (text === '8' || lowerText === 'balance' || lowerText === 'wallet') {
+    if (raw === '8' || lowerText === 'balance' || lowerText === 'wallet') {
         try {
             const userId = await getLinkedUserId(senderPsid);
-
-            if (!userId) {
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        '❌ Your Messenger is not linked to any Dnezerlinks account yet.\n\n' +
-                        'Please login first (option 1) or create an account (option 2) to view your wallet balance.'
-                });
-                return;
-            }
-
             const userSnap = await admin.database().ref('users/' + userId).once('value');
 
             if (!userSnap.exists()) {
                 await sendMessengerReply(senderPsid, {
-                    text: '❌ Account record not found. Please contact support.'
+                    text: '❌ Account record not found. Please contact support.' + MENU_FOOTER
                 });
                 return;
             }
@@ -1419,20 +1526,19 @@ async function handleUserMessage(senderPsid, text) {
                 text:
                     '💰 Dnezerlinks Wallet Balance\n\n' +
                     'Name: ' + name + '\n' +
-                    'Balance: ₦' + balance.toLocaleString() + '\n\n' +
-                    'Type "menu" to return to main options.'
+                    'Balance: ₦' + balance.toLocaleString() + MENU_FOOTER
             });
         } catch (err) {
             console.error('Balance check error:', err);
             await sendMessengerReply(senderPsid, {
-                text: '❌ Unable to retrieve wallet balance at the moment. Please try again later.'
+                text: '❌ Unable to retrieve wallet balance at the moment. Please try again later.' + MENU_FOOTER
             });
         }
         return;
     }
 
     // 9. Check Account Status
-    if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
+    if (raw === '9' || lowerText === 'status' || lowerText === 'account status') {
         try {
             const userId = await getLinkedUserId(senderPsid);
 
@@ -1447,93 +1553,48 @@ async function handleUserMessage(senderPsid, text) {
                         '✅ Account Status\n\n' +
                         'Your Messenger is successfully linked to a Dnezerlinks account.\n\n' +
                         'Name: ' + name + '\n' +
-                        'Email: ' + email + '\n\n' +
-                        'You can now use all services (Airtime, Data, Electricity, Bulk SMS, etc).'
-                });
-            } else {
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        'ℹ️ Account Status\n\n' +
-                        'Your Messenger is currently not linked to any Dnezerlinks account.\n\n' +
-                        'To enjoy full access to our services, please:\n\n' +
-                        '1. Type 1 to Login\n' +
-                        '2. Type 2 to Create a new Account\n\n' +
-                        'We look forward to serving you!'
+                        'Email: ' + email + MENU_FOOTER
                 });
             }
         } catch (err) {
             console.error('Status check error:', err);
             await sendMessengerReply(senderPsid, {
-                text: '❌ Unable to check account status right now. Please try again later.'
+                text: '❌ Unable to check account status right now. Please try again later.' + MENU_FOOTER
             });
         }
         return;
     }
 
-    // 10. Forgot Password
-    if (text === '10' || lowerText === 'forgot' || lowerText === 'reset') {
-        const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
-        await sendMessengerButtonTemplate(senderPsid, payload);
-        return;
-    }
-
     // 11. Fund Wallet
-    if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
+    if (raw === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
         const initial = await fundChat.startFundWalletFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 12. Transaction History
-    if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
+    if (raw === '12' || lowerText === 'history' || lowerText === 'transactions') {
         const result = await historyChat.getTransactionHistory(senderPsid);
-        await sendMessengerReply(senderPsid, result);
+        await sendMessengerReply(senderPsid, { text: (result.text || '') + MENU_FOOTER });
         return;
     }
 
     // 13. Exam PIN
-    if (text === '13' || lowerText.indexOf('exam') !== -1 || lowerText === 'waec' || lowerText === 'neco') {
+    if (raw === '13' || lowerText.indexOf('exam') !== -1 || lowerText === 'waec' || lowerText === 'neco') {
         const initial = examChat.startExamFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
     // 14. Recharge PIN
-    if (text === '14' || lowerText.indexOf('recharge pin') !== -1 || lowerText === 'rechargepin') {
+    if (raw === '14' || lowerText.indexOf('recharge pin') !== -1 || lowerText === 'rechargepin') {
         const initial = rechargePinChat.startRechargePinFlow(senderPsid);
         await sendMessengerReply(senderPsid, initial);
         return;
     }
 
-    // Menu (dynamic option 1)
-    if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'hi' || lowerText === 'hello') {
-        const linked = await loginChat.isLinked(senderPsid);
-        const option1 = linked ? '1. Logout' : '1. Login';
-
-        await sendMessengerReply(senderPsid, {
-            text:
-                'Welcome to Dnezerlinks!\n\n' +
-                option1 + '\n' +
-                '2. Create Account\n' +
-                '3. Airtime Top-up\n' +
-                '4. Data Bundles\n' +
-                '5. Cable TV\n' +
-                '6. Electricity Bills\n' +
-                '7. Bulk SMS\n' +
-                '8. Check Wallet Balance\n' +
-                '9. Check Account Status\n' +
-                '10. Forgot Password\n' +
-                '11. Fund Wallet\n' +
-                '12. Transaction History\n' +
-                '13. Exam PIN\n' +
-                '14. Recharge PIN\n\n' +
-                'Reply with a number.'
-        });
-        return;
-    }
-
     await sendMessengerReply(senderPsid, {
-        text: 'I didn\'t get that. Type \'menu\' to see options.'
+        text: 'I didn\'t get that.' + MENU_FOOTER
     });
 }
 
