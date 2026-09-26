@@ -2,27 +2,26 @@
 const path = require('path');
 const axios = require('axios');
 
-// ---- BULLETPROOF LOAD OF CABLE PLANS ----
+// ---- SAFE LOAD OF CABLE PLANS ----
 let localPlans = {};
 try {
-    // Construct absolute path using process.cwd() (the root of your project)
     const absolutePlansPath = path.join(process.cwd(), 'public', 'cable', 'cable_plans');
     const plansModule = require(absolutePlansPath);
 
-    if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
+    // Safely parse the object whether it's wrapped or direct
+    if (plansModule && plansModule.localPlans) {
         localPlans = plansModule.localPlans;
-    } else if (plansModule['1'] || plansModule['2'] || plansModule['3'] || plansModule['4']) {
+    } else if (plansModule && (plansModule['1'] || plansModule['2'])) {
         localPlans = plansModule;
-    } else {
-        localPlans = {};
     }
 
-    console.log('✅ Cable plans loaded successfully. Providers found:', Object.keys(localPlans));
+    console.log('✅ Cable plans loaded successfully. Available providers:', Object.keys(localPlans));
 } catch (err) {
-    console.error('❌ CRITICAL: Could not load cable_plans.js from root path.');
-    console.error('Error details:', err.message);
+    console.error('❌ CRITICAL: Could not load cable_plans.js');
+    console.error('Error details:', err.stack || err.message);
     localPlans = {};
 }
+
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
