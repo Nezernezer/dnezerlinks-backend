@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const airtimeChat = require('./airtime');
 const loginChat = require('./login');
 const dataChat = require('./data');
+const fundChat    = require('./fundwallet');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -725,6 +726,15 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerReply(senderPsid, reply);
         return;
     }
+	// ===== ACTIVE FUND WALLET SESSION =====
+const fundSession = fundChat.getFundSession(senderPsid);
+if (fundSession) {
+    const result = await fundChat.handleFundWalletFlow(senderPsid, text, fundSession, APP_URL);
+    if (result && result.text) {
+        await sendMessengerReply(senderPsid, result);
+    }
+    return;
+}
 
     // ===== ACTIVE DATA SESSION =====
     const dataSession = dataChat.getDataSession(senderPsid);
@@ -810,13 +820,12 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // 11. Fund Wallet
-    if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
-        await sendMessengerReply(senderPsid, {
-            text: '💰 Fund Wallet\n\nThis feature is coming soon. You can currently fund via the web dashboard.'
-        });
-        return;
-    }
+	// 11. Fund Wallet
+if (text === '11' || lowerText === 'fund' || lowerText === 'fund wallet') {
+    const initial = await fundChat.startFundWalletFlow(senderPsid);
+    await sendMessengerReply(senderPsid, initial);
+    return;
+}
 
     // 12. Transaction History
     if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
