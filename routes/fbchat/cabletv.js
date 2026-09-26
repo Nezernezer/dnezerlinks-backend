@@ -2,21 +2,21 @@
 const path = require('path');
 const axios = require('axios');
 
-// ---- LOAD CABLE PLANS (same method as data.js) ----
+// ---- SAFE LOAD OF CABLE PLANS (same pattern as data.js) ----
 let localPlans = {};
 try {
     const plansModule = require('../../public/cable/cable_plans');
     localPlans = plansModule.localPlans || plansModule || {};
-    console.log('✅ Cable plans loaded. Providers:', Object.keys(localPlans));
+    console.log('✅ Cable plans loaded successfully. Providers:', Object.keys(localPlans));
 } catch (err1) {
     try {
         const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
         localPlans = plansModule.localPlans || plansModule || {};
-        console.log('✅ Cable plans loaded via fallback. Providers:', Object.keys(localPlans));
+        console.log('✅ Cable plans loaded via fallback path. Providers:', Object.keys(localPlans));
     } catch (err2) {
-        console.error('❌ Could not load cable_plans.js');
-        console.error(err1.message);
-        console.error(err2.message);
+        console.error('❌ CRITICAL: Could not load cable_plans.js');
+        console.error('Error 1:', err1.message);
+        console.error('Error 2:', err2.message);
         localPlans = {};
     }
 }
@@ -83,15 +83,18 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            // Support both "1" and 1 keys
-            const plans = localPlans[provider.id] || localPlans[String(provider.id)] || localPlans[Number(provider.id)] || [];
+            // Same style as data.js lookup
+            const plans = (localPlans && localPlans[provider.id]) ? localPlans[provider.id] : [];
+
+            console.log('Provider:', provider.id, '| Plans found:', plans.length);
+            console.log('Available keys in localPlans:', Object.keys(localPlans || {}));
 
             if (!plans || plans.length === 0) {
                 clearCableSession(psid);
                 return {
                     text:
                         '❌ No packages available for this provider right now.\n\n' +
-                        'Loaded providers: ' + (Object.keys(localPlans).join(', ') || 'none') +
+                        'Loaded providers: ' + (Object.keys(localPlans || {}).join(', ') || 'none') +
                         '\n\nType "menu" to go back.'
                 };
             }
