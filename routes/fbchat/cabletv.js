@@ -1,26 +1,21 @@
 // routes/fbchat/cabletv.js
-const path = require('path');
 const axios = require('axios');
 
-// ---- CLEAN, INDEPENDENT CABLE PLANS LOADER ----
+// ---- CLEAN LOCAL REQUIRE OF CABLE PLANS ----
 let localPlans = {};
 try {
-    // Directly require your cable plans file using a safe absolute path
-    const plansModule = require(path.join(process.cwd(), 'public', 'cable', 'cable_plans'));
-    
-    // Assign directly if localPlans exists, otherwise fallback to the module itself
+    const plansModule = require('./cable_plans');
     localPlans = plansModule.localPlans || plansModule;
-    
-    console.log('✅ Cable plans loaded successfully. Providers found:', Object.keys(localPlans || {}));
-} catch (error) {
-    console.error('❌ Failed to load cable plans module:', error.message);
+    console.log('✅ Cable plans loaded successfully from local folder. Providers:', Object.keys(localPlans || {}));
+} catch (err) {
+    console.error('❌ CRITICAL: Could not load local cable_plans.js');
+    console.error('Error details:', err.stack || err.message);
     localPlans = {};
 }
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
-// Provider mappings for standard inputs
 const PROVIDERS = {
     '1': { id: '1', name: 'GOTV' },
     '2': { id: '2', name: 'DSTV' },
@@ -69,7 +64,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
     try {
         const input = text.trim();
 
-        // ========== STEP 1: Select Provider ==========
+        // ========== STEP 1: Provider Selection ==========
         if (session.step === 'CABLE_PROVIDER') {
             const key = input.toLowerCase();
             const provider = PROVIDERS[key] || PROVIDERS[input];
@@ -80,7 +75,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            // Fetch plans safely using string or numeric keys
             const plans = localPlans[provider.id] || localPlans[Number(provider.id)] || [];
 
             if (!plans || plans.length === 0) {
@@ -110,7 +104,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             return { text: msg };
         }
 
-        // ========== STEP 2: Select Plan ==========
+        // ========== STEP 2: Plan Selection ==========
         if (session.step === 'CABLE_PLAN') {
             const plans = session.data.plans || [];
             const index = parseInt(input, 10) - 1;
@@ -138,7 +132,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             };
         }
 
-        // ========== STEP 3: Input IUC & Validate ==========
+        // ========== STEP 3: IUC Validation ==========
         if (session.step === 'CABLE_IUC') {
             const iuc = input.replace(/\s+/g, '');
             if (iuc.length < 8) {
