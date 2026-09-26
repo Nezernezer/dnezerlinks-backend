@@ -60,9 +60,22 @@ async function loadUserData(userId) {
     return snap.exists() ? snap.val() : null;
 }
 
+// Sort so Palmpay always comes first (if it exists)
+function sortAccounts(accountsList) {
+    return accountsList.slice().sort(function (a, b) {
+        const aIsPalm = (a.bank_name || '').toLowerCase().includes('palm');
+        const bIsPalm = (b.bank_name || '').toLowerCase().includes('palm');
+        if (aIsPalm && !bIsPalm) return -1;
+        if (!aIsPalm && bIsPalm) return 1;
+        return 0;
+    });
+}
+
 function formatExistingAccounts(virtualAccounts) {
-    const list = virtualAccounts ? Object.values(virtualAccounts) : [];
+    let list = virtualAccounts ? Object.values(virtualAccounts) : [];
     if (list.length === 0) return null;
+
+    list = sortAccounts(list);
 
     let text = 'Your Virtual Accounts:\n\n';
     list.forEach(function (acc, i) {
@@ -73,12 +86,28 @@ function formatExistingAccounts(virtualAccounts) {
     return text;
 }
 
-function buildBankMenu() {
+// Only show banks the user does NOT already have
+function getAvailableBanks(virtualAccounts) {
+    const existingList = virtualAccounts ? Object.values(virtualAccounts) : [];
+
+    return BANKS.filter(function (bank) {
+        const alreadyHas = existingList.some(function (acc) {
+            return matchBank(acc, bank.key);
+        });
+        return !alreadyHas;
+    });
+}
+
+function buildBankMenu(availableBanks) {
+    if (!availableBanks || availableBanks.length === 0) {
+        return 'You already have accounts for all available banks.\n\nType "menu" to go back.';
+    }
+
     let text = 'Create a new virtual account:\n\n';
-    BANKS.forEach(function (b, i) {
+    availableBanks.forEach(function (b, i) {
         text += (i + 1) + '. ' + b.label + '\n';
     });
-    text += '\nReply with the number (1-6) of the bank you want.';
+    text += '\nReply with the number of the bank you want.';
     return text;
 }
 
@@ -97,8 +126,8 @@ async function startFundWalletFlow(psid) {
 
     const balance = Number(userData.balance || 0).toLocaleString();
     const virtualAccounts = userData.virtual_accounts_new || {};
+    const availableBanks = getAvailableBanks(virtualAccounts);
 
-    // Store session so user can choose a bank next
     fundSessions[psid] = {
         step: 'FUND_CHOOSE_BANK',
         data: {
@@ -106,7 +135,8 @@ async function startFundWalletFlow(psid) {
             email: userData.email || '',
             name: userData.name || '',
             phone: userData.phone || '08000000000',
-            virtualAccounts: virtualAccounts
+            virtualAccounts: virtualAccounts,
+            availableBanks: availableBanks
         },
         lastActive: Date.now()
     };
@@ -117,12 +147,12 @@ async function startFundWalletFlow(psid) {
     const existingText = formatExistingAccounts(virtualAccounts);
     if (existingText) {
         msg += existingText;
-        msg += 'You can transfer any amount to any of the accounts above and your wallet will be credited automatically.\n\n';
+        msg += 'Transfer any amount to any of the accounts above and your wallet will be credited automatically.\n\n';
     } else {
         msg += 'You do not have any virtual account yet.\n\n';
     }
 
-    msg += buildBankMenu();
+    msg += buildBankMenu(availableBanks);
     return { text: msg };
 }
 
@@ -131,34 +161,41 @@ async function handleFundWalletFlow(psid, text, session, APP_URL) {
         const input = text.trim().toLowerCase();
 
         if (session.step === 'FUND_CHOOSE_BANK') {
-            // Allow user to type "menu" or "back"
             if (input === 'menu' || input === 'back' || input === 'cancel') {
                 clearFundSession(psid);
                 return { text: 'Cancelled. Type "menu" to see options.' };
             }
 
+            const availableBanks = session.data.availableBanks || [];
+
+            if (availableBanks.length === 0) {
+                clearFundSession(psid);
+                return {
+                    text: 'You already have accounts for all available banks.\n\nType "menu" to go back.'
+                };
+            }
+
             let selectedBank = null;
             const idx = parseInt(input, 10) - 1;
 
-            if (!isNaN(idx) && idx >= 0 && idx < BANKS.length) {
-                selectedBank = BANKS[idx];
+            if (!isNaN(idx) && idx >= 0 && idx < availableBanks.length) {
+                selectedBank = availableBanks[idx];
             } else {
-                selectedBank = BANKS.find(function (b) {
+                selectedBank = availableBanks.find(function (b) {
                     return b.key === input || b.label.toLowerCase() === input;
                 });
             }
 
             if (!selectedBank) {
                 return {
-                    text: '❌ Invalid selection.\n\n' + buildBankMenu()
+                    text: '❌ Invalid selection.\n\n' + buildBankMenu(availableBanks)
                 };
             }
 
-            // Check if user already has this bank
+            // Safety check (should never happen because we filtered)
             const existingList = session.data.virtualAccounts
                 ? Object.values(session.data.virtualAccounts)
                 : [];
-
             const alreadyHas = existingList.find(function (acc) {
                 return matchBank(acc, selectedBank.key);
             });
@@ -177,7 +214,6 @@ async function handleFundWalletFlow(psid, text, session, APP_URL) {
             }
 
             // Generate new account
-            session.step = 'FUND_GENERATING';
             const userId = session.data.userId;
             const fullName = (session.data.name || 'Customer User').trim();
             const nameParts = fullName.split(/\s+/);
