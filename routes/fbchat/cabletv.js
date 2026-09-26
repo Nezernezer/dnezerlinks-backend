@@ -2,17 +2,44 @@
 const path = require('path');
 const axios = require('axios');
 
-// ---- SAFE LOAD OF CABLE PLANS (same pattern as data.js) ----
+// ---- SAFE LOAD OF CABLE PLANS ----
 let localPlans = {};
 try {
     const plansModule = require('../../public/cable/cable_plans');
-    localPlans = plansModule.localPlans || plansModule || {};
-    console.log('✅ Cable plans loaded successfully. Providers:', Object.keys(localPlans));
+
+    console.log('📦 Raw module keys:', Object.keys(plansModule || {}));
+    console.log('📦 Has localPlans?', !!plansModule.localPlans);
+    console.log('📦 localPlans type:', typeof plansModule.localPlans);
+
+    if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
+        localPlans = plansModule.localPlans;
+    } else if (plansModule.default && plansModule.default.localPlans) {
+        localPlans = plansModule.default.localPlans;
+    } else if (plansModule['1'] || plansModule['2']) {
+        // In case the whole module IS the plans object
+        localPlans = plansModule;
+    } else {
+        localPlans = {};
+    }
+
+    console.log('✅ Cable plans loaded. Providers:', Object.keys(localPlans));
+    if (localPlans['1']) {
+        console.log('   GOTV plans count:', localPlans['1'].length);
+    }
 } catch (err1) {
     try {
+        const path = require('path');
         const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
-        localPlans = plansModule.localPlans || plansModule || {};
-        console.log('✅ Cable plans loaded via fallback path. Providers:', Object.keys(localPlans));
+
+        if (plansModule.localPlans) {
+            localPlans = plansModule.localPlans;
+        } else if (plansModule['1'] || plansModule['2']) {
+            localPlans = plansModule;
+        } else {
+            localPlans = {};
+        }
+
+        console.log('✅ Cable plans loaded via fallback. Providers:', Object.keys(localPlans));
     } catch (err2) {
         console.error('❌ CRITICAL: Could not load cable_plans.js');
         console.error('Error 1:', err1.message);
@@ -20,6 +47,7 @@ try {
         localPlans = {};
     }
 }
+
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
