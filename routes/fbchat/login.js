@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const admin = require('firebase-admin');
 
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -59,8 +60,38 @@ function startForgotFlow(senderPsid, pendingAuthTokens, APP_URL) {
     };
 }
 
+/**
+ * Logout – removes messenger link
+ */
+async function doLogout(senderPsid) {
+    try {
+        await admin.database().ref('messenger_links/' + senderPsid).remove();
+        return {
+            text: '✅ You have been logged out of Messenger.\n\nType "menu" to start again or "1" to login.'
+        };
+    } catch (e) {
+        return {
+            text: '❌ Logout failed. Please try again.'
+        };
+    }
+}
+
+/**
+ * Check if PSID is linked
+ */
+async function isLinked(senderPsid) {
+    try {
+        const snap = await admin.database().ref('messenger_links/' + senderPsid).once('value');
+        return snap.exists() && !!snap.val().userId;
+    } catch (e) {
+        return false;
+    }
+}
+
 module.exports = {
     startLoginFlow,
     startRegisterFlow,
-    startForgotFlow
+    startForgotFlow,
+    doLogout,
+    isLinked
 };

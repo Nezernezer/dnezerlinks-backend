@@ -11,7 +11,7 @@ const fundChat = require('./fundwallet');
 const cableChat = require('./cabletv');
 const electricityChat = require('./electricity');
 const bulksmsChat = require('./bulksms');
-const historyChat = require('./history'); 
+const historyChat = require('./history');
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
@@ -110,6 +110,15 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
             '• Rate: ₦' + (extra.rate || 0) + ' per page\n' +
             '• Total Cost: ₦' + Number(amount).toLocaleString() + '\n\n' +
             'Message Preview:\n"' + (extra.messagePreview || '') + '"\n\n' +
+            '🔐 Enter your PIN securely (link expires in 5 minutes):';
+    } else if (extra.service === 'cable') {
+        reviewText =
+            'Review Cable TV Transaction:\n\n' +
+            '• Provider: ' + (extra.providerName || network) + '\n' +
+            '• Package: ' + (extra.planName || '') + '\n' +
+            '• IUC: ' + (extra.iuc || phone) + '\n' +
+            '• Customer: ' + (extra.customerName || '') + '\n' +
+            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
             '🔐 Enter your PIN securely (link expires in 5 minutes):';
     } else {
         reviewText =
@@ -1021,44 +1030,20 @@ async function handleUserMessage(senderPsid, text) {
                 attempts: 0
             };
 
-            const reviewText =
-                'Review Cable TV Transaction:\n\n' +
-                '• Provider: ' + result.data.providerName + '\n' +
-                '• Package: ' + result.data.planName + '\n' +
-                '• IUC: ' + result.data.iuc + '\n' +
-                '• Customer: ' + result.data.customerName + '\n' +
-                '• Amount: ₦' + Number(result.data.amount).toLocaleString() + '\n\n' +
-                '🔐 Enter your PIN securely (link expires in 5 minutes):';
-
-            const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
-
-            try {
-                await axios.post(
-                    'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
-                    {
-                        recipient: { id: senderPsid },
-                        message: {
-                            attachment: {
-                                type: 'template',
-                                payload: {
-                                    template_type: 'button',
-                                    text: reviewText,
-                                    buttons: [{
-                                        type: 'web_url',
-                                        url: webviewUrl,
-                                        title: '🔐 Enter PIN Securely',
-                                        webview_height_ratio: 'compact'
-                                    }]
-                                }
-                            }
-                        }
-                    }
-                );
-            } catch (err) {
-                await sendMessengerReply(senderPsid, {
-                    text: reviewText + '\n\n' + webviewUrl
-                });
-            }
+            await sendSecurePinLink(
+                senderPsid,
+                result.data.providerName,
+                result.data.iuc,
+                result.data.amount,
+                pinToken,
+                {
+                    service: 'cable',
+                    providerName: result.data.providerName,
+                    planName: result.data.planName,
+                    iuc: result.data.iuc,
+                    customerName: result.data.customerName
+                }
+            );
             return;
         }
 
@@ -1127,11 +1112,35 @@ async function handleUserMessage(senderPsid, text) {
 
     // ===== MENU OPTIONS =====
 
-    // 1. Login
-    if (text === '1' || lowerText === 'login') {
-        const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
-        await sendMessengerButtonTemplate(senderPsid, payload);
-        return;
+    // 1. Login OR Logout (dynamic)
+    if (text === '1' || lowerText === 'login' || lowerText === 'logout') {
+        const linked = await loginChat.isLinked(senderPsid);
+
+        if (linked && (text === '1' || lowerText === 'logout')) {
+            const result = await loginChat.doLogout(senderPsid);
+            await sendMessengerReply(senderPsid, result);
+            return;
+        }
+
+        if (!linked && (text === '1' || lowerText === 'login')) {
+            const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
+            await sendMessengerButtonTemplate(senderPsid, payload);
+            return;
+        }
+
+        if (linked && lowerText === 'login') {
+            await sendMessengerReply(senderPsid, {
+                text: '✅ You are already logged in.\nType "1" to logout or "menu" for options.'
+            });
+            return;
+        }
+
+        if (!linked && lowerText === 'logout') {
+            await sendMessengerReply(senderPsid, {
+                text: 'ℹ️ You are not logged in.\nType "1" to login.'
+            });
+            return;
+        }
     }
 
     // 2. Create Account
@@ -1175,88 +1184,88 @@ async function handleUserMessage(senderPsid, text) {
         await sendMessengerReply(senderPsid, initial);
         return;
     }
-	
-	// 8. Check Wallet Balance
-if (text === '8' || lowerText === 'balance' || lowerText === 'wallet') {
-    try {
-        const userId = await getLinkedUserId(senderPsid);
 
-        if (!userId) {
-            await sendMessengerReply(senderPsid, {
-                text:
-                    "❌ Your Messenger is not linked to any Dnezerlinks account yet.\n\n" +
-                    "Please login first (option 1) or create an account (option 2) to view your wallet balance."
-            });
-            return;
-        }
+    // 8. Check Wallet Balance
+    if (text === '8' || lowerText === 'balance' || lowerText === 'wallet') {
+        try {
+            const userId = await getLinkedUserId(senderPsid);
 
-        const userSnap = await admin.database().ref('users/' + userId).once('value');
+            if (!userId) {
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '❌ Your Messenger is not linked to any Dnezerlinks account yet.\n\n' +
+                        'Please login first (option 1) or create an account (option 2) to view your wallet balance.'
+                });
+                return;
+            }
 
-        if (!userSnap.exists()) {
-            await sendMessengerReply(senderPsid, {
-                text: "❌ Account record not found. Please contact support."
-            });
-            return;
-        }
-
-        const userData = userSnap.val();
-        const balance = userData.balance !== undefined ? Number(userData.balance) : 0;
-        const name = userData.name || 'User';
-
-        await sendMessengerReply(senderPsid, {
-            text:
-                "💰 *Dnezerlinks Wallet Balance*\n\n" +
-                "Name: " + name + "\n" +
-                "Balance: ₦" + balance.toLocaleString() + "\n\n" +
-                "Type 'menu' to return to main options."
-        });
-    } catch (err) {
-        console.error("Balance check error:", err);
-        await sendMessengerReply(senderPsid, {
-            text: "❌ Unable to retrieve wallet balance at the moment. Please try again later."
-        });
-    }
-    return;
-}
-
-// 9. Check Account Status (Linked or Not)
-if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
-    try {
-        const userId = await getLinkedUserId(senderPsid);
-
-        if (userId) {
             const userSnap = await admin.database().ref('users/' + userId).once('value');
-            const userData = userSnap.exists() ? userSnap.val() : {};
+
+            if (!userSnap.exists()) {
+                await sendMessengerReply(senderPsid, {
+                    text: '❌ Account record not found. Please contact support.'
+                });
+                return;
+            }
+
+            const userData = userSnap.val();
+            const balance = userData.balance !== undefined ? Number(userData.balance) : 0;
             const name = userData.name || 'User';
-            const email = userData.email || 'Not available';
 
             await sendMessengerReply(senderPsid, {
                 text:
-                    "✅ *Account Status*\n\n" +
-                    "Your Messenger is successfully linked to a Dnezerlinks account.\n\n" +
-                    "Name: " + name + "\n" +
-                    "Email: " + email + "\n\n" +
-                    "You can now use all services (Airtime, Data, Electricity, Bulk SMS, etc)."
+                    '💰 Dnezerlinks Wallet Balance\n\n' +
+                    'Name: ' + name + '\n' +
+                    'Balance: ₦' + balance.toLocaleString() + '\n\n' +
+                    'Type "menu" to return to main options.'
             });
-        } else {
+        } catch (err) {
+            console.error('Balance check error:', err);
             await sendMessengerReply(senderPsid, {
-                text:
-                    "ℹ️ *Account Status*\n\n" +
-                    "Your Messenger is currently *not linked* to any Dnezerlinks account.\n\n" +
-                    "To enjoy full access to our services, please:\n\n" +
-                    "1️⃣ Type *1* to Login\n" +
-                    "2️⃣ Type *2* to Create a new Account\n\n" +
-                    "We look forward to serving you!"
+                text: '❌ Unable to retrieve wallet balance at the moment. Please try again later.'
             });
         }
-    } catch (err) {
-        console.error("Status check error:", err);
-        await sendMessengerReply(senderPsid, {
-            text: "❌ Unable to check account status right now. Please try again later."
-        });
+        return;
     }
-    return;
-}
+
+    // 9. Check Account Status
+    if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
+        try {
+            const userId = await getLinkedUserId(senderPsid);
+
+            if (userId) {
+                const userSnap = await admin.database().ref('users/' + userId).once('value');
+                const userData = userSnap.exists() ? userSnap.val() : {};
+                const name = userData.name || 'User';
+                const email = userData.email || 'Not available';
+
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '✅ Account Status\n\n' +
+                        'Your Messenger is successfully linked to a Dnezerlinks account.\n\n' +
+                        'Name: ' + name + '\n' +
+                        'Email: ' + email + '\n\n' +
+                        'You can now use all services (Airtime, Data, Electricity, Bulk SMS, etc).'
+                });
+            } else {
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        'ℹ️ Account Status\n\n' +
+                        'Your Messenger is currently not linked to any Dnezerlinks account.\n\n' +
+                        'To enjoy full access to our services, please:\n\n' +
+                        '1. Type 1 to Login\n' +
+                        '2. Type 2 to Create a new Account\n\n' +
+                        'We look forward to serving you!'
+                });
+            }
+        } catch (err) {
+            console.error('Status check error:', err);
+            await sendMessengerReply(senderPsid, {
+                text: '❌ Unable to check account status right now. Please try again later.'
+            });
+        }
+        return;
+    }
 
     // 10. Forgot Password
     if (text === '10' || lowerText === 'forgot' || lowerText === 'reset') {
@@ -1271,34 +1280,23 @@ if (text === '9' || lowerText === 'status' || lowerText === 'account status') {
         await sendMessengerReply(senderPsid, initial);
         return;
     }
-	// 12. Transaction History
-if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
-    const result = await historyChat.getTransactionHistory(senderPsid);
-    await sendMessengerReply(senderPsid, result);
-    return;
-}
 
-    // 13. Logout
-    if (text === '13' || lowerText === 'logout') {
-        try {
-            await admin.database().ref('messenger_links/' + senderPsid).remove();
-            await sendMessengerReply(senderPsid, {
-                text: '✅ You have been logged out of Messenger.\nType "menu" to start again or "1" to login.'
-            });
-        } catch (e) {
-            await sendMessengerReply(senderPsid, {
-                text: '❌ Logout failed. Please try again.'
-            });
-        }
+    // 12. Transaction History
+    if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
+        const result = await historyChat.getTransactionHistory(senderPsid);
+        await sendMessengerReply(senderPsid, result);
         return;
     }
 
-    // Menu
+    // Menu (dynamic option 1)
     if (lowerText === 'menu' || lowerText === 'start' || lowerText === 'hi' || lowerText === 'hello') {
+        const linked = await loginChat.isLinked(senderPsid);
+        const option1 = linked ? '1. Logout' : '1. Login';
+
         await sendMessengerReply(senderPsid, {
             text:
                 'Welcome to Dnezerlinks!\n\n' +
-                '1. Login\n' +
+                option1 + '\n' +
                 '2. Create Account\n' +
                 '3. Airtime Top-up\n' +
                 '4. Data Bundles\n' +
@@ -1309,8 +1307,7 @@ if (text === '12' || lowerText === 'history' || lowerText === 'transactions') {
                 '9. Check Account Status\n' +
                 '10. Forgot Password\n' +
                 '11. Fund Wallet\n' +
-                '12. Transaction History\n' +
-                '13. Logout\n\n' +
+                '12. Transaction History\n\n' +
                 'Reply with a number.'
         });
         return;
