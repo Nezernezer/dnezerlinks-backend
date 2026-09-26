@@ -1,44 +1,24 @@
 // routes/fbchat/cabletv.js
 const path = require('path');
 const axios = require('axios');
-const fs = require('fs');
 
-// ---- SAFE LOAD OF CABLE PLANS ----
+// ---- LOAD CABLE PLANS (same method as data.js) ----
 let localPlans = {};
-
-function tryLoadPlans() {
-    const possiblePaths = [
-        path.join(__dirname, '../../public/cable/cable_plans.js'),
-        path.join(__dirname, '../../../public/cable/cable_plans.js'),
-        path.join(process.cwd(), 'public/cable/cable_plans.js'),
-        path.join(process.cwd(), 'routes/../public/cable/cable_plans.js')
-    ];
-
-    for (let i = 0; i < possiblePaths.length; i++) {
-        const p = possiblePaths[i];
-        try {
-            if (fs.existsSync(p)) {
-                // Clear cache so we always get fresh data
-                delete require.cache[require.resolve(p)];
-                const mod = require(p);
-                const plans = mod.localPlans || mod || {};
-                if (plans && (plans['1'] || plans['2'] || plans[1] || plans[2])) {
-                    console.log('✅ Cable plans loaded from:', p);
-                    console.log('   Providers found:', Object.keys(plans));
-                    return plans;
-                }
-            }
-        } catch (e) {
-            console.log('⚠️ Failed path', p, '→', e.message);
-        }
+try {
+    const plansModule = require('../../public/cable/cable_plans');
+    localPlans = plansModule.localPlans || plansModule || {};
+    console.log('✅ Cable plans loaded. Providers:', Object.keys(localPlans));
+} catch (err1) {
+    try {
+        const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
+        localPlans = plansModule.localPlans || plansModule || {};
+        console.log('✅ Cable plans loaded via fallback. Providers:', Object.keys(localPlans));
+    } catch (err2) {
+        console.error('❌ Could not load cable_plans.js');
+        console.error(err1.message);
+        console.error(err2.message);
+        localPlans = {};
     }
-    return null;
-}
-
-localPlans = tryLoadPlans() || {};
-
-if (!Object.keys(localPlans).length) {
-    console.error('❌ CRITICAL: cable_plans.js could not be loaded. Check file location and module.exports');
 }
 
 const cableSessions = {};
@@ -103,17 +83,15 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            // Support both string and number keys
-            const plans = localPlans[provider.id] || localPlans[Number(provider.id)] || [];
-
-            console.log('Selected provider:', provider.id, '→ plans found:', plans.length);
+            // Support both "1" and 1 keys
+            const plans = localPlans[provider.id] || localPlans[String(provider.id)] || localPlans[Number(provider.id)] || [];
 
             if (!plans || plans.length === 0) {
                 clearCableSession(psid);
                 return {
                     text:
                         '❌ No packages available for this provider right now.\n\n' +
-                        'Available providers in system: ' + (Object.keys(localPlans).join(', ') || 'none') +
+                        'Loaded providers: ' + (Object.keys(localPlans).join(', ') || 'none') +
                         '\n\nType "menu" to go back.'
                 };
             }
