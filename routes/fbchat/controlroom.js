@@ -1,3 +1,15 @@
+async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken) {
+    const webviewUrl = `\( {APP_URL}/webhook/secure-pin-portal?token= \){pinToken}`;
+
+    // ===== TEMPORARY DEBUG =====
+    console.log("====== DEBUG URL ======");
+    console.log("APP_URL     →", JSON.stringify(APP_URL));
+    console.log("webviewUrl  →", webviewUrl);
+    console.log("=======================");
+    // ===========================
+
+    // ... rest of the function stays the same
+}
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
