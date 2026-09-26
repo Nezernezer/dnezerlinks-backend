@@ -8,7 +8,6 @@ try {
     const absolutePlansPath = path.join(process.cwd(), 'public', 'cable', 'cable_plans');
     const plansModule = require(absolutePlansPath);
 
-    // Safely parse the object whether it's wrapped or direct
     if (plansModule && plansModule.localPlans) {
         localPlans = plansModule.localPlans;
     } else if (plansModule && (plansModule['1'] || plansModule['2'])) {
@@ -21,7 +20,6 @@ try {
     console.error('Error details:', err.stack || err.message);
     localPlans = {};
 }
-
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
@@ -85,10 +83,15 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            const plans = (localPlans && localPlans[provider.id]) ? localPlans[provider.id] : [];
+            // ---- BULLETPROOF PLAN LOOKUP ----
+            let plans = [];
+            if (localPlans) {
+                plans = localPlans[provider.id] || localPlans[Number(provider.id)] || localPlans[String(provider.id)] || [];
+            }
 
-            console.log('Provider ID:', provider.id, '| Plans found count:', plans.length);
-            console.log('Loaded keys in localPlans:', Object.keys(localPlans || {}));
+            console.log('🔍 Target Provider ID:', provider.id);
+            console.log('🔍 Plans found count:', plans.length);
+            console.log('🔍 Available keys in localPlans:', Object.keys(localPlans || {}));
 
             if (!plans || plans.length === 0) {
                 clearCableSession(psid);
