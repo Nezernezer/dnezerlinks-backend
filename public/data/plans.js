@@ -252,3 +252,5 @@ const processPlans = (data) => {
 };
 
 const groupedPlans = processPlans(rawPlans);
+
+module.exports = { groupedPlans, rawPlans, addProfit, processPlans };
