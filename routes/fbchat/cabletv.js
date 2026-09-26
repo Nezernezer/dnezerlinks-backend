@@ -7,16 +7,9 @@ let localPlans = {};
 try {
     const plansModule = require('../../public/cable/cable_plans');
 
-    console.log('📦 Raw module keys:', Object.keys(plansModule || {}));
-    console.log('📦 Has localPlans?', !!plansModule.localPlans);
-    console.log('📦 localPlans type:', typeof plansModule.localPlans);
-
     if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
         localPlans = plansModule.localPlans;
-    } else if (plansModule.default && plansModule.default.localPlans) {
-        localPlans = plansModule.default.localPlans;
-    } else if (plansModule['1'] || plansModule['2']) {
-        // In case the whole module IS the plans object
+    } else if (plansModule['1'] || plansModule['2'] || plansModule['3'] || plansModule['4']) {
         localPlans = plansModule;
     } else {
         localPlans = {};
@@ -28,12 +21,11 @@ try {
     }
 } catch (err1) {
     try {
-        const path = require('path');
         const plansModule = require(path.join(__dirname, '../../public/cable/cable_plans'));
 
-        if (plansModule.localPlans) {
+        if (plansModule.localPlans && typeof plansModule.localPlans === 'object') {
             localPlans = plansModule.localPlans;
-        } else if (plansModule['1'] || plansModule['2']) {
+        } else if (plansModule['1'] || plansModule['2'] || plansModule['3'] || plansModule['4']) {
             localPlans = plansModule;
         } else {
             localPlans = {};
@@ -47,7 +39,6 @@ try {
         localPlans = {};
     }
 }
-
 
 const cableSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
@@ -111,7 +102,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 };
             }
 
-            // Same style as data.js lookup
             const plans = (localPlans && localPlans[provider.id]) ? localPlans[provider.id] : [];
 
             console.log('Provider:', provider.id, '| Plans found:', plans.length);
