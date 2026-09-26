@@ -142,11 +142,9 @@ async function handleDataFlow(psid, text, session) {
             if (!isNaN(idx) && idx >= 0 && idx < categories.length) {
                 selectedCategory = categories[idx];
             } else {
-                selectedCategory = categories.find(
-                    function (c) {
-                        return c.toLowerCase() === input.toLowerCase();
-                    }
-                );
+                selectedCategory = categories.find(function (c) {
+                    return c.toLowerCase() === input.toLowerCase();
+                });
             }
 
             if (!selectedCategory) {
@@ -168,9 +166,10 @@ async function handleDataFlow(psid, text, session) {
 
             let msg = 'Data Type: ' + selectedCategory + '\n\nSelect Plan:\n\n';
             plans.forEach(function (plan, i) {
-                var cleanName = (plan.name || '').split(' - ₦')[0];
-                var price = Number(plan.price).toLocaleString();
-                msg += (i + 1) + '. ' + cleanName + ' - ₦' + price + '\n';
+                // Remove original price from the name
+                var cleanName = (plan.name || '').split(' - ₦')[0].trim();
+                var finalPrice = Number(plan.price).toLocaleString();
+                msg += (i + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the plan.';
 
@@ -191,6 +190,9 @@ async function handleDataFlow(psid, text, session) {
 
             const selectedPlan = plans[idx];
 
+            // Clean name only (no original price)
+            const cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
+
             return {
                 type: 'READY_FOR_PIN',
                 data: {
@@ -199,8 +201,8 @@ async function handleDataFlow(psid, text, session) {
                     network: session.data.network,
                     networkID: NETWORK_ID_MAP[session.data.network],
                     planId: selectedPlan.id,
-                    amount: selectedPlan.price,
-                    planName: selectedPlan.name
+                    amount: selectedPlan.price,          // final price with profit
+                    planName: cleanPlanName              // clean name only
                 }
             };
         }
