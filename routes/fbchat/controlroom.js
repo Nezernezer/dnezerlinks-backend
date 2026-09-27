@@ -1582,11 +1582,13 @@ async function handleUserMessage(senderPsid, text) {
             return;
         }
 
-        if (!linked && (raw === '1' || lowerText === 'login')) {
-            const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
-            await sendMessengerButtonTemplate(senderPsid, payload);
-            return;
-        }
+	if (!linked && (raw === '1' || lowerText === 'login')) {
+    const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
+    await sendMessengerReply(senderPsid, {
+        text: payload.text + '\n\n' + payload.url
+    });
+    return;
+}
 
         if (linked && lowerText === 'login') {
             await sendMessengerReply(senderPsid, {
@@ -1604,19 +1606,21 @@ async function handleUserMessage(senderPsid, text) {
     }
 
     // 2. Create Account
-    if (raw === '2' || lowerText === 'register' || lowerText === 'signup') {
-        const payload = loginChat.startRegisterFlow(senderPsid, pendingAuthTokens, APP_URL);
-        await sendMessengerButtonTemplate(senderPsid, payload);
-        return;
-    }
-
+	if (raw === '2' || lowerText === 'register' || lowerText === 'signup') {
+    const payload = loginChat.startRegisterFlow(senderPsid, pendingAuthTokens, APP_URL);
+    await sendMessengerReply(senderPsid, {
+        text: payload.text + '\n\n' + payload.url
+    });
+    return;
+}
     // 10. Forgot Password
-    if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
-        const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
-        await sendMessengerButtonTemplate(senderPsid, payload);
-        return;
-    }
-
+	if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
+    const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
+    await sendMessengerReply(senderPsid, {
+        text: payload.text + '\n\n' + payload.url
+    });
+    return;
+}
     // All other services require linked account
     const serviceTriggers =
         raw === '3' || raw === '4' || raw === '5' || raw === '6' || raw === '7' ||
