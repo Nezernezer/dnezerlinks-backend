@@ -31,6 +31,7 @@ const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 
 const MENU_FOOTER = '\n\nType 0 or menu for main menu.';
+const DELETE_PIN_REMINDER = '\n\n⚠️ Please delete all the four digits pin you entered above.';
 
 // ========== HELPERS ==========
 
@@ -148,111 +149,302 @@ async function requireLink(senderPsid) {
     return true;
 }
 
+// ========== TWO-WAY PIN SYSTEM ==========
+
 async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, extra = {}) {
-    const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + pinToken;
-
-    let reviewText = '';
-
-    if (extra.service === 'data') {
-        reviewText =
-            'Review Data Transaction:\n\n' +
-            '• Network: ' + network.toUpperCase() + '\n' +
-            '• Phone: ' + phone + '\n' +
-            '• Plan: ' + (extra.planName || '') + '\n' +
-            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else if (extra.service === 'electricity') {
-        reviewText =
-            'Review Electricity Payment:\n\n' +
-            '• Disco: ' + (extra.discoName || network) + '\n' +
-            '• Meter Type: ' + (extra.meterType || '') + '\n' +
-            '• Meter No: ' + phone + '\n' +
-            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else if (extra.service === 'bulksms') {
-        reviewText =
-            'Review Bulk SMS:\n\n' +
-            '• Sender ID: ' + (extra.senderName || '') + '\n' +
-            '• Recipients: ' + (extra.recipientCount || 0) + '\n' +
-            '• Pages: ' + (extra.pages || 0) + ' (' + (extra.encoding || 'GSM') + ')\n' +
-            '• Rate: ₦' + (extra.rate || 0) + ' per page\n' +
-            '• Total Cost: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            'Message Preview:\n"' + (extra.messagePreview || '') + '"\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else if (extra.service === 'cable') {
-        reviewText =
-            'Review Cable TV Transaction:\n\n' +
-            '• Provider: ' + (extra.providerName || network) + '\n' +
-            '• Package: ' + (extra.planName || '') + '\n' +
-            '• IUC: ' + (extra.iuc || phone) + '\n' +
-            '• Customer: ' + (extra.customerName || '') + '\n' +
-            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else if (extra.service === 'exampin') {
-        reviewText =
-            'Review Exam PIN Purchase:\n\n' +
-            '• Exam: ' + (extra.examLabel || network) + '\n' +
-            '• Quantity: ' + (extra.quantity || 1) + '\n' +
-            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else if (extra.service === 'rechargepin') {
-        reviewText =
-            'Review Recharge PIN:\n\n' +
-            '• Network: ' + network + '\n' +
-            '• Denomination: ₦' + (extra.denomination || amount) + '\n' +
-            '• Quantity: ' + (extra.qty || 1) + '\n' +
-            '• Brand: ' + (extra.brandName || 'Dnezerlinks') + '\n' +
-            '• Total: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    } else {
-        reviewText =
-            'Review Airtime Transaction:\n\n' +
-            '• Network: ' + network.toUpperCase() + '\n' +
-            '• Phone: ' + phone + '\n' +
-            '• Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
-            '🔐 Enter your PIN securely (link expires in 5 minutes):\n' +
-            '(Type # or cancel to abort)';
-    }
-
-    try {
-        await axios.post(
-            'https://graph.facebook.com/v19.0/me/messages?access_token=' + PAGE_ACCESS_TOKEN,
-            {
-                recipient: { id: senderPsid },
-                message: {
-                    attachment: {
-                        type: 'template',
-                        payload: {
-                            template_type: 'button',
-                            text: reviewText,
-                            buttons: [
-                                {
-                                    type: 'web_url',
-                                    url: webviewUrl,
-                                    title: '🔐 Enter PIN Securely',
-                                    webview_height_ratio: 'compact'
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        );
-        console.log('✅ PIN Button sent');
-        return;
-    } catch (err) {
-        console.log('PIN Button failed → falling back to text link');
-    }
+    // Store data and ask Free Mode question first
+    pendingPinTokens[pinToken].awaitingFreeModeChoice = true;
+    pendingPinTokens[pinToken].network = network;
+    pendingPinTokens[pinToken].phone = phone;
+    pendingPinTokens[pinToken].amount = amount;
+    pendingPinTokens[pinToken].extra = extra || {};
 
     await sendMessengerReply(senderPsid, {
-        text: reviewText + '\n\n' + webviewUrl
+        text:
+            '🔐 Before entering your PIN:\n\n' +
+            'Are you using Facebook / Messenger *Free Mode* currently?\n\n' +
+            '1. No, I\'m not using Free Mode\n' +
+            '2. Yes, I\'m using Free Mode\n\n' +
+            'Reply with 1 or 2:'
     });
+}
+
+async function processFreeModePin(senderPsid, pin, sessionData, token) {
+    const psid = sessionData.psid;
+    const service = sessionData.service;
+    const phone = sessionData.phone;
+    const network = sessionData.network;
+    const amount = sessionData.amount || sessionData.totalCost;
+
+    try {
+        const userId = await getLinkedUserId(psid);
+        if (!userId) {
+            delete pendingPinTokens[token];
+            await sendMessengerReply(psid, { text: '❌ Account not linked.' + MENU_FOOTER });
+            return;
+        }
+
+        const userSnap = await admin.database().ref('users/' + userId).once('value');
+        if (!userSnap.exists()) {
+            delete pendingPinTokens[token];
+            await sendMessengerReply(psid, { text: '❌ User not found.' + MENU_FOOTER });
+            return;
+        }
+
+        const userData = userSnap.val();
+        const correctPin = userData.pin || userData.transaction_pin;
+
+        if (String(pin).trim() !== String(correctPin).trim()) {
+            sessionData.attempts = (sessionData.attempts || 0) + 1;
+            const attemptsLeft = 3 - sessionData.attempts;
+
+            if (sessionData.attempts >= 3) {
+                delete pendingPinTokens[token];
+                await sendMessengerReply(psid, {
+                    text: '❌ Too many wrong PIN attempts. Transaction cancelled.' + MENU_FOOTER
+                });
+                return;
+            }
+
+            await sendMessengerReply(psid, {
+                text: '❌ Invalid PIN. ' + attemptsLeft + ' attempt(s) left.\n\nPlease enter your 4-digit PIN again:'
+            });
+            return;
+        }
+
+        // PIN correct → process transaction
+        delete pendingPinTokens[token];
+
+        // ========== AIRTIME ==========
+        if (service === 'airtime') {
+            const parsedAmount = parseFloat(amount);
+            const networkMap = { mtn: '1', glo: '2', '9mobile': '3', airtel: '4' };
+            const networkID = networkMap[network.toLowerCase()] || network;
+
+            const response = await axios.post(APP_URL + '/api/airtime/buy', {
+                uid: userId, phone, amount: parsedAmount, networkID, pin
+            }, { timeout: 55000 });
+
+            if (response.data && response.data.success) {
+                await sendMessengerReply(psid, {
+                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() +
+                          '\nPhone: ' + phone + '\nAmount: ₦' + parsedAmount.toLocaleString() +
+                          DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            } else {
+                await sendMessengerReply(psid, {
+                    text: '❌ Airtime Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== DATA ==========
+        if (service === 'data') {
+            const parsedAmount = parseFloat(amount);
+            const planId = sessionData.planId;
+            const networkID = sessionData.networkID || dataChat.NETWORK_ID_MAP[network.toLowerCase()] || network;
+
+            const response = await axios.post(APP_URL + '/api/data/buy', {
+                uid: userId, phone, dataPlan: planId, networkID: String(networkID), amount: parsedAmount, pin
+            }, { timeout: 55000 });
+
+            if (response.data && response.data.success) {
+                await sendMessengerReply(psid, {
+                    text: '✅ Data Purchase Successful!\n\nNetwork: ' + network.toUpperCase() +
+                          '\nPhone: ' + phone + '\nPlan: ' + (sessionData.planName || planId) +
+                          '\nAmount: ₦' + parsedAmount.toLocaleString() + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            } else {
+                await sendMessengerReply(psid, {
+                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== CABLE ==========
+        if (service === 'cable') {
+            const parsedAmount = parseFloat(amount);
+            try {
+                const response = await axios.post(APP_URL + '/api/cabletv/pay', {
+                    uid: userId,
+                    iuc: sessionData.iuc,
+                    providerID: String(sessionData.providerID),
+                    planID: String(sessionData.planID),
+                    amount: parsedAmount,
+                    pin
+                }, { timeout: 60000 });
+
+                if (response.data && response.data.success) {
+                    await sendMessengerReply(psid, {
+                        text: '✅ Cable TV Subscription Successful!\n\nProvider: ' + (sessionData.providerName || '') +
+                              '\nPackage: ' + (sessionData.planName || '') +
+                              '\nIUC: ' + sessionData.iuc +
+                              '\nCustomer: ' + (sessionData.customerName || '') +
+                              '\nAmount: ₦' + parsedAmount.toLocaleString() + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                }
+            } catch (err) {
+                await sendMessengerReply(psid, {
+                    text: '❌ Cable TV Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== ELECTRICITY ==========
+        if (service === 'electricity') {
+            const parsedAmount = parseFloat(amount);
+            try {
+                const response = await axios.post(APP_URL + '/api/electricity/pay', {
+                    uid: userId,
+                    meterNumber: sessionData.meterNumber,
+                    amount: parsedAmount,
+                    tokenType: sessionData.meterType,
+                    disco: sessionData.disco,
+                    pin
+                }, { timeout: 60000 });
+
+                if (response.data && response.data.success) {
+                    let msg = '✅ Electricity Payment Successful!\n\n';
+                    msg += 'Disco: ' + (sessionData.disco || '') + '\n';
+                    msg += 'Meter: ' + (sessionData.meterNumber || '') + '\n';
+                    msg += 'Type: ' + (sessionData.meterType || '') + '\n';
+                    msg += 'Amount: ₦' + parsedAmount.toLocaleString();
+                    if (response.data.token) msg += '\n\n🔑 Token: ' + response.data.token;
+                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
+                    await sendMessengerReply(psid, { text: msg });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                }
+            } catch (err) {
+                await sendMessengerReply(psid, {
+                    text: '❌ Electricity Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== BULK SMS ==========
+        if (service === 'bulksms') {
+            try {
+                const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
+                    uid: userId,
+                    recipient: sessionData.recipients,
+                    message: sessionData.message,
+                    senderName: sessionData.senderName,
+                    pin
+                }, { timeout: 65000 });
+
+                if (response.data && response.data.success) {
+                    await sendMessengerReply(psid, {
+                        text: '✅ Bulk SMS Sent Successfully!\n\nSender: ' + sessionData.senderName +
+                              '\nRecipients: ' + sessionData.recipientCount +
+                              '\nPages: ' + sessionData.pages +
+                              '\nCost: ₦' + Number(sessionData.amount).toLocaleString() +
+                              DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                }
+            } catch (err) {
+                await sendMessengerReply(psid, {
+                    text: '❌ Bulk SMS Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== EXAM PIN ==========
+        if (service === 'exampin') {
+            try {
+                const response = await axios.post(APP_URL + '/api/exampin/buy', {
+                    uid: userId,
+                    examType: sessionData.examType,
+                    quantity: sessionData.quantity,
+                    pin
+                }, { timeout: 55000 });
+
+                if (response.data && response.data.success) {
+                    let msg = '✅ Exam PIN Purchase Successful!\n\n';
+                    msg += 'Exam: ' + (sessionData.examLabel || sessionData.examType) + '\n';
+                    msg += 'Quantity: ' + sessionData.quantity + '\n';
+                    msg += 'Amount: ₦' + Number(sessionData.amount).toLocaleString() + '\n\n';
+                    msg += 'PIN: ' + (response.data.pin || 'N/A') + '\n';
+                    msg += 'Serial: ' + (response.data.serial || 'N/A') + '\n\n';
+                    msg += 'Save this message securely.';
+                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
+                    await sendMessengerReply(psid, { text: msg });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                }
+            } catch (err) {
+                await sendMessengerReply(psid, {
+                    text: '❌ Exam PIN Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+        // ========== RECHARGE PIN ==========
+        if (service === 'rechargepin') {
+            try {
+                const response = await axios.post(APP_URL + '/api/rechargepin/generate', {
+                    uid: userId,
+                    network: sessionData.network,
+                    amount: sessionData.amount,
+                    qty: sessionData.qty,
+                    brandName: sessionData.brandName || 'Dnezerlinks',
+                    pin
+                }, { timeout: 65000 });
+
+                if (response.data && response.data.success) {
+                    const pins = response.data.pins || [];
+                    let msg = '✅ Recharge PINs Generated!\n\n';
+                    msg += 'Network: ' + sessionData.network + '\n';
+                    msg += 'Denomination: ₦' + sessionData.amount + '\n';
+                    msg += 'Quantity: ' + sessionData.qty + '\n';
+                    msg += 'Brand: ' + (sessionData.brandName || 'Dnezerlinks') + '\n\n';
+
+                    pins.slice(0, 15).forEach(function (p, i) {
+                        msg += (i + 1) + '. PIN: ' + (p.pin || '') + ' | SN: ' + (p.serial || 'N/A') + '\n';
+                    });
+                    if (pins.length > 15) {
+                        msg += '\n...and ' + (pins.length - 15) + ' more.';
+                    }
+                    msg += '\n\nSave this message securely.';
+                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
+                    await sendMessengerReply(psid, { text: msg });
+                } else {
+                    await sendMessengerReply(psid, {
+                        text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
+                    });
+                }
+            } catch (err) {
+                await sendMessengerReply(psid, {
+                    text: '❌ Recharge PIN Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
+                });
+            }
+            return;
+        }
+
+    } catch (error) {
+        delete pendingPinTokens[token];
+        await sendMessengerReply(psid, {
+            text: '❌ Transaction Failed: ' + (error.message || 'Server error') + DELETE_PIN_REMINDER + MENU_FOOTER
+        });
+    }
 }
 
 // ========== WEBHOOK ROUTES ==========
@@ -575,7 +767,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
     }
 });
 
-// ========== SECURE PIN PORTAL ==========
+// ========== SECURE PIN PORTAL (for Option 1 - Non Free Mode) ==========
 router.get('/secure-pin-portal', (req, res) => {
     const token = req.query.token;
 
@@ -744,11 +936,7 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const networkID = networkMap[network.toLowerCase()] || network;
 
             const response = await axios.post(APP_URL + '/api/airtime/buy', {
-                uid: userId,
-                phone: phone,
-                amount: parsedAmount,
-                networkID: networkID,
-                pin: pin
+                uid: userId, phone, amount: parsedAmount, networkID, pin
             }, { timeout: 55000 });
 
             if (response.data && response.data.success) {
@@ -769,28 +957,16 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
             const networkID = sessionData.networkID || dataChat.NETWORK_ID_MAP[network.toLowerCase()] || network;
 
             const response = await axios.post(APP_URL + '/api/data/buy', {
-                uid: userId,
-                phone: phone,
-                dataPlan: planId,
-                networkID: String(networkID),
-                amount: parsedAmount,
-                pin: pin
+                uid: userId, phone, dataPlan: planId, networkID: String(networkID), amount: parsedAmount, pin
             }, { timeout: 55000 });
 
             if (response.data && response.data.success) {
                 await sendMessengerReply(psid, {
-                    text:
-                        '✅ Data Purchase Successful!\n\n' +
-                        'Network: ' + network.toUpperCase() + '\n' +
-                        'Phone: ' + phone + '\n' +
-                        'Plan: ' + (sessionData.planName || planId) + '\n' +
-                        'Amount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
+                    text: '✅ Data Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nPlan: ' + (sessionData.planName || planId) + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
                 });
                 return res.json({ success: true });
             } else {
-                await sendMessengerReply(psid, {
-                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                });
+                await sendMessengerReply(psid, { text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -798,40 +974,22 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         // ========== CABLE TV ==========
         if (service === 'cable') {
             const parsedAmount = parseFloat(amount);
-            const providerID = sessionData.providerID;
-            const planID = sessionData.planID;
-            const iuc = sessionData.iuc;
-
             try {
                 const response = await axios.post(APP_URL + '/api/cabletv/pay', {
-                    uid: userId,
-                    iuc: iuc,
-                    providerID: String(providerID),
-                    planID: String(planID),
-                    amount: parsedAmount,
-                    pin: pin
+                    uid: userId, iuc: sessionData.iuc, providerID: String(sessionData.providerID), planID: String(sessionData.planID), amount: parsedAmount, pin
                 }, { timeout: 60000 });
 
                 if (response.data && response.data.success) {
                     await sendMessengerReply(psid, {
-                        text:
-                            '✅ Cable TV Subscription Successful!\n\n' +
-                            'Provider: ' + (sessionData.providerName || '') + '\n' +
-                            'Package: ' + (sessionData.planName || planID) + '\n' +
-                            'IUC: ' + iuc + '\n' +
-                            'Customer: ' + (sessionData.customerName || '') + '\n' +
-                            'Amount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
+                        text: '✅ Cable TV Subscription Successful!\n\nProvider: ' + (sessionData.providerName || '') + '\nPackage: ' + (sessionData.planName || '') + '\nIUC: ' + sessionData.iuc + '\nCustomer: ' + (sessionData.customerName || '') + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
                     });
                     return res.json({ success: true });
                 } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                    });
+                    await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
-                const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + errMsg + MENU_FOOTER });
+                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -839,38 +997,23 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         // ========== ELECTRICITY ==========
         if (service === 'electricity') {
             const parsedAmount = parseFloat(amount);
-
             try {
                 const response = await axios.post(APP_URL + '/api/electricity/pay', {
-                    uid: userId,
-                    meterNumber: sessionData.meterNumber,
-                    amount: parsedAmount,
-                    tokenType: sessionData.meterType,
-                    disco: sessionData.disco,
-                    pin: pin
+                    uid: userId, meterNumber: sessionData.meterNumber, amount: parsedAmount, tokenType: sessionData.meterType, disco: sessionData.disco, pin
                 }, { timeout: 60000 });
 
                 if (response.data && response.data.success) {
-                    let msg = '✅ Electricity Payment Successful!\n\n';
-                    msg += 'Disco: ' + (sessionData.disco || '') + '\n';
-                    msg += 'Meter: ' + (sessionData.meterNumber || '') + '\n';
-                    msg += 'Type: ' + (sessionData.meterType || '') + '\n';
-                    msg += 'Amount: ₦' + parsedAmount.toLocaleString() + '\n';
-                    if (response.data.token) {
-                        msg += '\n🔑 Token: ' + response.data.token;
-                    }
+                    let msg = '✅ Electricity Payment Successful!\n\nDisco: ' + (sessionData.disco || '') + '\nMeter: ' + (sessionData.meterNumber || '') + '\nType: ' + (sessionData.meterType || '') + '\nAmount: ₦' + parsedAmount.toLocaleString();
+                    if (response.data.token) msg += '\n\n🔑 Token: ' + response.data.token;
                     msg += MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                    });
+                    await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
-                const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + errMsg + MENU_FOOTER });
+                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -879,31 +1022,20 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         if (service === 'bulksms') {
             try {
                 const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
-                    uid: userId,
-                    recipient: sessionData.recipients,
-                    message: sessionData.message,
-                    senderName: sessionData.senderName,
-                    pin: pin
+                    uid: userId, recipient: sessionData.recipients, message: sessionData.message, senderName: sessionData.senderName, pin
                 }, { timeout: 65000 });
 
                 if (response.data && response.data.success) {
-                    let msg = '✅ Bulk SMS Sent Successfully!\n\n';
-                    msg += 'Sender: ' + sessionData.senderName + '\n';
-                    msg += 'Recipients: ' + sessionData.recipientCount + '\n';
-                    msg += 'Pages: ' + sessionData.pages + '\n';
-                    msg += 'Cost: ₦' + Number(sessionData.amount).toLocaleString();
-                    msg += MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
+                    await sendMessengerReply(psid, {
+                        text: '✅ Bulk SMS Sent Successfully!\n\nSender: ' + sessionData.senderName + '\nRecipients: ' + sessionData.recipientCount + '\nPages: ' + sessionData.pages + '\nCost: ₦' + Number(sessionData.amount).toLocaleString() + MENU_FOOTER
+                    });
                     return res.json({ success: true });
                 } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                    });
+                    await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
-                const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + errMsg + MENU_FOOTER });
+                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -912,32 +1044,19 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         if (service === 'exampin') {
             try {
                 const response = await axios.post(APP_URL + '/api/exampin/buy', {
-                    uid: userId,
-                    examType: sessionData.examType,
-                    quantity: sessionData.quantity,
-                    pin: pin
+                    uid: userId, examType: sessionData.examType, quantity: sessionData.quantity, pin
                 }, { timeout: 55000 });
 
                 if (response.data && response.data.success) {
-                    let msg = '✅ Exam PIN Purchase Successful!\n\n';
-                    msg += 'Exam: ' + (sessionData.examLabel || sessionData.examType) + '\n';
-                    msg += 'Quantity: ' + sessionData.quantity + '\n';
-                    msg += 'Amount: ₦' + Number(sessionData.amount).toLocaleString() + '\n\n';
-                    msg += 'PIN: ' + (response.data.pin || 'N/A') + '\n';
-                    msg += 'Serial: ' + (response.data.serial || 'N/A') + '\n\n';
-                    msg += 'Save this message securely.';
-                    msg += MENU_FOOTER;
+                    let msg = '✅ Exam PIN Purchase Successful!\n\nExam: ' + (sessionData.examLabel || sessionData.examType) + '\nQuantity: ' + sessionData.quantity + '\nAmount: ₦' + Number(sessionData.amount).toLocaleString() + '\n\nPIN: ' + (response.data.pin || 'N/A') + '\nSerial: ' + (response.data.serial || 'N/A') + '\n\nSave this message securely.' + MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                    });
+                    await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
-                const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + errMsg + MENU_FOOTER });
+                await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -946,42 +1065,25 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
         if (service === 'rechargepin') {
             try {
                 const response = await axios.post(APP_URL + '/api/rechargepin/generate', {
-                    uid: userId,
-                    network: sessionData.network,
-                    amount: sessionData.amount,
-                    qty: sessionData.qty,
-                    brandName: sessionData.brandName || 'Dnezerlinks',
-                    pin: pin
+                    uid: userId, network: sessionData.network, amount: sessionData.amount, qty: sessionData.qty, brandName: sessionData.brandName || 'Dnezerlinks', pin
                 }, { timeout: 65000 });
 
                 if (response.data && response.data.success) {
                     const pins = response.data.pins || [];
-                    let msg = '✅ Recharge PINs Generated!\n\n';
-                    msg += 'Network: ' + sessionData.network + '\n';
-                    msg += 'Denomination: ₦' + sessionData.amount + '\n';
-                    msg += 'Quantity: ' + sessionData.qty + '\n';
-                    msg += 'Brand: ' + (sessionData.brandName || 'Dnezerlinks') + '\n\n';
-
+                    let msg = '✅ Recharge PINs Generated!\n\nNetwork: ' + sessionData.network + '\nDenomination: ₦' + sessionData.amount + '\nQuantity: ' + sessionData.qty + '\nBrand: ' + (sessionData.brandName || 'Dnezerlinks') + '\n\n';
                     pins.slice(0, 15).forEach(function (p, i) {
                         msg += (i + 1) + '. PIN: ' + (p.pin || '') + ' | SN: ' + (p.serial || 'N/A') + '\n';
                     });
-                    if (pins.length > 15) {
-                        msg += '\n...and ' + (pins.length - 15) + ' more. Check web dashboard for full list.';
-                    }
-                    msg += '\n\nSave this message securely.';
-                    msg += MENU_FOOTER;
-
+                    if (pins.length > 15) msg += '\n...and ' + (pins.length - 15) + ' more.';
+                    msg += '\n\nSave this message securely.' + MENU_FOOTER;
                     await sendMessengerReply(psid, { text: msg });
                     return res.json({ success: true });
                 } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER
-                    });
+                    await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
                     return res.json({ success: false, closeWindow: true });
                 }
             } catch (err) {
-                const errMsg = err.response?.data?.error || err.message || 'Server error';
-                await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + errMsg + MENU_FOOTER });
+                await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
                 return res.json({ success: false, closeWindow: true });
             }
         }
@@ -1010,6 +1112,10 @@ async function handleUserMessage(senderPsid, text) {
     // # / stop / cancel → abort
     if (raw === '#' || lowerText === 'stop' || lowerText === 'cancel' || lowerText === 'abort') {
         clearAllSessions(senderPsid);
+        // Also clear any pending PIN tokens for this user
+        Object.keys(pendingPinTokens).forEach(t => {
+            if (pendingPinTokens[t].psid === senderPsid) delete pendingPinTokens[t];
+        });
         await sendMessengerReply(senderPsid, { text: '🛑 Transaction cancelled.' + MENU_FOOTER });
         await showMainMenu(senderPsid);
         return;
@@ -1059,6 +1165,65 @@ async function handleUserMessage(senderPsid, text) {
         }
         await showMainMenu(senderPsid);
         return;
+    }
+
+    // ===== FREE MODE CHOICE & CHAT PIN ENTRY =====
+    const freeModeToken = Object.keys(pendingPinTokens).find(t => {
+        const d = pendingPinTokens[t];
+        return d.psid === senderPsid && (d.awaitingFreeModeChoice || d.awaitingChatPin) && Date.now() < d.expiresAt;
+    });
+
+    if (freeModeToken) {
+        const sessionData = pendingPinTokens[freeModeToken];
+
+        // User answered the Free Mode question
+        if (sessionData.awaitingFreeModeChoice) {
+            if (raw === '1' || lowerText === 'no') {
+                // Not Free Mode → send plain text link
+                sessionData.awaitingFreeModeChoice = false;
+                const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + freeModeToken;
+
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '🔐 Click the secure link below to enter your PIN:\n\n' +
+                        webviewUrl +
+                        '\n\n(Link expires in 5 minutes)\n(Type # or cancel to abort)'
+                });
+                return;
+            }
+
+            if (raw === '2' || lowerText === 'yes') {
+                // Free Mode → ask for PIN in chat
+                sessionData.awaitingFreeModeChoice = false;
+                sessionData.awaitingChatPin = true;
+
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '⚠️ You selected Free Mode.\n\n' +
+                        'Please enter your 4-digit Transaction PIN now.\n\n' +
+                        'After the transaction is processed, please *delete* the PIN you typed above for your security.'
+                });
+                return;
+            }
+
+            await sendMessengerReply(senderPsid, {
+                text: 'Please reply with 1 (No Free Mode) or 2 (Yes Free Mode):'
+            });
+            return;
+        }
+
+        // User typed a 4-digit PIN while in Free Mode
+        if (sessionData.awaitingChatPin && /^\d{4}$/.test(raw)) {
+            await processFreeModePin(senderPsid, raw, sessionData, freeModeToken);
+            return;
+        }
+
+        if (sessionData.awaitingChatPin) {
+            await sendMessengerReply(senderPsid, {
+                text: 'Please enter a valid 4-digit PIN:'
+            });
+            return;
+        }
     }
 
     // ===== ACTIVE AIRTIME SESSION =====
@@ -1445,7 +1610,7 @@ async function handleUserMessage(senderPsid, text) {
         return;
     }
 
-    // 10. Forgot Password (allowed without link)
+    // 10. Forgot Password
     if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
         const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
         await sendMessengerButtonTemplate(senderPsid, payload);
