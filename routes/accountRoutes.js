@@ -12,31 +12,37 @@ const getBillstackHeaders = () => ({
 
 router.post('/fund', async (req, res) => {
     try {
-        let { uid, email, first_name, last_name, phone, requested_bank } = req.body;
+        let { uid, email, first_name, last_name, phone, requested_bank, include_kyc, bvn, nin } = req.body;
 
         // 1. Force clear any lingering "Client" strings sent from frontend storage
         if (first_name && first_name.toLowerCase().includes('client')) first_name = "";
         if (last_name && last_name.toLowerCase().includes('client')) last_name = "";
 
         // 2. Format names correctly. Uses registered names exactly.
-        let finalFirstName = first_name ? first_name.trim() : ""; // e.g., "Ukoje"
-        let finalLastName = last_name ? last_name.trim() : "";   // e.g., "Faith"
+        let finalFirstName = first_name ? first_name.trim() : ""; 
+        let finalLastName = last_name ? last_name.trim() : "";   
 
-        // Get the first two letters of the last name if it exists
         let shortLastName = finalLastName.length >= 2 ? finalLastName.substring(0, 2) : finalLastName;
-
-        // Combine first name and 2-letter last name slice with a space (e.g., "Ukoje Fa")
         const combinedUserNames = shortLastName ? `${finalFirstName} ${shortLastName}` : finalFirstName;
 
-        // Construct payload forcing combined names into firstName and hardcoding (BILLSTACK) into lastName
+        // Construct base payload
         const payload = {
             email: email,
             reference: `VA_${uid}_${Date.now()}`,
-            firstName: combinedUserNames,  // Forces name combo here (e.g., "Ukoje Fa")
-            lastName: "(BILLSTACK)",       // Forces suffix marker here
+            firstName: combinedUserNames,  
+            lastName: "(BILLSTACK)",       
             phone: phone,
             bank: requested_bank.toUpperCase()
         };
+
+        // If KYC is verified and included, extract and attach BVN or NIN credentials
+        if (include_kyc) {
+            if (bvn && bvn.trim() !== "") {
+                payload.bvn = bvn.trim();
+            } else if (nin && nin.trim() !== "") {
+                payload.nin = nin.trim();
+            }
+        }
 
         console.log('📤 Sanitized Payload Sending to Billstack:', JSON.stringify(payload, null, 2));
 
@@ -47,7 +53,6 @@ router.post('/fund', async (req, res) => {
         const responseData = response.data;
 
         if (responseData.status === true && responseData.data && responseData.data.account) {
-            // Billstack returns an array, extract the first index item
             const accountInfo = responseData.data.account[0];
 
             const accountToSave = {
@@ -57,8 +62,7 @@ router.post('/fund', async (req, res) => {
                 created_at: accountInfo.created_at
             };
 
-            // Save structured data to Firebase realtime database node
-            await db.ref(`users/${uid}/virtual_accounts_new`).push(accountToSave);
+            await db.ref(`users/${uid}/virtual_accounts`).push(accountToSave);
 
             return res.json({ success: true, account: accountToSave });
         } else {
