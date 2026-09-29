@@ -26,6 +26,8 @@ console.log('Using APP_URL →', APP_URL);
 
 const pendingPinTokens = {};
 const pendingAuthTokens = {};
+const pendingFreeLogin = {};      // Free Mode login sessions
+const pendingFreeRegister = {};   // Free Mode register sessions
 
 const PIN_TOKEN_EXPIRY_MS = 5 * 60 * 1000;
 const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
@@ -92,6 +94,8 @@ function clearAllSessions(psid) {
     try { fundChat.clearFundSession(psid); } catch (e) {}
     try { examChat.clearExamSession(psid); } catch (e) {}
     try { rechargePinChat.clearRechargePinSession(psid); } catch (e) {}
+    delete pendingFreeLogin[psid];
+    delete pendingFreeRegister[psid];
 }
 
 async function getLinkedUserId(senderPsid) {
@@ -152,7 +156,6 @@ async function requireLink(senderPsid) {
 // ========== TWO-WAY PIN SYSTEM ==========
 
 async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, extra = {}) {
-    // Store data and ask Free Mode question first
     pendingPinTokens[pinToken].awaitingFreeModeChoice = true;
     pendingPinTokens[pinToken].network = network;
     pendingPinTokens[pinToken].phone = phone;
@@ -212,7 +215,6 @@ async function processFreeModePin(senderPsid, pin, sessionData, token) {
             return;
         }
 
-        // PIN correct → process transaction
         delete pendingPinTokens[token];
 
         // ========== AIRTIME ==========
@@ -767,7 +769,7 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
     }
 });
 
-// ========== SECURE PIN PORTAL (for Option 1 - Non Free Mode) ==========
+// ========== SECURE PIN PORTAL ==========
 router.get('/secure-pin-portal', (req, res) => {
     const token = req.query.token;
 
@@ -1112,10 +1114,11 @@ async function handleUserMessage(senderPsid, text) {
     // # / stop / cancel → abort
     if (raw === '#' || lowerText === 'stop' || lowerText === 'cancel' || lowerText === 'abort') {
         clearAllSessions(senderPsid);
-        // Also clear any pending PIN tokens for this user
         Object.keys(pendingPinTokens).forEach(t => {
             if (pendingPinTokens[t].psid === senderPsid) delete pendingPinTokens[t];
         });
+        delete pendingFreeLogin[senderPsid];
+        delete pendingFreeRegister[senderPsid];
         await sendMessengerReply(senderPsid, { text: '🛑 Transaction cancelled.' + MENU_FOOTER });
         await showMainMenu(senderPsid);
         return;
@@ -1176,10 +1179,8 @@ async function handleUserMessage(senderPsid, text) {
     if (freeModeToken) {
         const sessionData = pendingPinTokens[freeModeToken];
 
-        // User answered the Free Mode question
         if (sessionData.awaitingFreeModeChoice) {
             if (raw === '1' || lowerText === 'no') {
-                // Not Free Mode → send plain text link
                 sessionData.awaitingFreeModeChoice = false;
                 const webviewUrl = APP_URL + '/webhook/secure-pin-portal?token=' + freeModeToken;
 
@@ -1193,7 +1194,6 @@ async function handleUserMessage(senderPsid, text) {
             }
 
             if (raw === '2' || lowerText === 'yes') {
-                // Free Mode → ask for PIN in chat
                 sessionData.awaitingFreeModeChoice = false;
                 sessionData.awaitingChatPin = true;
 
@@ -1212,7 +1212,6 @@ async function handleUserMessage(senderPsid, text) {
             return;
         }
 
-        // User typed a 4-digit PIN while in Free Mode
         if (sessionData.awaitingChatPin && /^\d{4}$/.test(raw)) {
             await processFreeModePin(senderPsid, raw, sessionData, freeModeToken);
             return;
@@ -1222,6 +1221,289 @@ async function handleUserMessage(senderPsid, text) {
             await sendMessengerReply(senderPsid, {
                 text: 'Please enter a valid 4-digit PIN:'
             });
+            return;
+        }
+    }
+
+    // ===== FREE MODE LOGIN FLOW =====
+    if (pendingFreeLogin[senderPsid]) {
+        const session = pendingFreeLogin[senderPsid];
+
+        if (Date.now() > session.expiresAt) {
+            delete pendingFreeLogin[senderPsid];
+            await sendMessengerReply(senderPsid, {
+                text: '⏳ Login session expired. Please type 1 to start again.' + MENU_FOOTER
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_FREE_MODE') {
+            if (raw === '1' || lowerText === 'no') {
+                delete pendingFreeLogin[senderPsid];
+                const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
+                await sendMessengerReply(senderPsid, {
+                    text: payload.text + '\n\n' + payload.url
+                });
+                return;
+            }
+
+            if (raw === '2' || lowerText === 'yes') {
+                session.step = 'ASK_EMAIL';
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        'Please enter your registered email address:\n\n' +
+                        '⚠️ After processing, please delete the email you typed above.'
+                });
+                return;
+            }
+
+            await sendMessengerReply(senderPsid, { text: 'Please reply with 1 or 2:' });
+            return;
+        }
+
+        if (session.step === 'ASK_EMAIL') {
+            if (!raw.includes('@') || raw.length < 6) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid email address:' });
+                return;
+            }
+            session.email = raw.toLowerCase().trim();
+            session.step = 'ASK_PASSWORD';
+            await sendMessengerReply(senderPsid, {
+                text:
+                    'Please enter your login password:\n\n' +
+                    '⚠️ After processing, please delete the password you typed above.'
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_PASSWORD') {
+            const email = session.email;
+            const password = raw;
+            delete pendingFreeLogin[senderPsid];
+
+            try {
+                const snapshot = await admin.database()
+                    .ref('users')
+                    .orderByChild('email')
+                    .equalTo(email)
+                    .once('value');
+
+                if (!snapshot.exists()) {
+                    await sendMessengerReply(senderPsid, {
+                        text:
+                            '❌ No account found with this email.\n\n' +
+                            '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
+                    });
+                    return;
+                }
+
+                let userId = null;
+                let userData = null;
+                snapshot.forEach(child => {
+                    userId = child.key;
+                    userData = child.val();
+                });
+
+                if (String(userData.password || '').trim() !== String(password).trim()) {
+                    await sendMessengerReply(senderPsid, {
+                        text:
+                            '❌ Incorrect password.\n\n' +
+                            '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
+                    });
+                    return;
+                }
+
+                await admin.database().ref('messenger_links/' + senderPsid).set({
+                    userId: userId,
+                    email: email,
+                    linkedAt: new Date().toISOString()
+                });
+                await admin.database().ref('users/' + userId + '/messenger_psid').set(senderPsid);
+
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '✅ Successfully Logged In & Linked to ' + email + '!\n\n' +
+                        '⚠️ Please delete the email and password you entered above for your security.' + MENU_FOOTER
+                });
+            } catch (err) {
+                console.error('Free mode login error:', err);
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '❌ Login failed. Please try again.\n\n' +
+                        '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
+                });
+            }
+            return;
+        }
+    }
+
+    // ===== FREE MODE REGISTER FLOW =====
+    if (pendingFreeRegister[senderPsid]) {
+        const session = pendingFreeRegister[senderPsid];
+
+        if (Date.now() > session.expiresAt) {
+            delete pendingFreeRegister[senderPsid];
+            await sendMessengerReply(senderPsid, {
+                text: '⏳ Registration session expired. Please type 2 to start again.' + MENU_FOOTER
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_FREE_MODE') {
+            if (raw === '1' || lowerText === 'no') {
+                delete pendingFreeRegister[senderPsid];
+                const payload = loginChat.startRegisterFlow(senderPsid, pendingAuthTokens, APP_URL);
+                await sendMessengerReply(senderPsid, {
+                    text: payload.text + '\n\n' + payload.url
+                });
+                return;
+            }
+
+            if (raw === '2' || lowerText === 'yes') {
+                session.step = 'ASK_NAME';
+                await sendMessengerReply(senderPsid, {
+                    text: 'Please enter your Full Name:'
+                });
+                return;
+            }
+
+            await sendMessengerReply(senderPsid, { text: 'Please reply with 1 or 2:' });
+            return;
+        }
+
+        if (session.step === 'ASK_NAME') {
+            if (raw.length < 2) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid name:' });
+                return;
+            }
+            session.name = raw;
+            session.step = 'ASK_PHONE';
+            await sendMessengerReply(senderPsid, { text: 'Please enter your Phone Number:' });
+            return;
+        }
+
+        if (session.step === 'ASK_PHONE') {
+            if (raw.length < 10) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid phone number:' });
+                return;
+            }
+            session.phone = raw;
+            session.step = 'ASK_ADDRESS';
+            await sendMessengerReply(senderPsid, { text: 'Please enter your Home Address:' });
+            return;
+        }
+
+        if (session.step === 'ASK_ADDRESS') {
+            if (raw.length < 5) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid address:' });
+                return;
+            }
+            session.address = raw;
+            session.step = 'ASK_EMAIL';
+            await sendMessengerReply(senderPsid, {
+                text:
+                    'Please enter your Email Address:\n\n' +
+                    '⚠️ After processing, please delete the email you typed.'
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_EMAIL') {
+            if (!raw.includes('@') || raw.length < 6) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid email address:' });
+                return;
+            }
+            session.email = raw.toLowerCase().trim();
+            session.step = 'ASK_PASSWORD';
+            await sendMessengerReply(senderPsid, {
+                text:
+                    'Please enter a Password (minimum 6 characters):\n\n' +
+                    '⚠️ After processing, please delete the password you typed.'
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_PASSWORD') {
+            if (raw.length < 6) {
+                await sendMessengerReply(senderPsid, { text: '❌ Password must be at least 6 characters:' });
+                return;
+            }
+            session.password = raw;
+            session.step = 'ASK_PIN';
+            await sendMessengerReply(senderPsid, {
+                text:
+                    'Please enter a 4-digit Transaction PIN:\n\n' +
+                    '⚠️ After processing, please delete the PIN you typed.'
+            });
+            return;
+        }
+
+        if (session.step === 'ASK_PIN') {
+            if (!/^\d{4}$/.test(raw)) {
+                await sendMessengerReply(senderPsid, { text: '❌ Please enter a valid 4-digit PIN:' });
+                return;
+            }
+
+            const { name, phone, address, email, password } = session;
+            const pin = raw;
+            delete pendingFreeRegister[senderPsid];
+
+            try {
+                const snapshot = await admin.database()
+                    .ref('users')
+                    .orderByChild('email')
+                    .equalTo(email)
+                    .once('value');
+
+                if (snapshot.exists()) {
+                    await sendMessengerReply(senderPsid, {
+                        text:
+                            '❌ An account with this email already exists.\n\n' +
+                            '⚠️ Please delete the email, password and PIN you entered above.' + MENU_FOOTER
+                    });
+                    return;
+                }
+
+                const newUserRef = admin.database().ref('users').push();
+                const userId = newUserRef.key;
+
+                await newUserRef.set({
+                    userId: userId,
+                    name: name,
+                    email: email,
+                    phone: phone,
+                    address: address,
+                    password: password.trim(),
+                    pin: pin,
+                    transaction_pin: pin,
+                    balance: 0,
+                    account_status: 'active',
+                    messenger_psid: senderPsid,
+                    createdAt: new Date().toISOString()
+                });
+
+                await admin.database().ref('messenger_links/' + senderPsid).set({
+                    userId: userId,
+                    email: email,
+                    linkedAt: new Date().toISOString()
+                });
+
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '🎉 Account Created & Linked Successfully!\n\n' +
+                        'Name: ' + name + '\n' +
+                        'Email: ' + email + '\n' +
+                        'Balance: ₦0.00\n\n' +
+                        '⚠️ Please delete the email, password and PIN you entered above for your security.' + MENU_FOOTER
+                });
+            } catch (err) {
+                console.error('Free mode register error:', err);
+                await sendMessengerReply(senderPsid, {
+                    text:
+                        '❌ Registration failed. Please try again.\n\n' +
+                        '⚠️ Please delete the sensitive information you entered above.' + MENU_FOOTER
+                });
+            }
             return;
         }
     }
@@ -1582,13 +1864,22 @@ async function handleUserMessage(senderPsid, text) {
             return;
         }
 
-	if (!linked && (raw === '1' || lowerText === 'login')) {
-    const payload = loginChat.startLoginFlow(senderPsid, pendingAuthTokens, APP_URL);
-    await sendMessengerReply(senderPsid, {
-        text: payload.text + '\n\n' + payload.url
-    });
-    return;
-}
+        if (!linked && (raw === '1' || lowerText === 'login')) {
+            pendingFreeLogin[senderPsid] = {
+                step: 'ASK_FREE_MODE',
+                expiresAt: Date.now() + 5 * 60 * 1000
+            };
+
+            await sendMessengerReply(senderPsid, {
+                text:
+                    '🔐 Login\n\n' +
+                    'Are you currently using Facebook / Messenger *Free Mode*?\n\n' +
+                    '1. No, I\'m not using Free Mode\n' +
+                    '2. Yes, I\'m using Free Mode\n\n' +
+                    'Reply with 1 or 2:'
+            });
+            return;
+        }
 
         if (linked && lowerText === 'login') {
             await sendMessengerReply(senderPsid, {
@@ -1606,21 +1897,32 @@ async function handleUserMessage(senderPsid, text) {
     }
 
     // 2. Create Account
-	if (raw === '2' || lowerText === 'register' || lowerText === 'signup') {
-    const payload = loginChat.startRegisterFlow(senderPsid, pendingAuthTokens, APP_URL);
-    await sendMessengerReply(senderPsid, {
-        text: payload.text + '\n\n' + payload.url
-    });
-    return;
-}
+    if (raw === '2' || lowerText === 'register' || lowerText === 'signup') {
+        pendingFreeRegister[senderPsid] = {
+            step: 'ASK_FREE_MODE',
+            expiresAt: Date.now() + 5 * 60 * 1000
+        };
+
+        await sendMessengerReply(senderPsid, {
+            text:
+                '📝 Create Account\n\n' +
+                'Are you currently using Facebook / Messenger *Free Mode*?\n\n' +
+                '1. No, I\'m not using Free Mode\n' +
+                '2. Yes, I\'m using Free Mode\n\n' +
+                'Reply with 1 or 2:'
+        });
+        return;
+    }
+
     // 10. Forgot Password
-	if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
-    const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
-    await sendMessengerReply(senderPsid, {
-        text: payload.text + '\n\n' + payload.url
-    });
-    return;
-}
+    if (raw === '10' || lowerText === 'forgot' || lowerText === 'reset') {
+        const payload = loginChat.startForgotFlow(senderPsid, pendingAuthTokens, APP_URL);
+        await sendMessengerReply(senderPsid, {
+            text: payload.text + '\n\n' + payload.url
+        });
+        return;
+    }
+
     // All other services require linked account
     const serviceTriggers =
         raw === '3' || raw === '4' || raw === '5' || raw === '6' || raw === '7' ||
