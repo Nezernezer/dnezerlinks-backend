@@ -22,6 +22,11 @@ function renderTable() {
         // 2. SAFETY ESCAPING: Protect names containing special string layouts or quotes from breaking click handlers
         const safeName = (u.name || 'User').replace(/'/g, "\\'");
 
+        // Extract identity details safely from folder nodes
+        const kycPayload = u.verify || u.declined || u.not_submitted || {};
+        const idType = u.id_type || kycPayload.id_type || '---';
+        const idNumber = u.id_number || kycPayload.id_number || 'N/A';
+
         // 3. PRIVILEGE MATRIX FILTERS: Conditionally generate interface actions
         let actionButtonsHtml = "";
 
@@ -48,8 +53,7 @@ function renderTable() {
                 <td>${u.email || '<i>No Email</i>'}<br><small>${u.phone || 'No Phone'}</small></td>
                 <td style="font-family:monospace; font-size:10px; color:#666;">${uid}</td>
                 <td>
-                    <small>${u.matric_no ? `ID: ${u.matric_no}` : '---'}</small>
-                    ${u.id_type ? `<br><small style="color:#777;">${u.id_type}: ${u.id_number || 'N/A'}</small>` : ''}
+                    <small>${u.matric_no ? `ID: ${u.matric_no}` : (idType !== '---' ? `${idType}:${idNumber}` : '---')}</small>
                 </td>
                 <td><span class="badge status-${status}">${status}</span></td>
                 <td>

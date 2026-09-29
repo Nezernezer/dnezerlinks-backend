@@ -63,7 +63,7 @@
 
         .card {
             flex: 0 0 100%;
-            height: 160px;
+            height: 180px;
             border-radius: 16px;
             padding: 20px;
             display: flex;
@@ -76,7 +76,19 @@
         }
 
         .card:active { transform: scale(0.98); }
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
         .card-title { font-size: 1.8rem; font-weight: 700; letter-spacing: 1px; text-transform: capitalize; }
+        
+        .bvn-compulsory-text {
+            font-size: 0.65rem;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
         .card-body { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
 
         .account-info-box {
@@ -123,6 +135,31 @@
         .bg-wema { background: linear-gradient(135deg, #c62828, #f44336); }
 
         .hint { text-align: center; color: #888; font-size: 0.9rem; margin-top: -20px; margin-bottom: 20px; }
+
+        /* CUSTOM MODAL OVERLAY STYLES */
+        #custom-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+        }
+        .modal-content p { font-size: 1rem; color: #333; margin-bottom: 20px; line-height: 1.5; }
+        .modal-buttons { display: flex; justify-content: center; gap: 15px; }
+        .modal-btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .modal-btn-yes { background-color: #007bff; color: white; }
+        .modal-btn-no { background-color: #e0e0e0; color: #333; }
     </style>
 </head>
 <body>
@@ -137,12 +174,26 @@
         <div id="status-msg"></div>
     </div>
 
+    <!-- KYC Confirmation Modal -->
+    <div id="custom-modal">
+        <div class="modal-content">
+            <p id="modal-msg">You have not submitted your KYC. Do you want to submit now?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-yes" onclick="handleModalYes()">Yes</button>
+                <button class="modal-btn modal-btn-no" onclick="handleModalNo()">No</button>
+            </div>
+        </div>
+    </div>
+
     <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
         <div class="swipe-container">
 
             <!-- Box 1: Palmpay -->
             <div class="card bg-palm" id="card-palmpay">
-                <div class="card-title">Palmpay</div>
+                <div class="card-top">
+                    <div class="card-title">Palmpay</div>
+                    <span class="bvn-compulsory-text">BVN or NIN is compulsory for this bank</span>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-palmpay">
                         <span class="acc-number-text" id="num-palmpay"></span>
@@ -154,7 +205,9 @@
 
             <!-- Box 2: 9psb -->
             <div class="card bg-psb" id="card-9psb">
-                <div class="card-title">9psb</div>
+                <div class="card-top">
+                    <div class="card-title">9psb</div>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-9psb">
                         <span class="acc-number-text" id="num-9psb"></span>
@@ -166,7 +219,9 @@
 
             <!-- Box 3: Safehaven -->
             <div class="card bg-safe" id="card-safehaven">
-                <div class="card-title">Safehaven</div>
+                <div class="card-top">
+                    <div class="card-title">Safehaven</div>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-safehaven">
                         <span class="acc-number-text" id="num-safehaven"></span>
@@ -178,7 +233,9 @@
 
             <!-- Box 4: Bankly -->
             <div class="card bg-bankly" id="card-bankly">
-                <div class="card-title">Bankly</div>
+                <div class="card-top">
+                    <div class="card-title">Bankly</div>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-bankly">
                         <span class="acc-number-text" id="num-bankly"></span>
@@ -190,7 +247,9 @@
 
             <!-- Box 5: Providus -->
             <div class="card bg-providus" id="card-providus">
-                <div class="card-title">Providus</div>
+                <div class="card-top">
+                    <div class="card-title">Providus</div>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-providus">
                         <span class="acc-number-text" id="num-providus"></span>
@@ -202,7 +261,9 @@
 
             <!-- Box 6: Wema -->
             <div class="card bg-wema" id="card-wema">
-                <div class="card-title">Wema</div>
+                <div class="card-top">
+                    <div class="card-title">Wema</div>
+                </div>
                 <div class="card-body">
                     <div class="account-info-box" id="info-wema">
                         <span class="acc-number-text" id="num-wema"></span>
@@ -247,8 +308,6 @@
             msgEl.style.display = "block";
         }
 
-        // Modified: Now strictly checks newly generated virtual accounts under the active migration pathway
-        // and completely ignores old global user account entries.
         function updateStaticCards(virtualAccounts) {
             let valuesList = [];
             if (virtualAccounts && typeof virtualAccounts === 'object') {
@@ -265,18 +324,17 @@
 
                 if (processingBanks.has(key)) return;
 
-                // Only check newly created accounts inside virtual_accounts_new with robust matching
                 let matched = valuesList.find(acc => {
                     if (!acc || !acc.bank_name) return false;
                     const bName = acc.bank_name.toLowerCase();
-                    
+
                     if (key === '9psb') return bName.includes('9psb') || bName.includes('9 payment');
                     if (key === 'palmpay') return bName.includes('palmpay') || bName.includes('palm pay');
                     if (key === 'safehaven') return bName.includes('safehaven') || bName.includes('safe haven');
                     if (key === 'bankly') return bName.includes('bankly');
                     if (key === 'providus') return bName.includes('providus');
                     if (key === 'wema') return bName.includes('wema');
-                    
+
                     return bName.includes(key);
                 });
 
@@ -298,7 +356,48 @@
             });
         }
 
-        async function triggerAccountGeneration(bankKey) {
+        function hasKycVerified() {
+            if (!cachedUserData) return false;
+            const bvn = cachedUserData.bvn || cachedUserData.BVN;
+            const nin = cachedUserData.nin || cachedUserData.NIN;
+            const kycStatus = cachedUserData.kyc_status || cachedUserData.kycVerified;
+            
+            return (bvn && String(bvn).trim() !== "") || 
+                   (nin && String(nin).trim() !== "") || 
+                   kycStatus === true || kycStatus === "verified";
+        }
+
+        function triggerAccountGeneration(bankKey) {
+            const currentUser = firebase.auth().currentUser;
+            if (!currentUser) return;
+
+            const kycExist = hasKycVerified();
+
+            if (bankKey === 'palmpay') {
+                if (!kycExist) {
+                    document.getElementById('custom-modal').style.display = 'flex';
+                    return;
+                }
+            } else {
+                if (!kycExist) {
+                    executeGeneration(bankKey, false);
+                    return;
+                }
+            }
+
+            executeGeneration(bankKey, true);
+        }
+
+        function handleModalYes() {
+            document.getElementById('custom-modal').style.display = 'none';
+            window.location.href = 'kyc_status.html';
+        }
+
+        function handleModalNo() {
+            document.getElementById('custom-modal').style.display = 'none';
+        }
+
+        async function executeGeneration(bankKey, includeKyc) {
             const targetBtn = document.getElementById(`btn-${bankKey}`);
 
             processingBanks.add(bankKey);
@@ -329,7 +428,10 @@
                         first_name: firstName,
                         last_name: lastName,
                         phone: cachedUserData.phone || "08000000000",
-                        requested_bank: bankKey
+                        requested_bank: bankKey,
+                        include_kyc: includeKyc,
+                        bvn: cachedUserData.bvn || cachedUserData.BVN || "",
+                        nin: cachedUserData.nin || cachedUserData.NIN || ""
                     })
                 });
 
@@ -338,11 +440,11 @@
                 processingBanks.delete(bankKey);
 
                 if (result.success) {
-                    setStatus("Your virtual account has been created  successfully! You can now fund your wallet by sending money into it and get credited automatically", "#27AE60");
+                    setStatus("Your virtual account has been created successfully! You can now fund your wallet by sending money into it and get credited automatically", "#27AE60");
                     setTimeout(() => setStatus(""), 3000);
                     updateStaticCards(cachedUserData.virtual_accounts_new);
                 } else {
-                    setStatus(result.error || result.message || "Error encoutered while processing your request. Please retry.", "red");
+                    setStatus(result.error || result.message || "Error encountered while processing your request. Please retry.", "red");
                     if (targetBtn) {
                         targetBtn.disabled = false;
                         targetBtn.innerText = "Get Account Number";

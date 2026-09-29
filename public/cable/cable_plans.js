@@ -1,3 +1,4 @@
+//note you have to copy everything to cable_plans.js inside fbchat for messanger chat if uodated
 /**
  * Profit Margin Logic
  */
@@ -125,3 +126,4 @@ const localPlans = {
         { id: 129, name: `Sports Only - 6 Months - ₦${calculateSellingPrice(18200).toLocaleString()}`, price: calculateSellingPrice(18200) }
     ]
 };
+module.exports = { localPlans, calculateSellingPrice };

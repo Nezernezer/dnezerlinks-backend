@@ -451,13 +451,14 @@
 
     function matchesSearch(uid, u) {
         if (!searchQuery) return true;
+        const kycPayload = u.verify || u.declined || u.not_submitted || {};
         const haystack = [
             uid,
             u.name || '',
             u.email || '',
-            u.id_type || '',
-            u.id_number || '',
-            u.dob || '',
+            u.id_type || kycPayload.id_type || '',
+            u.id_number || kycPayload.id_number || '',
+            u.dob || kycPayload.dob || '',
             u.kyc_status || '',
             String(u.balance || '')
         ].join(' ').toLowerCase();
@@ -465,7 +466,6 @@
     }
 
     function toggleExpand(uid, event) {
-        // Don't toggle if clicking a button inside details
         if (event && event.target.closest('.action-btn')) return;
         if (expandedUids.has(uid)) {
             expandedUids.delete(uid);
@@ -509,8 +509,6 @@
             return;
         }
 
-        // Will set empty state after loop if count stays 0 (e.g. search/filter)
-
         uids.forEach(uid => {
             const u = usersData[uid];
             let status = u.kyc_status || 'NOT-SUBMITTED';
@@ -523,7 +521,11 @@
             const accountClass = isBlocked ? 'account-blocked' : 'account-active';
             const isExpanded = expandedUids.has(uid);
 
-            // Build operation buttons (same permissions as before)
+            const kycPayload = u.verify || u.declined || u.not_submitted || {};
+            const idType = u.id_type || kycPayload.id_type || 'N/A';
+            const idNumber = u.id_number || kycPayload.id_number || 'N/A';
+            const dob = u.dob || kycPayload.dob || 'N/A';
+
             let opsButtons = [];
             if (isMaster || currentAdminRoles.canVerifyKyc) {
                 opsButtons.push(`<button class="action-btn btn-v" onclick="event.stopPropagation(); approve('${uid}', this)">Verify</button>`);
@@ -541,12 +543,6 @@
                 opsButtons.push(`<button class="action-btn btn-del" onclick="event.stopPropagation(); delAccount('${uid}', this)">Delete</button>`);
             }
 
-            // Pad to keep grid tidy if fewer than 9
-            while (opsButtons.length > 0 && opsButtons.length < 9 && opsButtons.length % 3 !== 0) {
-                // no padding needed – grid just fills what it has
-                break;
-            }
-
             const opsHtml = opsButtons.length
                 ? `<div class="btn-grid">${opsButtons.join('')}</div>`
                 : `<span class="readonly-note">Read-Only</span>`;
@@ -561,11 +557,10 @@
                 : 'None';
             const loginAttempts = u.login_attempts != null ? u.login_attempts : 0;
 
-            // Extra unknown fields
             const knownKeys = new Set([
                 'name', 'email', 'kyc_status', 'id_type', 'id_number', 'dob',
                 'balance', 'account_status', 'transaction_pin', 'lockout_until',
-                'login_attempts', 'kyc_decline_reason'
+                'login_attempts', 'kyc_decline_reason', 'verify', 'declined', 'not_submitted'
             ]);
             let extraRows = '';
             Object.keys(u).forEach(key => {
@@ -592,9 +587,9 @@
                     <div class="details-grid">
                         <div class="detail-block">
                             <h4>Identity & KYC</h4>
-                            <div class="detail-row"><span class="label">ID Type</span><span class="value">${formatValue(u.id_type)}</span></div>
-                            <div class="detail-row"><span class="label">ID No.</span><span class="value">${formatValue(u.id_number)}</span></div>
-                            <div class="detail-row"><span class="label">DOB</span><span class="value dob-val">${formatValue(u.dob)}</span></div>
+                            <div class="detail-row"><span class="label">ID Type</span><span class="value">${formatValue(idType)}</span></div>
+                            <div class="detail-row"><span class="label">ID No.</span><span class="value">${formatValue(idNumber)}</span></div>
+                            <div class="detail-row"><span class="label">DOB</span><span class="value dob-val">${formatValue(dob)}</span></div>
                             ${declineReason}
                             <div class="detail-row" style="margin-top:8px"><span class="label">UID</span></div>
                             <span class="uid-box">${uid}</span>
@@ -626,8 +621,23 @@
         if (!confirm("Approve KYC for this user?")) return;
         btn.disabled = true;
         try {
-            await db.ref(`users/${uid}`).update({ kyc_status: 'VERIFIED' });
-            await logAdminAction('VERIFY KYC', uid, `Approved KYC for user ${uid}`);
+            const userRef = db.ref(`users/${uid}`);
+            const snap = await userRef.once('value');
+            const userData = snap.val() || {};
+
+            const identityData = userData.verify || userData.declined || userData.not_submitted || {
+                id_type: userData.id_type || 'NIN/BVN',
+                id_number: userData.id_number || '',
+                dob: userData.dob || ''
+            };
+
+            await userRef.update({
+                kyc_status: 'VERIFIED',
+                verify: identityData,
+                not_submitted: null,
+                declined: null
+            });
+            await logAdminAction('VERIFY KYC', uid, `Approved KYC and stored under verify folder for user ${uid}`);
         } catch (e) {
             alert("Error: " + e.message);
             btn.disabled = false;
@@ -639,8 +649,24 @@
         if (reason === null) return;
         btn.disabled = true;
         try {
-            await db.ref(`users/${uid}`).update({ kyc_status: 'DECLINED', kyc_decline_reason: reason });
-            await logAdminAction('DECLINE KYC', uid, `Declined KYC for user ${uid}. Reason: ${reason}`);
+            const userRef = db.ref(`users/${uid}`);
+            const snap = await userRef.once('value');
+            const userData = snap.val() || {};
+
+            const identityData = userData.verify || userData.declined || userData.not_submitted || {
+                id_type: userData.id_type || 'NIN/BVN',
+                id_number: userData.id_number || '',
+                dob: userData.dob || ''
+            };
+
+            await userRef.update({
+                kyc_status: 'DECLINED',
+                kyc_decline_reason: reason,
+                declined: identityData,
+                verify: null,
+                not_submitted: null
+            });
+            await logAdminAction('DECLINE KYC', uid, `Declined KYC and moved record to declined folder for user ${uid}. Reason: ${reason}`);
         } catch (e) {
             alert("Error: " + e.message);
             btn.disabled = false;
@@ -648,11 +674,22 @@
     }
 
     async function revertStatus(uid, btn) {
-        if (!confirm("Revert KYC status to NOT-SUBMITTED?")) return;
+        if (!confirm("WARNING: Reverting status to NOT-SUBMITTED will permanently delete the verification folder and all stored identity records (NIN/BVN) created by Verify or Decline. Proceed?")) return;
         btn.disabled = true;
         try {
-            await db.ref(`users/${uid}`).update({ kyc_status: 'NOT-SUBMITTED' });
-            await logAdminAction('REVERT KYC', uid, `Reverted KYC status to NOT-SUBMITTED for user ${uid}`);
+            const userRef = db.ref(`users/${uid}`);
+            
+            await userRef.update({
+                kyc_status: 'NOT-SUBMITTED',
+                verify: null,
+                declined: null,
+                not_submitted: null,
+                id_type: null,
+                id_number: null,
+                dob: null
+            });
+            
+            await logAdminAction('REVERT & DELETE FOLDER', uid, `Reverted KYC status to NOT-SUBMITTED and wiped verification folder/identity details for user ${uid}`);
         } catch (e) {
             alert("Error: " + e.message);
             btn.disabled = false;
