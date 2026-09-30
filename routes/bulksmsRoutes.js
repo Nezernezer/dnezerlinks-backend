@@ -33,7 +33,7 @@ router.post('/send-sms', async (req, res) => {
     const uniqueTxKey = txRef.key;
 
     try {
-        // Fetch user record to verify Transaction PIN and Balance securely on the server
+        // Fetch user record to verify Transaction PIN securely on the server
         const userSnap = await userRef.once('value');
         const userData = userSnap.val() || {};
         const storedPin = userData.transaction_pin || userData.pin;
@@ -73,20 +73,26 @@ router.post('/send-sms', async (req, res) => {
         const totalCost = totalPages * ratePerPage * totalRecipients;
         const balanceRef = db.ref(`users/${activeUid}/balance`);
 
-        // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront to avoid race condition bypasses
+        // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront with diagnostic logging
         let apiCallAllowed = false;
+        let dbBalanceSnapshot = null;
+
         await balanceRef.transaction((currentBalance) => {
-            if (currentBalance === null || currentBalance < totalCost) {
-                return; // Break transaction safely if funds are missing
+            dbBalanceSnapshot = currentBalance; // Capture for debugging
+            console.log(`🔍 [BulkSMS] DB Balance at users/${activeUid}/balance:`, currentBalance, `(Type: ${typeof currentBalance}) | Required Cost: ${totalCost}`);
+
+            if (currentBalance === null || currentBalance === undefined || currentBalance < totalCost) {
+                return; // Break transaction safely if funds are missing or path is null
             }
             apiCallAllowed = true;
             return currentBalance - totalCost;
         });
 
         if (!apiCallAllowed) {
+            console.error(`❌ Insufficient Balance. DB Balance retrieved: ${dbBalanceSnapshot}, Required: ${totalCost}`);
             return res.status(402).json({
                 success: false,
-                error: `Insufficient balance to complete request. Total cost: ₦${totalCost}.`
+                error: `Insufficient balance. Your database balance is ₦${dbBalanceSnapshot ?? 0}, but total cost is ₦${totalCost}.`
             });
         }
 
