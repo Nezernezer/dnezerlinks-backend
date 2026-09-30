@@ -43,7 +43,7 @@ router.post('/send-sms', async (req, res) => {
     }
 
     const db = admin.database();
-    
+
     // Resolve the actual database key (Handles both direct Auth UIDs and Push Key paths)
     const targetDbKey = await resolveUserKey(db, activeUid);
     const userRef = db.ref(`users/${targetDbKey}`);
@@ -51,6 +51,8 @@ router.post('/send-sms', async (req, res) => {
     // Generate unique reference key EARLY before calling the gateway provider
     const txRef = db.ref(`transactions/${targetDbKey}`).push();
     const uniqueTxKey = txRef.key;
+
+    let totalCost = 0; // declared early so the catch block can access it
 
     try {
         // Fetch user record to verify Transaction PIN securely on the server
@@ -90,28 +92,25 @@ router.post('/send-sms', async (req, res) => {
             return res.status(400).json({ success: false, error: "No valid recipient numbers provided." });
         }
 
-        const totalCost = totalPages * ratePerPage * totalRecipients;
+        totalCost = totalPages * ratePerPage * totalRecipients;
         const balanceRef = db.ref(`users/${targetDbKey}/balance`);
 
-        // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront with auto-coercion
-        let apiCallAllowed = false;
-        let dbBalanceSnapshot = null;
+        // 🔒 SAFE TRANSACTION WALLET LOCK
+        // No side-effects inside the update function — only use the committed flag
+        const txResult = await balanceRef.transaction((currentBalance) => {
+            const balance = Number(currentBalance) || 0;
 
-        await balanceRef.transaction((currentBalance) => {
-            dbBalanceSnapshot = currentBalance;
-            const numericBalance = parseFloat(currentBalance) || 0;
-
-            if (numericBalance < totalCost) {
-                return; // Break transaction safely if funds are insufficient
+            if (balance < totalCost) {
+                return; // Abort — do not change the balance
             }
-            apiCallAllowed = true;
-            return numericBalance - totalCost;
+            return balance - totalCost; // Commit the deduction
         });
 
-        if (!apiCallAllowed) {
+        if (!txResult.committed) {
+            const currentBal = Number(txResult.snapshot.val()) || 0;
             return res.status(402).json({
                 success: false,
-                error: `Insufficient balance. Your database balance is ₦${dbBalanceSnapshot ?? 0}, but total cost is ₦${totalCost}.`
+                error: `Insufficient balance. Your database balance is ₦\( {currentBal}, but total cost is ₦ \){totalCost}.`
             });
         }
 
@@ -125,7 +124,7 @@ router.post('/send-sms', async (req, res) => {
         const adminUid = process.env.ADMIN_UID;
 
         if (isPlatformBrand && targetDbKey !== adminUid && activeUid !== adminUid) {
-            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: "Security Alert: 'Dnezerlinks' branding is restricted to administrative accounts only."
@@ -137,7 +136,7 @@ router.post('/send-sms', async (req, res) => {
         );
 
         if (isRestricted) {
-            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted institutional brand name.`
@@ -148,7 +147,7 @@ router.post('/send-sms', async (req, res) => {
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
 
         if (!apiKey) {
-            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
 
@@ -200,7 +199,7 @@ router.post('/send-sms', async (req, res) => {
         }
 
         console.error("❌ BulkSMS Gateway Refusal Payload:", apiData);
-        await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+        await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
         return res.status(400).json({
             success: false,
             error: apiData.message || "BulkSMS provider failed to process transmission."
@@ -208,6 +207,16 @@ router.post('/send-sms', async (req, res) => {
 
     } catch (error) {
         console.error("⚠️ Bulk SMS Exception Handler Active:", error.message);
+
+        // Refund if we already deducted
+        try {
+            const balanceRef = db.ref(`users/${targetDbKey}/balance`);
+            if (totalCost > 0) {
+                await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+            }
+        } catch (refundErr) {
+            console.error("❌ Failed to refund balance:", refundErr.message);
+        }
 
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('Network Error')) {
             try {
@@ -232,8 +241,10 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
-        return res.status(500).json({ success: false, error: "Internal Server Processing Error. Balance returned." });
+        return res.status(500).json({
+            success: false,
+            error: "Internal Server Processing Error. Balance returned."
+        });
     }
 });
 
