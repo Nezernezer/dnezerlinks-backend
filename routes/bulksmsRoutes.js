@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
-const axios = require('axios'); // Switched to axios for explicit timeout support
+const axios = require('axios');
 
 // --- COMPREHENSIVE NIGERIAN FINANCIAL/BRAND BLACKLIST ---
 const RESTRICTED_SENDER_IDS = [
@@ -11,6 +11,23 @@ const RESTRICTED_SENDER_IDS = [
     "opay", "palmpay", "palm", "kuda", "kudabank", "moniepoint",
     "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
 ];
+
+// Helper function to resolve the actual Firebase DB node key for a user
+async function resolveUserKey(db, activeUid) {
+    const directSnap = await db.ref(`users/${activeUid}`).once('value');
+    if (directSnap.exists()) {
+        return activeUid;
+    }
+
+    // Secondary search by child property 'userId' if direct key lookup yields null
+    const querySnap = await db.ref('users').orderByChild('userId').equalTo(activeUid).once('value');
+    if (querySnap.exists()) {
+        const keys = Object.keys(querySnap.val());
+        return keys[0]; // Return the actual Push ID (-P2gw5tSUBT...)
+    }
+
+    return activeUid; // Fallback to direct key if no matching record is found
+}
 
 // Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
 router.post('/send-sms', async (req, res) => {
@@ -26,10 +43,13 @@ router.post('/send-sms', async (req, res) => {
     }
 
     const db = admin.database();
-    const userRef = db.ref(`users/${activeUid}`);
+    
+    // Resolve the actual database key (Handles both direct Auth UIDs and Push Key paths)
+    const targetDbKey = await resolveUserKey(db, activeUid);
+    const userRef = db.ref(`users/${targetDbKey}`);
 
     // Generate unique reference key EARLY before calling the gateway provider
-    const txRef = db.ref(`transactions/${activeUid}`).push();
+    const txRef = db.ref(`transactions/${targetDbKey}`).push();
     const uniqueTxKey = txRef.key;
 
     try {
@@ -71,32 +91,31 @@ router.post('/send-sms', async (req, res) => {
         }
 
         const totalCost = totalPages * ratePerPage * totalRecipients;
-        const balanceRef = db.ref(`users/${activeUid}/balance`);
+        const balanceRef = db.ref(`users/${targetDbKey}/balance`);
 
-        // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront with diagnostic logging
+        // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront with auto-coercion
         let apiCallAllowed = false;
         let dbBalanceSnapshot = null;
 
         await balanceRef.transaction((currentBalance) => {
-            dbBalanceSnapshot = currentBalance; // Capture for debugging
-            console.log(`🔍 [BulkSMS] DB Balance at users/${activeUid}/balance:`, currentBalance, `(Type: ${typeof currentBalance}) | Required Cost: ${totalCost}`);
+            dbBalanceSnapshot = currentBalance;
+            const numericBalance = parseFloat(currentBalance) || 0;
 
-            if (currentBalance === null || currentBalance === undefined || currentBalance < totalCost) {
-                return; // Break transaction safely if funds are missing or path is null
+            if (numericBalance < totalCost) {
+                return; // Break transaction safely if funds are insufficient
             }
             apiCallAllowed = true;
-            return currentBalance - totalCost;
+            return numericBalance - totalCost;
         });
 
         if (!apiCallAllowed) {
-            console.error(`❌ Insufficient Balance. DB Balance retrieved: ${dbBalanceSnapshot}, Required: ${totalCost}`);
             return res.status(402).json({
                 success: false,
                 error: `Insufficient balance. Your database balance is ₦${dbBalanceSnapshot ?? 0}, but total cost is ₦${totalCost}.`
             });
         }
 
-        console.log(`💳 BulkSMS Debit Locked: ₦${totalCost} deducted from UID: ${activeUid}. Initiating gateway.`);
+        console.log(`💳 BulkSMS Debit Locked: ₦${totalCost} deducted from UID Node: ${targetDbKey}. Initiating gateway.`);
 
         // 4. Sender ID Spoofing & Admin Brand Guard
         let requestedSender = (senderName || "Dnezerlinks").trim();
@@ -105,8 +124,7 @@ router.post('/send-sms', async (req, res) => {
         const isPlatformBrand = normalizedSender.includes("dnezerlinks") || normalizedSender.includes("dnezer");
         const adminUid = process.env.ADMIN_UID;
 
-        if (isPlatformBrand && activeUid !== adminUid) {
-            // Immediate rollback on brand protection trigger
+        if (isPlatformBrand && targetDbKey !== adminUid && activeUid !== adminUid) {
             await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
             return res.status(403).json({
                 success: false,
@@ -119,7 +137,6 @@ router.post('/send-sms', async (req, res) => {
         );
 
         if (isRestricted) {
-            // Immediate rollback on restricted brand trigger
             await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
             return res.status(403).json({
                 success: false,
@@ -135,7 +152,7 @@ router.post('/send-sms', async (req, res) => {
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
 
-        // 5. Request to BulkSMSLive Gateway using Axios with a 1-minute timeout
+        // 5. Request to BulkSMSLive Gateway
         const gatewayUrl = "https://api.bulksmslive.com/v2/app/sendsms";
         const response = await axios.post(
             gatewayUrl,
@@ -144,7 +161,7 @@ router.post('/send-sms', async (req, res) => {
                 message: message,
                 recipients: cleanRecipient,
                 forcednd: 1,
-                "request-id": uniqueTxKey // Pre-mapping track reference parameter to the core API provider
+                "request-id": uniqueTxKey
             },
             {
                 headers: {
@@ -152,11 +169,10 @@ router.post('/send-sms', async (req, res) => {
                     "Accept": "application/json",
                     "Content-Type": "application/json"
                 },
-                timeout: 60000 // 🕒 Timeout explicitly set to 1 minute (60,000ms)
+                timeout: 60000
             }
         );
 
-        // BulkSMSLive response parsing
         const apiData = response.data;
         const apiStatus = String(apiData.status || apiData.Status || "").toLowerCase();
 
@@ -183,7 +199,6 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // Handle structural payload rejections from gateway provider (Instant Auto-Refund)
         console.error("❌ BulkSMS Gateway Refusal Payload:", apiData);
         await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
         return res.status(400).json({
@@ -194,10 +209,8 @@ router.post('/send-sms', async (req, res) => {
     } catch (error) {
         console.error("⚠️ Bulk SMS Exception Handler Active:", error.message);
 
-        // 7. Handle Midway Handshake Timeouts & Dropped Packets
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('Network Error')) {
             try {
-                // Keep funds locked, log transaction status as 'pending'
                 await txRef.set({
                     service: "Bulk SMS",
                     sender: senderName || "Dnezerlinks",
@@ -209,8 +222,6 @@ router.post('/send-sms', async (req, res) => {
                     reference: uniqueTxKey,
                     description: `Bulk SMS transaction pending verification due to provider timeout.`
                 });
-
-                console.log(`📝 Gateway Sync Node Generated: Kept ₦${totalCost} locked for verification tracking (${uniqueTxKey})`);
             } catch (dbErr) {
                 console.error("❌ Failed to log pending node state to Firebase database:", dbErr.message);
             }
@@ -221,7 +232,6 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // System crash / parsing faults recovery logic (Safe Auto-Refund)
         await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
         return res.status(500).json({ success: false, error: "Internal Server Processing Error. Balance returned." });
     }
