@@ -12,29 +12,29 @@ const RESTRICTED_SENDER_IDS = [
     "cbn", "fgn", "efcc", "police", "npf", "naira", "enaira", "tax", "firs"
 ];
 
-// Helper function to resolve the actual Firebase DB node key for a user
+// Helper to resolve the real Firebase DB key
 async function resolveUserKey(db, activeUid) {
     const directSnap = await db.ref(`users/${activeUid}`).once('value');
     if (directSnap.exists()) {
         return activeUid;
     }
 
-    // Secondary search by child property 'userId' if direct key lookup yields null
     const querySnap = await db.ref('users').orderByChild('userId').equalTo(activeUid).once('value');
     if (querySnap.exists()) {
         const keys = Object.keys(querySnap.val());
-        return keys[0]; // Return the actual Push ID (-P2gw5tSUBT...)
+        return keys[0];
     }
 
-    return activeUid; // Fallback to direct key if no matching record is found
+    return activeUid;
 }
 
-// Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
 router.post('/send-sms', async (req, res) => {
+    console.log("🔥 BULKSMS ROUTE HIT", new Date().toISOString());
+    console.log("Body keys:", Object.keys(req.body || {}));
+
     const { recipient, message, senderName, uid, userId, pin } = req.body;
     const activeUid = uid || userId;
 
-    // 1. Validation Check (Mandatory fields including pin)
     if (!recipient || !message || !activeUid || !pin) {
         return res.status(400).json({
             success: false,
@@ -43,19 +43,15 @@ router.post('/send-sms', async (req, res) => {
     }
 
     const db = admin.database();
-
-    // Resolve the actual database key (Handles both direct Auth UIDs and Push Key paths)
     const targetDbKey = await resolveUserKey(db, activeUid);
     const userRef = db.ref(`users/${targetDbKey}`);
-
-    // Generate unique reference key EARLY before calling the gateway provider
     const txRef = db.ref(`transactions/${targetDbKey}`).push();
     const uniqueTxKey = txRef.key;
 
-    let totalCost = 0; // declared early so the catch block can access it
+    let totalCost = 0;
 
     try {
-        // Fetch user record to verify Transaction PIN securely on the server
+        // Second-layer PIN check (extra safety)
         const userSnap = await userRef.once('value');
         const userData = userSnap.val() || {};
         const storedPin = userData.transaction_pin || userData.pin;
@@ -67,12 +63,12 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // 2. Character Count & Page Split Engine (GSM 7-bit vs Unicode)
+        // Page calculation
         const isUnicode = /^[\x20-\x7E\xA1\xA3\xA4\xA5\xA7\xBF\xC4\xC5\xC6\xC7\xC9\xD1\xD2\xD3\xD4\xD5\xD6\xD8\xDC\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF2\xF3\xF4\xF5\xF6\xF8\xF9\xFA\xFB\xFC\xFE\xDF\r\n]*$/.test(message) === false;
         const charsPerPage = isUnicode ? 70 : 160;
         const totalPages = Math.ceil(message.length / charsPerPage);
 
-        // 3. Dynamic Time-of-Day Billing Engine (WAT / Lagos Time)
+        // Lagos time rate
         const lagosHour = parseInt(
             new Intl.DateTimeFormat('en-US', {
                 timeZone: 'Africa/Lagos',
@@ -80,11 +76,9 @@ router.post('/send-sms', async (req, res) => {
                 hour12: false
             }).format(new Date()), 10
         );
-
-        // Daytime rate (8 AM - 7:59 PM) = ₦7 | Nighttime rate (8 PM - 7:59 AM) = ₦14
         const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
 
-        // Clean phone numbers list
+        // Recipients
         const cleanRecipient = recipient.replace(/\+/g, '').replace(/\s+/g, '').trim();
         const totalRecipients = cleanRecipient.split(',').filter(n => n.length >= 10).length;
 
@@ -95,28 +89,30 @@ router.post('/send-sms', async (req, res) => {
         totalCost = totalPages * ratePerPage * totalRecipients;
         const balanceRef = db.ref(`users/${targetDbKey}/balance`);
 
-        // 🔒 SAFE TRANSACTION WALLET LOCK
-        // No side-effects inside the update function — only use the committed flag
+        console.log(`💰 Cost → pages:\( {totalPages} rate: \){ratePerPage} recipients:\( {totalRecipients} total:₦ \){totalCost}`);
+        console.log(`🔑 DB key: ${targetDbKey}`);
+
+        // SAFE TRANSACTION (no side effects)
         const txResult = await balanceRef.transaction((currentBalance) => {
             const balance = Number(currentBalance) || 0;
-
             if (balance < totalCost) {
-                return; // Abort — do not change the balance
+                return; // abort
             }
-            return balance - totalCost; // Commit the deduction
+            return balance - totalCost;
         });
 
         if (!txResult.committed) {
             const currentBal = Number(txResult.snapshot.val()) || 0;
+            console.log(`❌ Insufficient → balance:₦\( {currentBal} needed:₦ \){totalCost}`);
             return res.status(402).json({
                 success: false,
                 error: `Insufficient balance. Your database balance is ₦\( {currentBal}, but total cost is ₦ \){totalCost}.`
             });
         }
 
-        console.log(`💳 BulkSMS Debit Locked: ₦${totalCost} deducted from UID Node: ${targetDbKey}. Initiating gateway.`);
+        console.log(`💳 Debited ₦${totalCost} from ${targetDbKey}`);
 
-        // 4. Sender ID Spoofing & Admin Brand Guard
+        // Sender ID checks
         let requestedSender = (senderName || "Dnezerlinks").trim();
         const normalizedSender = requestedSender.toLowerCase().replace(/[\s-_\.]/g, '');
 
@@ -124,34 +120,34 @@ router.post('/send-sms', async (req, res) => {
         const adminUid = process.env.ADMIN_UID;
 
         if (isPlatformBrand && targetDbKey !== adminUid && activeUid !== adminUid) {
-            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+            await balanceRef.transaction(current => (Number(current) || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: "Security Alert: 'Dnezerlinks' branding is restricted to administrative accounts only."
             });
         }
 
-        const isRestricted = RESTRICTED_SENDER_IDS.some(restrictedWord =>
-            normalizedSender === restrictedWord || normalizedSender.includes(restrictedWord)
+        const isRestricted = RESTRICTED_SENDER_IDS.some(word =>
+            normalizedSender === word || normalizedSender.includes(word)
         );
 
         if (isRestricted) {
-            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+            await balanceRef.transaction(current => (Number(current) || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted institutional brand name.`
             });
         }
 
-        let finalSenderName = requestedSender.substring(0, 11);
+        const finalSenderName = requestedSender.substring(0, 11);
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
 
         if (!apiKey) {
-            await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+            await balanceRef.transaction(current => (Number(current) || 0) + totalCost);
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
 
-        // 5. Request to BulkSMSLive Gateway
+        // Call BulkSMSLive gateway
         const gatewayUrl = "https://api.bulksmslive.com/v2/app/sendsms";
         const response = await axios.post(
             gatewayUrl,
@@ -175,7 +171,6 @@ router.post('/send-sms', async (req, res) => {
         const apiData = response.data;
         const apiStatus = String(apiData.status || apiData.Status || "").toLowerCase();
 
-        // 6. Log Clean Success State
         if (apiStatus === "success" || apiStatus === "successful" || apiData.error === false) {
             await txRef.set({
                 service: "Bulk SMS",
@@ -198,24 +193,26 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        console.error("❌ BulkSMS Gateway Refusal Payload:", apiData);
-        await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+        // Gateway refused → refund
+        console.error("❌ Gateway refused:", apiData);
+        await balanceRef.transaction(current => (Number(current) || 0) + totalCost);
         return res.status(400).json({
             success: false,
             error: apiData.message || "BulkSMS provider failed to process transmission."
         });
 
     } catch (error) {
-        console.error("⚠️ Bulk SMS Exception Handler Active:", error.message);
+        console.error("⚠️ BulkSMS Exception:", error.message);
 
-        // Refund if we already deducted
+        // Always try to refund
         try {
-            const balanceRef = db.ref(`users/${targetDbKey}/balance`);
             if (totalCost > 0) {
-                await balanceRef.transaction(currentBalance => (Number(currentBalance) || 0) + totalCost);
+                const balanceRef = db.ref(`users/${targetDbKey}/balance`);
+                await balanceRef.transaction(current => (Number(current) || 0) + totalCost);
+                console.log("↩️ Refunded ₦" + totalCost);
             }
         } catch (refundErr) {
-            console.error("❌ Failed to refund balance:", refundErr.message);
+            console.error("❌ Refund failed:", refundErr.message);
         }
 
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('Network Error')) {
@@ -232,7 +229,7 @@ router.post('/send-sms', async (req, res) => {
                     description: `Bulk SMS transaction pending verification due to provider timeout.`
                 });
             } catch (dbErr) {
-                console.error("❌ Failed to log pending node state to Firebase database:", dbErr.message);
+                console.error("❌ Failed to log pending:", dbErr.message);
             }
 
             return res.status(504).json({

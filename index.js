@@ -19,14 +19,18 @@ try {
 
 const app = express();
 
-// CORS Configuration
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-billstack-signature'] }));
+// CORS
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-billstack-signature']
+}));
 
-// 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
+// Body parsers
 app.use(express.json({ type: ['application/json', 'text/plain', 'application/vnd.api+json'] }));
 app.use(express.urlencoded({ extended: true }));
 
-// Firebase Auth token extractor middleware for sendmoney and other routes
+// Optional Firebase Auth token extractor
 const extractUser = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -35,23 +39,26 @@ const extractUser = async (req, res, next) => {
             const decodedToken = await admin.auth().verifyIdToken(token);
             req.user = decodedToken;
         } catch (e) {
-            // Ignore invalid token, let downstream logic handle missing sessions
+            // ignore invalid token
         }
     }
     next();
 };
-
 app.use(extractUser);
 
-// 2. Public webhook and account routes mounted explicitly
+// Explicit public mounts
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 app.use('/api/account', require('./routes/accountRoutes'));
 app.use('/api/sendmoney', require('./routes/sendmoneyRoutes'));
 app.use('/webhook', require('./routes/fbchat/controlroom'));
 
-// Security gatekeeper for authenticated user actions
+// ====================== SECURITY GATEKEEPER ======================
+// PIN is checked for /bulksms and all other protected routes
 const securityGatekeeper = async (req, res, next) => {
+    console.log("Gatekeeper →", req.method, req.path);
+
+    // Only these paths skip the PIN check
     if (
         req.method === 'GET' ||
         req.path === '/' ||
@@ -62,25 +69,40 @@ const securityGatekeeper = async (req, res, next) => {
         req.path.includes('/users') ||
         req.path.includes('/fund') ||
         req.path.includes('/sendmoney')
-    ) return next();
+        // /bulksms is NOT excluded → PIN will be checked
+    ) {
+        return next();
+    }
 
-    const { uid, userId, pin } = req.body;
+    const { uid, userId, pin } = req.body || {};
     const activeUid = uid || userId;
 
+    console.log("Gatekeeper PIN check → uid:", activeUid, "pin received:", !!pin);
+
     if (!activeUid || String(activeUid).includes('.')) {
+        console.log("Gatekeeper rejected: Invalid Session");
         return res.status(400).json({ success: false, error: 'Invalid Session' });
     }
 
-    try {
-        const pinSnapshot = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
-        const altPinSnapshot = await admin.database().ref(`users/${activeUid}/pin`).once('value');
-        const storedPin = pinSnapshot.val() || altPinSnapshot.val();
+    if (!pin) {
+        console.log("Gatekeeper rejected: PIN missing");
+        return res.status(400).json({ success: false, error: 'PIN is required' });
+    }
 
-        if (!storedPin || String(storedPin).trim() !== String(pin || '').trim()) {
+    try {
+        const pinSnap = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
+        const altPinSnap = await admin.database().ref(`users/${activeUid}/pin`).once('value');
+        const storedPin = pinSnap.val() || altPinSnap.val();
+
+        if (!storedPin || String(storedPin).trim() !== String(pin).trim()) {
+            console.log("Gatekeeper rejected: Invalid PIN");
             return res.status(400).json({ success: false, error: 'Invalid PIN' });
         }
+
+        console.log("Gatekeeper → PIN OK, continuing to route");
         next();
     } catch (e) {
+        console.error("Gatekeeper error:", e.message);
         res.status(500).json({ success: false, error: 'Authentication Error' });
     }
 };
