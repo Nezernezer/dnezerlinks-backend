@@ -62,7 +62,7 @@ router.post('/fund', async (req, res) => {
                 created_at: accountInfo.created_at
             };
 
-            await db.ref(`users/${uid}/virtual_accounts`).push(accountToSave);
+            await db.ref(`users/${uid}/virtual_accounts_new`).push(accountToSave);
 
             return res.json({ success: true, account: accountToSave });
         } else {

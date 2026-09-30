@@ -14,25 +14,37 @@ const RESTRICTED_SENDER_IDS = [
 
 // Handles POST requests hitting: https://dnezerlinks-backend.onrender.com/api/bulksms/send-sms
 router.post('/send-sms', async (req, res) => {
-    const { recipient, message, senderName, uid, userId } = req.body;
+    const { recipient, message, senderName, uid, userId, pin } = req.body;
     const activeUid = uid || userId;
 
-    // 1. Validation Check
-    if (!recipient || !message || !activeUid) {
+    // 1. Validation Check (Mandatory fields including pin)
+    if (!recipient || !message || !activeUid || !pin) {
         return res.status(400).json({
             success: false,
-            error: "Missing fields: recipient, message, and userId are mandatory."
+            error: "Missing fields: recipient, message, userId, and pin are mandatory."
         });
     }
 
     const db = admin.database();
-    const userRef = db.ref(`users/${activeUid}/balance`);
-    
+    const userRef = db.ref(`users/${activeUid}`);
+
     // Generate unique reference key EARLY before calling the gateway provider
     const txRef = db.ref(`transactions/${activeUid}`).push();
     const uniqueTxKey = txRef.key;
 
     try {
+        // Fetch user record to verify Transaction PIN and Balance securely on the server
+        const userSnap = await userRef.once('value');
+        const userData = userSnap.val() || {};
+        const storedPin = userData.transaction_pin || userData.pin;
+
+        if (!storedPin || String(storedPin) !== String(pin)) {
+            return res.status(401).json({
+                success: false,
+                error: "Invalid transaction PIN."
+            });
+        }
+
         // 2. Character Count & Page Split Engine (GSM 7-bit vs Unicode)
         const isUnicode = /^[\x20-\x7E\xA1\xA3\xA4\xA5\xA7\xBF\xC4\xC5\xC6\xC7\xC9\xD1\xD2\xD3\xD4\xD5\xD6\xD8\xDC\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF2\xF3\xF4\xF5\xF6\xF8\xF9\xFA\xFB\xFC\xFE\xDF\r\n]*$/.test(message) === false;
         const charsPerPage = isUnicode ? 70 : 160;
@@ -59,10 +71,11 @@ router.post('/send-sms', async (req, res) => {
         }
 
         const totalCost = totalPages * ratePerPage * totalRecipients;
+        const balanceRef = db.ref(`users/${activeUid}/balance`);
 
         // 🔒 TRANSACTION WALLET LOCK: Deduct balance upfront to avoid race condition bypasses
         let apiCallAllowed = false;
-        await userRef.transaction((currentBalance) => {
+        await balanceRef.transaction((currentBalance) => {
             if (currentBalance === null || currentBalance < totalCost) {
                 return; // Break transaction safely if funds are missing
             }
@@ -88,7 +101,7 @@ router.post('/send-sms', async (req, res) => {
 
         if (isPlatformBrand && activeUid !== adminUid) {
             // Immediate rollback on brand protection trigger
-            await userRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: "Security Alert: 'Dnezerlinks' branding is restricted to administrative accounts only."
@@ -101,7 +114,7 @@ router.post('/send-sms', async (req, res) => {
 
         if (isRestricted) {
             // Immediate rollback on restricted brand trigger
-            await userRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
             return res.status(403).json({
                 success: false,
                 error: `Security Alert: The Sender ID '${requestedSender}' contains a restricted institutional brand name.`
@@ -112,7 +125,7 @@ router.post('/send-sms', async (req, res) => {
         const apiKey = process.env.BULKSMSLIVE_API_KEY;
 
         if (!apiKey) {
-            await userRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+            await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
             return res.status(500).json({ success: false, error: "Server gateway key configuration missing." });
         }
 
@@ -166,7 +179,7 @@ router.post('/send-sms', async (req, res) => {
 
         // Handle structural payload rejections from gateway provider (Instant Auto-Refund)
         console.error("❌ BulkSMS Gateway Refusal Payload:", apiData);
-        await userRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+        await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
         return res.status(400).json({
             success: false,
             error: apiData.message || "BulkSMS provider failed to process transmission."
@@ -185,7 +198,7 @@ router.post('/send-sms', async (req, res) => {
                     recipientsCount: recipient.split(',').length,
                     amount: totalCost,
                     type: "debit",
-                    status: "pending", // 📝 Kept pending for background reconciliation gatekeeper evaluation
+                    status: "pending",
                     timestamp: Date.now(),
                     reference: uniqueTxKey,
                     description: `Bulk SMS transaction pending verification due to provider timeout.`
@@ -203,7 +216,7 @@ router.post('/send-sms', async (req, res) => {
         }
 
         // System crash / parsing faults recovery logic (Safe Auto-Refund)
-        await userRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
+        await balanceRef.transaction(currentBalance => (currentBalance || 0) + totalCost);
         return res.status(500).json({ success: false, error: "Internal Server Processing Error. Balance returned." });
     }
 });

@@ -100,13 +100,12 @@
     const database = firebase.database();
     const API_BASE_URL = "https://dnezerlinks-backend.onrender.com";
 
-    auth.onAuthStateChanged(async user => { 
+    auth.onAuthStateChanged(async user => {
         if (!user) {
             window.location.href = "../login.html";
             return;
         }
 
-        // Check PIN on page load
         try {
             const snap = await database.ref('users/' + user.uid).once('value');
             const data = snap.val() || {};
@@ -213,18 +212,18 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userId: user.uid,
-                    pin: enteredPin,
+                    pin: enteredPin, // <--- Correctly passing PIN to backend
                     recipient: document.getElementById('recipients').value,
                     message: document.getElementById('message').value,
                     senderName: document.getElementById('senderId').value
                 })
             });
             const result = await response.json();
-            if (!response.ok || !result.success) throw new Error(result.error || "Transaction failed.");
+            
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || "Transaction failed.");
+            }
 
-            await database.ref('transactions/' + user.uid).push({
-                type: 'Bulk SMS', service: `SMS (${pages} pages)`, amount: result.cost || totalCost, date: new Date().toLocaleString(), status: "Sent"
-            });
             closePinModal();
             showGlobalMessage("Bulk SMS Sent Successfully!", false);
             document.getElementById('message').value = '';
