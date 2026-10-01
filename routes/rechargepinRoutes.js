@@ -15,21 +15,21 @@ router.post('/generate', async (req, res) => {
 
     // Validate payload
     if (!uid || !network || isNaN(parsedAmt) || isNaN(parsedQty) || parsedQty < 1) {
-        return res.status(400).json({ success: false, error: 'Invalid payload details.' });
+        return res.status(400).json({ success: false, error: 'Invalid request. Please check your details.' });
     }
 
     // Network mapping according to WisePay docs
     // 1 = MTN, 2 = AIRTEL, 3 = GLO, 4 = 9MOBILE
-    const networkMap = { 
-        'MTN': '1', 
-        'AIRTEL': '2', 
-        'GLO': '3', 
-        '9MOBILE': '4' 
+    const networkMap = {
+        'MTN': '1',
+        'AIRTEL': '2',
+        'GLO': '3',
+        '9MOBILE': '4'
     };
     const apiNetworkId = networkMap[String(network).toUpperCase()];
 
     if (!apiNetworkId) {
-        return res.status(400).json({ success: false, error: 'Unsupported Network platform selected.' });
+        return res.status(400).json({ success: false, error: 'Unsupported network selected.' });
     }
 
     const db = admin.database();
@@ -42,9 +42,10 @@ router.post('/generate', async (req, res) => {
         const liveServerBalance = balSnap.val();
 
         if (liveServerBalance === null) {
+            console.error("Balance node missing for UID:", uid);
             return res.status(400).json({
                 success: false,
-                error: "Database configuration error: Balance node does not exist for this account."
+                error: "Unable to process request at the moment. Please try again."
             });
         }
 
@@ -65,7 +66,7 @@ router.post('/generate', async (req, res) => {
         if (!transactionResult.committed) {
             return res.status(400).json({
                 success: false,
-                error: `Insufficient Balance! Your wallet is less than ₦${totalCost.toLocaleString()}`
+                error: `Insufficient Balance. You need ₦${totalCost.toLocaleString()}`
             });
         }
 
@@ -78,7 +79,7 @@ router.post('/generate', async (req, res) => {
 
         try {
             const wisePayKey = process.env.WISEPAY_API_KEY?.trim();
-            
+
             if (!wisePayKey) {
                 throw new Error("WISEPAY_API_KEY not configured");
             }
@@ -93,7 +94,7 @@ router.post('/generate', async (req, res) => {
                 },
                 {
                     headers: {
-                        'Authorization': `Bearer ${wisePayKey}`,   // ← Fixed: Bearer required
+                        'Authorization': `Bearer ${wisePayKey}`,
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
@@ -104,7 +105,6 @@ router.post('/generate', async (req, res) => {
             const data = wiseResponse.data || {};
 
             if (data.status === true && data.code === 200 && data.data?.pins) {
-                // Success from WisePay
                 pinsGenerated = data.data.pins.map(item => ({
                     pin: String(item.pin || '').trim(),
                     serial: String(item.sn || item.serial || 'N/A').trim()
@@ -120,13 +120,14 @@ router.post('/generate', async (req, res) => {
             }
 
         } catch (wiseError) {
+            // Full error only in Render logs
             console.error("🔥 WisePay failed:", wiseError.message);
             if (wiseError.response) {
                 console.error("WisePay status:", wiseError.response.status);
-                console.error("WisePay response:", wiseError.response.data);
+                console.error("WisePay response:", JSON.stringify(wiseError.response.data, null, 2));
             }
-            providerError = wiseError.response?.data?.data?.message 
-                || wiseError.response?.data?.message 
+            providerError = wiseError.response?.data?.data?.message
+                || wiseError.response?.data?.message
                 || wiseError.message;
         }
 
@@ -136,7 +137,7 @@ router.post('/generate', async (req, res) => {
         if (!providerUsed) {
             try {
                 const vtuKey = process.env.VTUNAIJA_API_KEY?.trim();
-                
+
                 if (!vtuKey) {
                     throw new Error("VTUNAIJA_API_KEY not configured");
                 }
@@ -205,21 +206,23 @@ router.post('/generate', async (req, res) => {
                 providerUsed = "VTU Naija";
 
             } catch (vtuError) {
+                // Full error only in Render logs
                 console.error("🔥 VTU Naija also failed:", vtuError.message);
-                
+                if (vtuError.response) {
+                    console.error("VTU Naija status:", vtuError.response.status);
+                    console.error("VTU Naija response:", JSON.stringify(vtuError.response.data, null, 2));
+                }
+
                 // Both providers failed → Refund
                 await userRef.child('balance').transaction((currentBal) => {
                     const currentNumericBal = currentBal === null ? 0 : Number(currentBal);
                     return currentNumericBal + totalCost;
                 });
 
-                const finalError = providerError 
-                    ? `WisePay: ${providerError} | VTU Naija: ${vtuError.message}`
-                    : vtuError.message;
-
+                // Generic message only for the user
                 return res.status(502).json({
                     success: false,
-                    error: `${finalError}. Your funds have been auto-refunded.`
+                    error: "Unable to generate PINs at the moment. Your funds have been refunded. Please try again later."
                 });
             }
         }
@@ -245,17 +248,20 @@ router.post('/generate', async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: `PINs Generated Successfully via ${providerUsed}!`,
+            message: "PINs Generated Successfully!",
             pins: pinsGenerated,
             network: network,
             amount: parsedAmt,
-            brandName: finalBrandValue,
-            provider: providerUsed
+            brandName: finalBrandValue
+            // provider intentionally hidden from user
         });
 
     } catch (rootError) {
         console.error("Critical System failure:", rootError);
-        return res.status(500).json({ success: false, error: 'Internal server operations failed.' });
+        return res.status(500).json({
+            success: false,
+            error: "Something went wrong. Please try again later."
+        });
     }
 });
 
