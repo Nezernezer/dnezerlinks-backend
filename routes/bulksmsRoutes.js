@@ -129,14 +129,14 @@ router.post('/send-sms', async (req, res) => {
             });
         }
 
-        // 2. Call BulkSMSLive API
+        // 2. Call BulkSMSLive API (correct lowercase / snake_case keys)
         const response = await axios.post(
             'https://api.bulksmslive.com/v2/app/sendsms',
             {
-                Message: message,
-                Sender_name: trimmedSender.substring(0, 11),
-                Recipients: recipients.join(','),
-                Forcednd: '1'
+                message: message,
+                sender_name: trimmedSender.substring(0, 11),
+                recipients: recipients.join(','),
+                forcednd: '1'
             },
             {
                 headers: {
