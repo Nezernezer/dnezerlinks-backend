@@ -1,5 +1,4 @@
-const admin = require('firebase-admin');
-const crypto = require('crypto');
+const axios = require('axios');
 
 const electricitySessions = {};
 
@@ -45,8 +44,6 @@ async function handleElectricityFlow(senderPsid, text, session) {
     const cleanText = text.trim();
 
     switch (session.step) {
-
-        // ========== STEP 1: SELECT DISCO ==========
         case 'ELECTRICITY_DISCO':
             const selected = DISCOS.find(d => d.id === cleanText || d.code.toLowerCase() === cleanText.toLowerCase());
             if (!selected) {
@@ -62,7 +59,6 @@ async function handleElectricityFlow(senderPsid, text, session) {
                 text: "Select Meter Type:\n\n1. Prepaid\n2. Postpaid\n\nReply with 1 or 2:"
             };
 
-        // ========== STEP 2: METER TYPE ==========
         case 'ELECTRICITY_METER_TYPE':
             let meterType = null;
             if (cleanText === '1' || cleanText.toLowerCase() === 'prepaid') {
@@ -81,7 +77,6 @@ async function handleElectricityFlow(senderPsid, text, session) {
 
             return { text: "🔢 Enter your Meter Number:" };
 
-        // ========== STEP 3: METER NUMBER ==========
         case 'ELECTRICITY_METER_NUMBER':
             if (cleanText.length < 8) {
                 return { text: "❌ Meter number seems too short. Please enter a valid meter number:" };
@@ -93,7 +88,6 @@ async function handleElectricityFlow(senderPsid, text, session) {
 
             return { text: "💵 Enter the amount to pay (Minimum ₦1,000):" };
 
-        // ========== STEP 4: AMOUNT ==========
         case 'ELECTRICITY_AMOUNT':
             const amountNum = parseFloat(cleanText);
             if (isNaN(amountNum) || amountNum < 1000) {
@@ -101,12 +95,61 @@ async function handleElectricityFlow(senderPsid, text, session) {
             }
 
             session.data.amount = amountNum;
-            // We will handle the final step (PIN link) in controlroom.js
-            return { step: 'READY_FOR_PIN' };
+            return {
+                step: 'READY_FOR_PIN',
+                type: 'READY_FOR_PIN',
+                data: {
+                    service: 'electricity',
+                    disco: session.data.disco,
+                    discoName: session.data.discoName,
+                    meterType: session.data.meterType,
+                    meterNumber: session.data.meterNumber,
+                    amount: session.data.amount
+                }
+            };
 
         default:
             clearElectricitySession(senderPsid);
             return { text: "Session expired. Type 'menu' to restart." };
+    }
+}
+
+/**
+ * Execute electricity payment after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { meterNumber, amount, meterType, disco, discoName } = sessionData;
+    const parsedAmount = parseFloat(amount);
+
+    try {
+        const response = await axios.post(APP_URL + '/api/electricity/pay', {
+            uid: userId,
+            meterNumber,
+            amount: parsedAmount,
+            tokenType: meterType,
+            disco,
+            pin
+        }, { timeout: 60000 });
+
+        if (response.data && response.data.success) {
+            let msg =
+                '✅ Electricity Payment Successful!\n\n' +
+                'Disco: ' + (discoName || disco || '') + '\n' +
+                'Meter: ' + (meterNumber || '') + '\n' +
+                'Type: ' + (meterType || '') + '\n' +
+                'Amount: ₦' + parsedAmount.toLocaleString();
+            if (response.data.token) msg += '\n\n🔑 Token: ' + response.data.token;
+            return { success: true, message: msg };
+        }
+        return {
+            success: false,
+            message: '❌ Electricity Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Electricity Failed: ' + (err.response?.data?.error || err.message)
+        };
     }
 }
 
@@ -115,5 +158,6 @@ module.exports = {
     handleElectricityFlow,
     getElectricitySession,
     clearElectricitySession,
+    executePurchase,
     DISCOS
 };

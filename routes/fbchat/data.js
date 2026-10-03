@@ -1,5 +1,6 @@
 // routes/fbchat/data.js
 const path = require('path');
+const axios = require('axios');
 
 // ---- SAFE LOAD OF PLANS ----
 let groupedPlans = {};
@@ -71,7 +72,6 @@ async function handleDataFlow(psid, text, session) {
     try {
         const input = text.trim();
 
-        // ========== STEP 1: Phone ==========
         if (session.step === 'DATA_PHONE') {
             let phone = input.replace(/\D/g, '');
             if (phone.length < 10 || phone.length > 14) {
@@ -93,7 +93,6 @@ async function handleDataFlow(psid, text, session) {
             };
         }
 
-        // ========== STEP 2: Network ==========
         if (session.step === 'DATA_NETWORK') {
             const key = input.toLowerCase();
             const network = NETWORK_MAP[key] || NETWORK_MAP[input];
@@ -106,7 +105,6 @@ async function handleDataFlow(psid, text, session) {
 
             if (!groupedPlans || !groupedPlans[network]) {
                 console.error('No plans found for network:', network);
-                console.error('Available networks:', Object.keys(groupedPlans || {}));
                 clearDataSession(psid);
                 return {
                     text: '❌ Data plans are currently unavailable. Please try again later or contact support.\n\nType "menu" to go back.'
@@ -117,7 +115,6 @@ async function handleDataFlow(psid, text, session) {
             session.step = 'DATA_TYPE';
 
             const categories = Object.keys(groupedPlans[network]);
-
             if (categories.length === 0) {
                 clearDataSession(psid);
                 return { text: '❌ No data plans available for this network right now.' };
@@ -133,7 +130,6 @@ async function handleDataFlow(psid, text, session) {
             return { text: msg };
         }
 
-        // ========== STEP 3: Data Type ==========
         if (session.step === 'DATA_TYPE') {
             const categories = session.data.categories || [];
             const idx = parseInt(input, 10) - 1;
@@ -148,9 +144,7 @@ async function handleDataFlow(psid, text, session) {
             }
 
             if (!selectedCategory) {
-                return {
-                    text: '❌ Invalid selection. Please reply with a valid number from the list:'
-                };
+                return { text: '❌ Invalid selection. Please reply with a valid number from the list:' };
             }
 
             session.data.dataType = selectedCategory;
@@ -166,7 +160,6 @@ async function handleDataFlow(psid, text, session) {
 
             let msg = 'Data Type: ' + selectedCategory + '\n\nSelect Plan:\n\n';
             plans.forEach(function (plan, i) {
-                // Remove original price from the name
                 var cleanName = (plan.name || '').split(' - ₦')[0].trim();
                 var finalPrice = Number(plan.price).toLocaleString();
                 msg += (i + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
@@ -177,20 +170,15 @@ async function handleDataFlow(psid, text, session) {
             return { text: msg };
         }
 
-        // ========== STEP 4: Data Plan ==========
         if (session.step === 'DATA_PLAN') {
             const plans = session.data.plans || [];
             const idx = parseInt(input, 10) - 1;
 
             if (isNaN(idx) || idx < 0 || idx >= plans.length) {
-                return {
-                    text: '❌ Invalid plan. Please reply with a valid number from the list:'
-                };
+                return { text: '❌ Invalid plan. Please reply with a valid number from the list:' };
             }
 
             const selectedPlan = plans[idx];
-
-            // Clean name only (no original price)
             const cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
 
             return {
@@ -201,13 +189,12 @@ async function handleDataFlow(psid, text, session) {
                     network: session.data.network,
                     networkID: NETWORK_ID_MAP[session.data.network],
                     planId: selectedPlan.id,
-                    amount: selectedPlan.price,          // final price with profit
-                    planName: cleanPlanName              // clean name only
+                    amount: selectedPlan.price,
+                    planName: cleanPlanName
                 }
             };
         }
 
-        // Fallback
         clearDataSession(psid);
         return { text: 'Session reset. Type "menu" to start over.' };
 
@@ -220,10 +207,52 @@ async function handleDataFlow(psid, text, session) {
     }
 }
 
+/**
+ * Execute data purchase after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { phone, network, networkID, planId, amount, planName } = sessionData;
+    const parsedAmount = parseFloat(amount);
+    const finalNetworkID = networkID || NETWORK_ID_MAP[(network || '').toLowerCase()] || network;
+
+    try {
+        const response = await axios.post(APP_URL + '/api/data/buy', {
+            uid: userId,
+            phone,
+            dataPlan: planId,
+            networkID: String(finalNetworkID),
+            amount: parsedAmount,
+            pin
+        }, { timeout: 55000 });
+
+        if (response.data && response.data.success) {
+            return {
+                success: true,
+                message:
+                    '✅ Data Purchase Successful!\n\n' +
+                    'Network: ' + (network || '').toUpperCase() + '\n' +
+                    'Phone: ' + phone + '\n' +
+                    'Plan: ' + (planName || planId) + '\n' +
+                    'Amount: ₦' + parsedAmount.toLocaleString()
+            };
+        }
+        return {
+            success: false,
+            message: '❌ Data Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Data Failed: ' + (err.response?.data?.error || err.message)
+        };
+    }
+}
+
 module.exports = {
     getDataSession,
     clearDataSession,
     startDataFlow,
     handleDataFlow,
+    executePurchase,
     NETWORK_ID_MAP
 };

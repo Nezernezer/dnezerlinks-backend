@@ -1,7 +1,6 @@
 // routes/fbchat/cabletv.js
 const axios = require('axios');
 
-// ---- CLEAN LOCAL REQUIRE OF CABLE PLANS ----
 let localPlans = {};
 try {
     const plansModule = require('./cable_plans');
@@ -64,7 +63,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
     try {
         const input = text.trim();
 
-        // ========== STEP 1: Provider Selection ==========
         if (session.step === 'CABLE_PROVIDER') {
             const key = input.toLowerCase();
             const provider = PROVIDERS[key] || PROVIDERS[input];
@@ -104,7 +102,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             return { text: msg };
         }
 
-        // ========== STEP 2: Plan Selection ==========
         if (session.step === 'CABLE_PLAN') {
             const plans = session.data.plans || [];
             const index = parseInt(input, 10) - 1;
@@ -132,7 +129,6 @@ async function handleCableFlow(psid, text, session, APP_URL) {
             };
         }
 
-        // ========== STEP 3: IUC Validation ==========
         if (session.step === 'CABLE_IUC') {
             const iuc = input.replace(/\s+/g, '');
             if (iuc.length < 8) {
@@ -154,7 +150,7 @@ async function handleCableFlow(psid, text, session, APP_URL) {
                 if (!validateRes.data || !validateRes.data.success) {
                     return {
                         text:
-                            '❌ ' + (validateRes.data.error || 'Invalid IUC/card number.') +
+                            '❌ ' + (validateRes.data?.error || 'Invalid IUC/card number.') +
                             '\n\nPlease enter a correct IUC / SmartCard Number:'
                     };
                 }
@@ -195,9 +191,51 @@ async function handleCableFlow(psid, text, session, APP_URL) {
     }
 }
 
+/**
+ * Execute cable TV payment after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { iuc, providerID, planID, amount, providerName, planName, customerName } = sessionData;
+    const parsedAmount = parseFloat(amount);
+
+    try {
+        const response = await axios.post(APP_URL + '/api/cabletv/pay', {
+            uid: userId,
+            iuc,
+            providerID: String(providerID),
+            planID: String(planID),
+            amount: parsedAmount,
+            pin
+        }, { timeout: 60000 });
+
+        if (response.data && response.data.success) {
+            return {
+                success: true,
+                message:
+                    '✅ Cable TV Subscription Successful!\n\n' +
+                    'Provider: ' + (providerName || '') + '\n' +
+                    'Package: ' + (planName || '') + '\n' +
+                    'IUC: ' + iuc + '\n' +
+                    'Customer: ' + (customerName || '') + '\n' +
+                    'Amount: ₦' + parsedAmount.toLocaleString()
+            };
+        }
+        return {
+            success: false,
+            message: '❌ Cable TV Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Cable TV Failed: ' + (err.response?.data?.error || err.message)
+        };
+    }
+}
+
 module.exports = {
     getCableSession,
     clearCableSession,
     startCableFlow,
-    handleCableFlow
+    handleCableFlow,
+    executePurchase
 };

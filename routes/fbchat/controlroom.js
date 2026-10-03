@@ -175,9 +175,6 @@ async function sendSecurePinLink(senderPsid, network, phone, amount, pinToken, e
 async function processFreeModePin(senderPsid, pin, sessionData, token) {
     const psid = sessionData.psid;
     const service = sessionData.service;
-    const phone = sessionData.phone;
-    const network = sessionData.network;
-    const amount = sessionData.amount || sessionData.totalCost;
 
     try {
         const userId = await getLinkedUserId(psid);
@@ -217,230 +214,29 @@ async function processFreeModePin(senderPsid, pin, sessionData, token) {
 
         delete pendingPinTokens[token];
 
-        // ========== AIRTIME ==========
-        if (service === 'airtime') {
-            const parsedAmount = parseFloat(amount);
-            const networkMap = { mtn: '1', glo: '2', '9mobile': '3', airtel: '4' };
-            const networkID = networkMap[network.toLowerCase()] || network;
+        // Dispatch to the correct service module
+        const executors = {
+            airtime: airtimeChat.executePurchase,
+            data: dataChat.executePurchase,
+            cable: cableChat.executePurchase,
+            electricity: electricityChat.executePurchase,
+            bulksms: bulksmsChat.executePurchase,
+            exampin: examChat.executePurchase,
+            rechargepin: rechargePinChat.executePurchase
+        };
 
-            const response = await axios.post(APP_URL + '/api/airtime/buy', {
-                uid: userId, phone, amount: parsedAmount, networkID, pin
-            }, { timeout: 55000 });
-
-            if (response.data && response.data.success) {
-                await sendMessengerReply(psid, {
-                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() +
-                          '\nPhone: ' + phone + '\nAmount: ₦' + parsedAmount.toLocaleString() +
-                          DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            } else {
-                await sendMessengerReply(psid, {
-                    text: '❌ Airtime Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
+        const executor = executors[service];
+        if (!executor) {
+            await sendMessengerReply(psid, {
+                text: '❌ Unknown service.' + DELETE_PIN_REMINDER + MENU_FOOTER
+            });
             return;
         }
 
-        // ========== DATA ==========
-        if (service === 'data') {
-            const parsedAmount = parseFloat(amount);
-            const planId = sessionData.planId;
-            const networkID = sessionData.networkID || dataChat.NETWORK_ID_MAP[network.toLowerCase()] || network;
-
-            const response = await axios.post(APP_URL + '/api/data/buy', {
-                uid: userId, phone, dataPlan: planId, networkID: String(networkID), amount: parsedAmount, pin
-            }, { timeout: 55000 });
-
-            if (response.data && response.data.success) {
-                await sendMessengerReply(psid, {
-                    text: '✅ Data Purchase Successful!\n\nNetwork: ' + network.toUpperCase() +
-                          '\nPhone: ' + phone + '\nPlan: ' + (sessionData.planName || planId) +
-                          '\nAmount: ₦' + parsedAmount.toLocaleString() + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            } else {
-                await sendMessengerReply(psid, {
-                    text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
-        // ========== CABLE ==========
-        if (service === 'cable') {
-            const parsedAmount = parseFloat(amount);
-            try {
-                const response = await axios.post(APP_URL + '/api/cabletv/pay', {
-                    uid: userId,
-                    iuc: sessionData.iuc,
-                    providerID: String(sessionData.providerID),
-                    planID: String(sessionData.planID),
-                    amount: parsedAmount,
-                    pin
-                }, { timeout: 60000 });
-
-                if (response.data && response.data.success) {
-                    await sendMessengerReply(psid, {
-                        text: '✅ Cable TV Subscription Successful!\n\nProvider: ' + (sessionData.providerName || '') +
-                              '\nPackage: ' + (sessionData.planName || '') +
-                              '\nIUC: ' + sessionData.iuc +
-                              '\nCustomer: ' + (sessionData.customerName || '') +
-                              '\nAmount: ₦' + parsedAmount.toLocaleString() + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, {
-                    text: '❌ Cable TV Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
-        // ========== ELECTRICITY ==========
-        if (service === 'electricity') {
-            const parsedAmount = parseFloat(amount);
-            try {
-                const response = await axios.post(APP_URL + '/api/electricity/pay', {
-                    uid: userId,
-                    meterNumber: sessionData.meterNumber,
-                    amount: parsedAmount,
-                    tokenType: sessionData.meterType,
-                    disco: sessionData.disco,
-                    pin
-                }, { timeout: 60000 });
-
-                if (response.data && response.data.success) {
-                    let msg = '✅ Electricity Payment Successful!\n\n';
-                    msg += 'Disco: ' + (sessionData.disco || '') + '\n';
-                    msg += 'Meter: ' + (sessionData.meterNumber || '') + '\n';
-                    msg += 'Type: ' + (sessionData.meterType || '') + '\n';
-                    msg += 'Amount: ₦' + parsedAmount.toLocaleString();
-                    if (response.data.token) msg += '\n\n🔑 Token: ' + response.data.token;
-                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, {
-                    text: '❌ Electricity Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
-        // ========== BULK SMS ==========
-        if (service === 'bulksms') {
-            try {
-                const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
-                    uid: userId,
-                    recipient: sessionData.recipients,
-                    message: sessionData.message,
-                    senderName: sessionData.senderName,
-                    pin
-                }, { timeout: 65000 });
-
-                if (response.data && response.data.success) {
-                    await sendMessengerReply(psid, {
-                        text: '✅ Bulk SMS Sent Successfully!\n\nSender: ' + sessionData.senderName +
-                              '\nRecipients: ' + sessionData.recipientCount +
-                              '\nPages: ' + sessionData.pages +
-                              '\nCost: ₦' + Number(sessionData.amount).toLocaleString() +
-                              DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, {
-                    text: '❌ Bulk SMS Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
-        // ========== EXAM PIN ==========
-        if (service === 'exampin') {
-            try {
-                const response = await axios.post(APP_URL + '/api/exampin/buy', {
-                    uid: userId,
-                    examType: sessionData.examType,
-                    quantity: sessionData.quantity,
-                    pin
-                }, { timeout: 55000 });
-
-                if (response.data && response.data.success) {
-                    let msg = '✅ Exam PIN Purchase Successful!\n\n';
-                    msg += 'Exam: ' + (sessionData.examLabel || sessionData.examType) + '\n';
-                    msg += 'Quantity: ' + sessionData.quantity + '\n';
-                    msg += 'Amount: ₦' + Number(sessionData.amount).toLocaleString() + '\n\n';
-                    msg += 'PIN: ' + (response.data.pin || 'N/A') + '\n';
-                    msg += 'Serial: ' + (response.data.serial || 'N/A') + '\n\n';
-                    msg += 'Save this message securely.';
-                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, {
-                    text: '❌ Exam PIN Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
-        // ========== RECHARGE PIN ==========
-        if (service === 'rechargepin') {
-            try {
-                const response = await axios.post(APP_URL + '/api/rechargepin/generate', {
-                    uid: userId,
-                    network: sessionData.network,
-                    amount: sessionData.amount,
-                    qty: sessionData.qty,
-                    brandName: sessionData.brandName || 'Dnezerlinks',
-                    pin
-                }, { timeout: 65000 });
-
-                if (response.data && response.data.success) {
-                    const pins = response.data.pins || [];
-                    let msg = '✅ Recharge PINs Generated!\n\n';
-                    msg += 'Network: ' + sessionData.network + '\n';
-                    msg += 'Denomination: ₦' + sessionData.amount + '\n';
-                    msg += 'Quantity: ' + sessionData.qty + '\n';
-                    msg += 'Brand: ' + (sessionData.brandName || 'Dnezerlinks') + '\n\n';
-
-                    pins.slice(0, 15).forEach(function (p, i) {
-                        msg += (i + 1) + '. PIN: ' + (p.pin || '') + ' | SN: ' + (p.serial || 'N/A') + '\n';
-                    });
-                    if (pins.length > 15) {
-                        msg += '\n...and ' + (pins.length - 15) + ' more.';
-                    }
-                    msg += '\n\nSave this message securely.';
-                    msg += DELETE_PIN_REMINDER + MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                } else {
-                    await sendMessengerReply(psid, {
-                        text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + DELETE_PIN_REMINDER + MENU_FOOTER
-                    });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, {
-                    text: '❌ Recharge PIN Failed: ' + (err.response?.data?.error || err.message) + DELETE_PIN_REMINDER + MENU_FOOTER
-                });
-            }
-            return;
-        }
-
+        const result = await executor(userId, sessionData, pin, APP_URL);
+        await sendMessengerReply(psid, {
+            text: result.message + DELETE_PIN_REMINDER + MENU_FOOTER
+        });
     } catch (error) {
         delete pendingPinTokens[token];
         await sendMessengerReply(psid, {
@@ -669,101 +465,27 @@ router.post('/secure-auth-portal-submit', express.json(), async (req, res) => {
     }
 
     const psid = sessionData.psid;
-    const cleanEmail = email ? email.toLowerCase().trim() : '';
 
     try {
+        let result;
+
         if (action === 'login') {
-            if (!idToken) {
-                return res.json({ success: false, message: '❌ Missing authentication token.' });
-            }
-
-            try {
-                const decoded = await admin.auth().verifyIdToken(idToken);
-                const authEmail = (decoded.email || '').toLowerCase();
-
-                if (authEmail !== cleanEmail) {
-                    return res.json({ success: false, message: '❌ Email mismatch.' });
-                }
-
-                const snapshot = await admin.database().ref('users').orderByChild('email').equalTo(cleanEmail).once('value');
-                if (!snapshot.exists()) {
-                    return res.json({ success: false, message: '❌ No account found with this email.' });
-                }
-
-                let userId = null;
-                snapshot.forEach(function (child) { userId = child.key; });
-
-                await admin.database().ref('messenger_links/' + psid).set({
-                    userId: userId,
-                    email: cleanEmail,
-                    linkedAt: new Date().toISOString()
-                });
-                await admin.database().ref('users/' + userId + '/messenger_psid').set(psid);
-
-                delete pendingAuthTokens[token];
-                await sendMessengerReply(psid, { text: '✅ Successfully Logged In & Linked to ' + cleanEmail + '!' + MENU_FOOTER });
-                return res.json({ success: true });
-            } catch (authErr) {
-                return res.json({ success: false, message: '❌ Incorrect password.' });
-            }
+            result = await loginChat.processLogin(psid, { email, idToken });
+        } else if (action === 'register') {
+            result = await loginChat.processRegister(psid, { name, phone, address, email, password, pin });
+        } else if (action === 'forgot') {
+            result = await loginChat.processForgot(psid, { email });
+        } else {
+            return res.json({ success: false, message: '❌ Invalid action.' });
         }
 
-        if (action === 'register') {
-            if (!name || !phone || !address || !cleanEmail || !password || password.length < 6 || !pin) {
-                return res.json({ success: false, message: '❌ Please fill all fields correctly.' });
-            }
-
-            const snapshot = await admin.database().ref('users').orderByChild('email').equalTo(cleanEmail).once('value');
-            if (snapshot.exists()) {
-                return res.json({ success: false, message: '❌ An account with this email already exists.' });
-            }
-
-            const newUserRef = admin.database().ref('users').push();
-            const userId = newUserRef.key;
-
-            await newUserRef.set({
-                userId: userId,
-                name: name,
-                email: cleanEmail,
-                phone: phone,
-                address: address,
-                password: password.trim(),
-                pin: pin,
-                transaction_pin: pin,
-                balance: 0,
-                account_status: 'active',
-                messenger_psid: psid,
-                createdAt: new Date().toISOString()
-            });
-
-            await admin.database().ref('messenger_links/' + psid).set({
-                userId: userId,
-                email: cleanEmail,
-                linkedAt: new Date().toISOString()
-            });
-
+        if (result.success) {
             delete pendingAuthTokens[token];
-            await sendMessengerReply(psid, {
-                text: '🎉 Account Created & Linked Successfully!\nName: ' + name + '\nEmail: ' + cleanEmail + '\nBalance: ₦0.00' + MENU_FOOTER
-            });
+            await sendMessengerReply(psid, { text: result.message });
             return res.json({ success: true });
+        } else {
+            return res.json({ success: false, message: result.message });
         }
-
-        if (action === 'forgot') {
-            const snapshot = await admin.database().ref('users').orderByChild('email').equalTo(cleanEmail).once('value');
-            if (!snapshot.exists()) {
-                return res.json({ success: false, message: '❌ No account matches this email.' });
-            }
-
-            await admin.auth().generatePasswordResetLink(cleanEmail);
-            delete pendingAuthTokens[token];
-            await sendMessengerReply(psid, {
-                text: '🔄 Password Reset Instructions sent to ' + cleanEmail + '. Check your inbox/spam.' + MENU_FOOTER
-            });
-            return res.json({ success: true });
-        }
-
-        return res.json({ success: false, message: '❌ Invalid action.' });
     } catch (e) {
         return res.json({ success: false, message: '❌ Error: ' + e.message });
     }
@@ -892,9 +614,6 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
     const psid = sessionData.psid;
     const service = sessionData.service;
-    const phone = sessionData.phone;
-    const network = sessionData.network;
-    const amount = sessionData.amount || sessionData.totalCost;
 
     try {
         const userId = await getLinkedUserId(psid);
@@ -931,166 +650,26 @@ router.post('/secure-pin-portal-submit', express.json(), async (req, res) => {
 
         delete pendingPinTokens[token];
 
-        // ========== AIRTIME ==========
-        if (service === 'airtime') {
-            const parsedAmount = parseFloat(amount);
-            const networkMap = { mtn: '1', glo: '2', '9mobile': '3', airtel: '4' };
-            const networkID = networkMap[network.toLowerCase()] || network;
+        // Dispatch to the correct service module
+        const executors = {
+            airtime: airtimeChat.executePurchase,
+            data: dataChat.executePurchase,
+            cable: cableChat.executePurchase,
+            electricity: electricityChat.executePurchase,
+            bulksms: bulksmsChat.executePurchase,
+            exampin: examChat.executePurchase,
+            rechargepin: rechargePinChat.executePurchase
+        };
 
-            const response = await axios.post(APP_URL + '/api/airtime/buy', {
-                uid: userId, phone, amount: parsedAmount, networkID, pin
-            }, { timeout: 55000 });
-
-            if (response.data && response.data.success) {
-                await sendMessengerReply(psid, {
-                    text: '✅ Airtime Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
-                });
-                return res.json({ success: true });
-            } else {
-                await sendMessengerReply(psid, { text: '❌ Airtime Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
+        const executor = executors[service];
+        if (!executor) {
+            await sendMessengerReply(psid, { text: '❌ Unknown service.' + MENU_FOOTER });
+            return res.json({ success: false, closeWindow: true });
         }
 
-        // ========== DATA ==========
-        if (service === 'data') {
-            const parsedAmount = parseFloat(amount);
-            const planId = sessionData.planId;
-            const networkID = sessionData.networkID || dataChat.NETWORK_ID_MAP[network.toLowerCase()] || network;
-
-            const response = await axios.post(APP_URL + '/api/data/buy', {
-                uid: userId, phone, dataPlan: planId, networkID: String(networkID), amount: parsedAmount, pin
-            }, { timeout: 55000 });
-
-            if (response.data && response.data.success) {
-                await sendMessengerReply(psid, {
-                    text: '✅ Data Purchase Successful!\n\nNetwork: ' + network.toUpperCase() + '\nPhone: ' + phone + '\nPlan: ' + (sessionData.planName || planId) + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
-                });
-                return res.json({ success: true });
-            } else {
-                await sendMessengerReply(psid, { text: '❌ Data Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        // ========== CABLE TV ==========
-        if (service === 'cable') {
-            const parsedAmount = parseFloat(amount);
-            try {
-                const response = await axios.post(APP_URL + '/api/cabletv/pay', {
-                    uid: userId, iuc: sessionData.iuc, providerID: String(sessionData.providerID), planID: String(sessionData.planID), amount: parsedAmount, pin
-                }, { timeout: 60000 });
-
-                if (response.data && response.data.success) {
-                    await sendMessengerReply(psid, {
-                        text: '✅ Cable TV Subscription Successful!\n\nProvider: ' + (sessionData.providerName || '') + '\nPackage: ' + (sessionData.planName || '') + '\nIUC: ' + sessionData.iuc + '\nCustomer: ' + (sessionData.customerName || '') + '\nAmount: ₦' + parsedAmount.toLocaleString() + MENU_FOOTER
-                    });
-                    return res.json({ success: true });
-                } else {
-                    await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                    return res.json({ success: false, closeWindow: true });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, { text: '❌ Cable TV Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        // ========== ELECTRICITY ==========
-        if (service === 'electricity') {
-            const parsedAmount = parseFloat(amount);
-            try {
-                const response = await axios.post(APP_URL + '/api/electricity/pay', {
-                    uid: userId, meterNumber: sessionData.meterNumber, amount: parsedAmount, tokenType: sessionData.meterType, disco: sessionData.disco, pin
-                }, { timeout: 60000 });
-
-                if (response.data && response.data.success) {
-                    let msg = '✅ Electricity Payment Successful!\n\nDisco: ' + (sessionData.disco || '') + '\nMeter: ' + (sessionData.meterNumber || '') + '\nType: ' + (sessionData.meterType || '') + '\nAmount: ₦' + parsedAmount.toLocaleString();
-                    if (response.data.token) msg += '\n\n🔑 Token: ' + response.data.token;
-                    msg += MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                    return res.json({ success: true });
-                } else {
-                    await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                    return res.json({ success: false, closeWindow: true });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, { text: '❌ Electricity Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        // ========== BULK SMS ==========
-        if (service === 'bulksms') {
-            try {
-                const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
-                    uid: userId, recipient: sessionData.recipients, message: sessionData.message, senderName: sessionData.senderName, pin
-                }, { timeout: 65000 });
-
-                if (response.data && response.data.success) {
-                    await sendMessengerReply(psid, {
-                        text: '✅ Bulk SMS Sent Successfully!\n\nSender: ' + sessionData.senderName + '\nRecipients: ' + sessionData.recipientCount + '\nPages: ' + sessionData.pages + '\nCost: ₦' + Number(sessionData.amount).toLocaleString() + MENU_FOOTER
-                    });
-                    return res.json({ success: true });
-                } else {
-                    await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                    return res.json({ success: false, closeWindow: true });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, { text: '❌ Bulk SMS Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        // ========== EXAM PIN ==========
-        if (service === 'exampin') {
-            try {
-                const response = await axios.post(APP_URL + '/api/exampin/buy', {
-                    uid: userId, examType: sessionData.examType, quantity: sessionData.quantity, pin
-                }, { timeout: 55000 });
-
-                if (response.data && response.data.success) {
-                    let msg = '✅ Exam PIN Purchase Successful!\n\nExam: ' + (sessionData.examLabel || sessionData.examType) + '\nQuantity: ' + sessionData.quantity + '\nAmount: ₦' + Number(sessionData.amount).toLocaleString() + '\n\nPIN: ' + (response.data.pin || 'N/A') + '\nSerial: ' + (response.data.serial || 'N/A') + '\n\nSave this message securely.' + MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                    return res.json({ success: true });
-                } else {
-                    await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                    return res.json({ success: false, closeWindow: true });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, { text: '❌ Exam PIN Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        // ========== RECHARGE PIN ==========
-        if (service === 'rechargepin') {
-            try {
-                const response = await axios.post(APP_URL + '/api/rechargepin/generate', {
-                    uid: userId, network: sessionData.network, amount: sessionData.amount, qty: sessionData.qty, brandName: sessionData.brandName || 'Dnezerlinks', pin
-                }, { timeout: 65000 });
-
-                if (response.data && response.data.success) {
-                    const pins = response.data.pins || [];
-                    let msg = '✅ Recharge PINs Generated!\n\nNetwork: ' + sessionData.network + '\nDenomination: ₦' + sessionData.amount + '\nQuantity: ' + sessionData.qty + '\nBrand: ' + (sessionData.brandName || 'Dnezerlinks') + '\n\n';
-                    pins.slice(0, 15).forEach(function (p, i) {
-                        msg += (i + 1) + '. PIN: ' + (p.pin || '') + ' | SN: ' + (p.serial || 'N/A') + '\n';
-                    });
-                    if (pins.length > 15) msg += '\n...and ' + (pins.length - 15) + ' more.';
-                    msg += '\n\nSave this message securely.' + MENU_FOOTER;
-                    await sendMessengerReply(psid, { text: msg });
-                    return res.json({ success: true });
-                } else {
-                    await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + (response.data.error || 'Unknown error') + MENU_FOOTER });
-                    return res.json({ success: false, closeWindow: true });
-                }
-            } catch (err) {
-                await sendMessengerReply(psid, { text: '❌ Recharge PIN Failed: ' + (err.response?.data?.error || err.message) + MENU_FOOTER });
-                return res.json({ success: false, closeWindow: true });
-            }
-        }
-
-        return res.json({ success: true });
+        const result = await executor(userId, sessionData, pin, APP_URL);
+        await sendMessengerReply(psid, { text: result.message + MENU_FOOTER });
+        return res.json({ success: result.success, closeWindow: true });
     } catch (error) {
         delete pendingPinTokens[token];
         const errMsg = error.response?.data?.error || error.message || 'Server error';
@@ -1281,125 +860,9 @@ async function handleUserMessage(senderPsid, text) {
             const password = raw;
             delete pendingFreeLogin[senderPsid];
 
-            try {
-                // Prefer env variable so you can use an unrestricted key for the backend
-                const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc';
-
-                console.log('[FreeLogin] Attempting Auth for:', email);
-
-                const authRes = await axios.post(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
-                    {
-                        email: email,
-                        password: password,
-                        returnSecureToken: true
-                    },
-                    {
-                        timeout: 15000,
-                        headers: { 'Content-Type': 'application/json' }
-                    }
-                );
-
-                console.log('[FreeLogin] Auth success, localId:', authRes.data?.localId);
-
-                if (!authRes.data || !authRes.data.localId) {
-                    await sendMessengerReply(senderPsid, {
-                        text:
-                            '❌ Incorrect password.\n\n' +
-                            '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
-                    });
-                    return;
-                }
-
-                // Auth succeeded – look up user in Realtime Database by email
-                const snapshot = await admin.database()
-                    .ref('users')
-                    .orderByChild('email')
-                    .equalTo(email)
-                    .once('value');
-
-                if (!snapshot.exists()) {
-                    // Fallback: try to find by Firebase Auth UID if your users collection uses Auth UID as key
-                    const authUid = authRes.data.localId;
-                    const uidSnap = await admin.database().ref('users/' + authUid).once('value');
-
-                    if (uidSnap.exists()) {
-                        const userId = authUid;
-                        await admin.database().ref('messenger_links/' + senderPsid).set({
-                            userId: userId,
-                            email: email,
-                            linkedAt: new Date().toISOString()
-                        });
-                        await admin.database().ref('users/' + userId + '/messenger_psid').set(senderPsid);
-
-                        await sendMessengerReply(senderPsid, {
-                            text:
-                                '✅ Successfully Logged In & Linked to ' + email + '!\n\n' +
-                                '⚠️ Please delete the email and password you entered above for your security.' + MENU_FOOTER
-                        });
-                        return;
-                    }
-
-                    await sendMessengerReply(senderPsid, {
-                        text:
-                            '❌ No account found with this email in the system.\n\n' +
-                            '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
-                    });
-                    return;
-                }
-
-                let userId = null;
-                snapshot.forEach(child => {
-                    userId = child.key;
-                });
-
-                // Link the Messenger account
-                await admin.database().ref('messenger_links/' + senderPsid).set({
-                    userId: userId,
-                    email: email,
-                    linkedAt: new Date().toISOString()
-                });
-                await admin.database().ref('users/' + userId + '/messenger_psid').set(senderPsid);
-
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        '✅ Successfully Logged In & Linked to ' + email + '!\n\n' +
-                        '⚠️ Please delete the email and password you entered above for your security.' + MENU_FOOTER
-                });
-            } catch (err) {
-                // Full error for debugging – check your server console / logs
-                const firebaseError = err.response?.data || err.message;
-                console.error('[FreeLogin] FULL ERROR →', JSON.stringify(firebaseError, null, 2));
-
-                const errorMsg = (err.response?.data?.error?.message || err.message || '').toUpperCase();
-                let userMsg = '❌ Login failed. Please try again.';
-
-                if (
-                    errorMsg.includes('INVALID_PASSWORD') ||
-                    errorMsg.includes('EMAIL_NOT_FOUND') ||
-                    errorMsg.includes('INVALID_LOGIN_CREDENTIALS') ||
-                    errorMsg.includes('INVALID_EMAIL') ||
-                    errorMsg.includes('USER_DISABLED')
-                ) {
-                    userMsg = '❌ Incorrect email or password.';
-                } else if (
-                    errorMsg.includes('API_KEY_INVALID') ||
-                    errorMsg.includes('API KEY NOT VALID') ||
-                    errorMsg.includes('PERMISSION_DENIED') ||
-                    errorMsg.includes('REQUESTS FROM THIS') ||
-                    errorMsg.includes('BLOCKED')
-                ) {
-                    // This is the usual cause when the Web API key is restricted to HTTP referrers
-                    userMsg = '❌ Server Auth configuration error. Contact support.';
-                    console.error('[FreeLogin] Likely cause: Firebase Web API key is restricted (HTTP referrer only). Create an unrestricted key or IP-restricted key for the backend and set FIREBASE_WEB_API_KEY in env.');
-                }
-
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        userMsg + '\n\n' +
-                        '⚠️ Please delete the email and password you entered above.' + MENU_FOOTER
-                });
-            }
+            // Process Free Mode login via login.js
+            const result = await loginChat.processFreeModeLogin(senderPsid, { email, password });
+            await sendMessengerReply(senderPsid, { text: result.message });
             return;
         }
     }
@@ -1515,62 +978,12 @@ async function handleUserMessage(senderPsid, text) {
             const pin = raw;
             delete pendingFreeRegister[senderPsid];
 
-            try {
-                const snapshot = await admin.database()
-                    .ref('users')
-                    .orderByChild('email')
-                    .equalTo(email)
-                    .once('value');
+            // Process Free Mode registration via login.js
+            const result = await loginChat.processFreeModeRegister(senderPsid, {
+                name, phone, address, email, password, pin
+            });
 
-                if (snapshot.exists()) {
-                    await sendMessengerReply(senderPsid, {
-                        text:
-                            '❌ An account with this email already exists.\n\n' +
-                            '⚠️ Please delete the email, password and PIN you entered above.' + MENU_FOOTER
-                    });
-                    return;
-                }
-
-                const newUserRef = admin.database().ref('users').push();
-                const userId = newUserRef.key;
-
-                await newUserRef.set({
-                    userId: userId,
-                    name: name,
-                    email: email,
-                    phone: phone,
-                    address: address,
-                    password: password.trim(),
-                    pin: pin,
-                    transaction_pin: pin,
-                    balance: 0,
-                    account_status: 'active',
-                    messenger_psid: senderPsid,
-                    createdAt: new Date().toISOString()
-                });
-
-                await admin.database().ref('messenger_links/' + senderPsid).set({
-                    userId: userId,
-                    email: email,
-                    linkedAt: new Date().toISOString()
-                });
-
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        '🎉 Account Created & Linked Successfully!\n\n' +
-                        'Name: ' + name + '\n' +
-                        'Email: ' + email + '\n' +
-                        'Balance: ₦0.00\n\n' +
-                        '⚠️ Please delete the email, password and PIN you entered above for your security.' + MENU_FOOTER
-                });
-            } catch (err) {
-                console.error('Free mode register error:', err);
-                await sendMessengerReply(senderPsid, {
-                    text:
-                        '❌ Registration failed. Please try again.\n\n' +
-                        '⚠️ Please delete the sensitive information you entered above.' + MENU_FOOTER
-                });
-            }
+            await sendMessengerReply(senderPsid, { text: result.message });
             return;
         }
     }
@@ -1578,45 +991,37 @@ async function handleUserMessage(senderPsid, text) {
     // ===== ACTIVE AIRTIME SESSION =====
     const airtimeSession = airtimeChat.getAirtimeSession(senderPsid);
     if (airtimeSession) {
-        if (airtimeSession.step === 'AIRTIME_AMOUNT') {
-            const amountNum = parseFloat(raw);
-            if (isNaN(amountNum) || amountNum < 100) {
-                await sendMessengerReply(senderPsid, { text: '❌ Invalid amount. Minimum is ₦100:' });
-                return;
-            }
+        const result = await airtimeChat.handleAirtimeFlow(senderPsid, text, airtimeSession);
 
-            airtimeSession.data.amount = amountNum;
-
-            if (!(await requireLink(senderPsid))) {
-                airtimeChat.clearAirtimeSession(senderPsid);
-                return;
-            }
-
+        if (result && result.type === 'READY_FOR_PIN') {
             airtimeChat.clearAirtimeSession(senderPsid);
+
+            if (!(await requireLink(senderPsid))) return;
 
             const pinToken = crypto.randomBytes(32).toString('hex');
             pendingPinTokens[pinToken] = {
                 psid: senderPsid,
                 service: 'airtime',
-                phone: airtimeSession.data.phone,
-                network: airtimeSession.data.network,
-                amount: airtimeSession.data.amount,
+                phone: result.data.phone,
+                network: result.data.network,
+                amount: result.data.amount,
                 expiresAt: Date.now() + PIN_TOKEN_EXPIRY_MS,
                 attempts: 0
             };
 
             await sendSecurePinLink(
                 senderPsid,
-                airtimeSession.data.network,
-                airtimeSession.data.phone,
-                airtimeSession.data.amount,
+                result.data.network,
+                result.data.phone,
+                result.data.amount,
                 pinToken
             );
             return;
         }
 
-        const reply = await airtimeChat.handleAirtimeFlow(senderPsid, text, airtimeSession);
-        await sendMessengerReply(senderPsid, reply);
+        if (result && result.text) {
+            await sendMessengerReply(senderPsid, result);
+        }
         return;
     }
 

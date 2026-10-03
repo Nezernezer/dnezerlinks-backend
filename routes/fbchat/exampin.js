@@ -1,4 +1,6 @@
 // routes/fbchat/exampin.js
+const axios = require('axios');
+
 const examSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -45,7 +47,6 @@ async function handleExamFlow(psid, text, session) {
     try {
         const input = text.trim();
 
-        // STEP 1: Exam type
         if (session.step === 'EXAM_TYPE') {
             const idx = parseInt(input, 10) - 1;
             let selected = null;
@@ -75,7 +76,6 @@ async function handleExamFlow(psid, text, session) {
             };
         }
 
-        // STEP 2: Quantity
         if (session.step === 'EXAM_QTY') {
             const qty = parseInt(input, 10);
             if (isNaN(qty) || qty < 1 || qty > 5) {
@@ -106,9 +106,47 @@ async function handleExamFlow(psid, text, session) {
     }
 }
 
+/**
+ * Execute exam PIN purchase after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { examType, examLabel, quantity, amount } = sessionData;
+
+    try {
+        const response = await axios.post(APP_URL + '/api/exampin/buy', {
+            uid: userId,
+            examType,
+            quantity,
+            pin
+        }, { timeout: 55000 });
+
+        if (response.data && response.data.success) {
+            let msg =
+                '✅ Exam PIN Purchase Successful!\n\n' +
+                'Exam: ' + (examLabel || examType) + '\n' +
+                'Quantity: ' + quantity + '\n' +
+                'Amount: ₦' + Number(amount).toLocaleString() + '\n\n' +
+                'PIN: ' + (response.data.pin || 'N/A') + '\n' +
+                'Serial: ' + (response.data.serial || 'N/A') + '\n\n' +
+                'Save this message securely.';
+            return { success: true, message: msg };
+        }
+        return {
+            success: false,
+            message: '❌ Exam PIN Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Exam PIN Failed: ' + (err.response?.data?.error || err.message)
+        };
+    }
+}
+
 module.exports = {
     getExamSession,
     clearExamSession,
     startExamFlow,
-    handleExamFlow
+    handleExamFlow,
+    executePurchase
 };

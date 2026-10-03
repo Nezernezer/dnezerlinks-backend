@@ -1,7 +1,7 @@
 // routes/fbchat/history.js
 const admin = require('firebase-admin');
 
-const HISTORY_LIMIT = 10; // show last 10 in chat (Messenger message length limit)
+const HISTORY_LIMIT = 10;
 
 async function getLinkedUserId(psid) {
     try {

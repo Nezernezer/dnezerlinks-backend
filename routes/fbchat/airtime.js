@@ -1,3 +1,4 @@
+const axios = require('axios');
 const admin = require('firebase-admin');
 
 const airtimeSessions = {};
@@ -48,9 +49,66 @@ async function handleAirtimeFlow(senderPsid, text, session) {
             session.lastActive = Date.now();
             return { text: "💵 Enter the amount to recharge (Minimum ₦100):" };
 
+        case 'AIRTIME_AMOUNT':
+            const amountNum = parseFloat(cleanText);
+            if (isNaN(amountNum) || amountNum < 100) {
+                return { text: "❌ Invalid amount. Minimum is ₦100:" };
+            }
+            session.data.amount = amountNum;
+            session.lastActive = Date.now();
+            return {
+                type: 'READY_FOR_PIN',
+                data: {
+                    service: 'airtime',
+                    phone: session.data.phone,
+                    network: session.data.network,
+                    amount: session.data.amount
+                }
+            };
+
         default:
             clearAirtimeSession(senderPsid);
             return { text: "Session expired. Type 'menu' to restart." };
+    }
+}
+
+/**
+ * Execute airtime purchase after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { phone, network, amount } = sessionData;
+    const parsedAmount = parseFloat(amount);
+    const networkMap = { mtn: '1', glo: '2', '9mobile': '3', airtel: '4' };
+    const networkID = networkMap[(network || '').toLowerCase()] || network;
+
+    try {
+        const response = await axios.post(APP_URL + '/api/airtime/buy', {
+            uid: userId,
+            phone,
+            amount: parsedAmount,
+            networkID,
+            pin
+        }, { timeout: 55000 });
+
+        if (response.data && response.data.success) {
+            return {
+                success: true,
+                message:
+                    '✅ Airtime Purchase Successful!\n\n' +
+                    'Network: ' + (network || '').toUpperCase() + '\n' +
+                    'Phone: ' + phone + '\n' +
+                    'Amount: ₦' + parsedAmount.toLocaleString()
+            };
+        }
+        return {
+            success: false,
+            message: '❌ Airtime Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Airtime Failed: ' + (err.response?.data?.error || err.message)
+        };
     }
 }
 
@@ -58,5 +116,6 @@ module.exports = {
     startAirtimeFlow,
     handleAirtimeFlow,
     getAirtimeSession,
-    clearAirtimeSession
+    clearAirtimeSession,
+    executePurchase
 };

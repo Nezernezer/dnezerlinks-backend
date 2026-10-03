@@ -1,4 +1,6 @@
 // routes/fbchat/rechargepin.js
+const axios = require('axios');
+
 const pinSessions = {};
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -42,7 +44,6 @@ async function handleRechargePinFlow(psid, text, session) {
     try {
         const input = text.trim();
 
-        // STEP 1: Network
         if (session.step === 'RPIN_NETWORK') {
             const idx = parseInt(input, 10) - 1;
             let network = null;
@@ -70,7 +71,6 @@ async function handleRechargePinFlow(psid, text, session) {
             return { text: msg };
         }
 
-        // STEP 2: Amount
         if (session.step === 'RPIN_AMOUNT') {
             const idx = parseInt(input, 10) - 1;
             let amount = null;
@@ -98,7 +98,6 @@ async function handleRechargePinFlow(psid, text, session) {
             };
         }
 
-        // STEP 3: Quantity
         if (session.step === 'RPIN_QTY') {
             const qty = parseInt(input, 10);
             if (isNaN(qty) || qty < 1 || qty > 50) {
@@ -116,7 +115,6 @@ async function handleRechargePinFlow(psid, text, session) {
             };
         }
 
-        // STEP 4: Brand name
         if (session.step === 'RPIN_BRAND') {
             let brand = input;
             if (brand.toLowerCase() === 'skip' || brand === '') {
@@ -148,9 +146,56 @@ async function handleRechargePinFlow(psid, text, session) {
     }
 }
 
+/**
+ * Execute recharge PIN generation after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { network, amount, qty, brandName } = sessionData;
+
+    try {
+        const response = await axios.post(APP_URL + '/api/rechargepin/generate', {
+            uid: userId,
+            network,
+            amount,
+            qty,
+            brandName: brandName || 'Dnezerlinks',
+            pin
+        }, { timeout: 65000 });
+
+        if (response.data && response.data.success) {
+            const pins = response.data.pins || [];
+            let msg =
+                '✅ Recharge PINs Generated!\n\n' +
+                'Network: ' + network + '\n' +
+                'Denomination: ₦' + amount + '\n' +
+                'Quantity: ' + qty + '\n' +
+                'Brand: ' + (brandName || 'Dnezerlinks') + '\n\n';
+
+            pins.slice(0, 15).forEach(function (p, i) {
+                msg += (i + 1) + '. PIN: ' + (p.pin || '') + ' | SN: ' + (p.serial || 'N/A') + '\n';
+            });
+            if (pins.length > 15) {
+                msg += '\n...and ' + (pins.length - 15) + ' more.';
+            }
+            msg += '\n\nSave this message securely.';
+            return { success: true, message: msg };
+        }
+        return {
+            success: false,
+            message: '❌ Recharge PIN Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Recharge PIN Failed: ' + (err.response?.data?.error || err.message)
+        };
+    }
+}
+
 module.exports = {
     getRechargePinSession,
     clearRechargePinSession,
     startRechargePinFlow,
-    handleRechargePinFlow
+    handleRechargePinFlow,
+    executePurchase
 };

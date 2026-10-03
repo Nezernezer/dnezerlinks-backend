@@ -1,4 +1,4 @@
-const admin = require('firebase-admin');
+const axios = require('axios');
 
 const bulksmsSessions = {};
 
@@ -31,7 +31,6 @@ function calculateCost(message, recipients) {
     const charsPerPage = unicode ? 70 : 160;
     const pages = message.length === 0 ? 0 : Math.ceil(message.length / charsPerPage);
 
-    // Lagos time
     const lagosHour = parseInt(
         new Intl.DateTimeFormat('en-US', {
             timeZone: 'Africa/Lagos',
@@ -43,7 +42,6 @@ function calculateCost(message, recipients) {
 
     const ratePerPage = (lagosHour >= 8 && lagosHour < 20) ? 7 : 14;
     const totalRecipients = recipients.split(',').filter(n => n.trim().length >= 10).length;
-
     const totalCost = pages * ratePerPage * (totalRecipients || 1);
 
     return {
@@ -59,8 +57,6 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
     const cleanText = text.trim();
 
     switch (session.step) {
-
-        // ========== 1. SENDER ID ==========
         case 'BULKSMS_SENDER':
             if (cleanText.length === 0 || cleanText.length > 11) {
                 return { text: "❌ Sender ID must be between 1 and 11 characters. Please try again:" };
@@ -74,7 +70,6 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
                 text: "📱 Enter recipient phone number(s).\n\nYou can send to multiple numbers by separating them with commas.\n\nExample:\n08012345678,07098765432"
             };
 
-        // ========== 2. RECIPIENTS ==========
         case 'BULKSMS_RECIPIENTS':
             const numbers = cleanText.split(',').map(n => n.trim()).filter(n => n.length >= 10);
 
@@ -91,7 +86,6 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
                 text: `✅ ${numbers.length} recipient(s) accepted.\n\n✏️ Now type your message:`
             };
 
-        // ========== 3. MESSAGE ==========
         case 'BULKSMS_MESSAGE':
             if (cleanText.length === 0) {
                 return { text: "❌ Message cannot be empty. Please type your message:" };
@@ -106,10 +100,11 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
             session.data.totalCost = costInfo.totalCost;
             session.data.encoding = costInfo.encoding;
 
-            // Ready for PIN
             return {
                 step: 'READY_FOR_PIN',
+                type: 'READY_FOR_PIN',
                 data: {
+                    service: 'bulksms',
                     senderName: session.data.senderName,
                     recipients: session.data.recipients,
                     recipientCount: session.data.recipientCount,
@@ -117,6 +112,7 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
                     pages: costInfo.pages,
                     rate: costInfo.ratePerPage,
                     totalCost: costInfo.totalCost,
+                    amount: costInfo.totalCost,
                     encoding: costInfo.encoding
                 }
             };
@@ -127,10 +123,49 @@ async function handleBulkSmsFlow(senderPsid, text, session) {
     }
 }
 
+/**
+ * Execute bulk SMS after PIN is verified
+ */
+async function executePurchase(userId, sessionData, pin, APP_URL) {
+    const { recipients, message, senderName, recipientCount, pages, amount } = sessionData;
+
+    try {
+        const response = await axios.post(APP_URL + '/api/bulksms/send-sms', {
+            uid: userId,
+            recipient: recipients,
+            message,
+            senderName,
+            pin
+        }, { timeout: 65000 });
+
+        if (response.data && response.data.success) {
+            return {
+                success: true,
+                message:
+                    '✅ Bulk SMS Sent Successfully!\n\n' +
+                    'Sender: ' + senderName + '\n' +
+                    'Recipients: ' + recipientCount + '\n' +
+                    'Pages: ' + pages + '\n' +
+                    'Cost: ₦' + Number(amount || sessionData.totalCost).toLocaleString()
+            };
+        }
+        return {
+            success: false,
+            message: '❌ Bulk SMS Failed: ' + (response.data?.error || 'Unknown error')
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: '❌ Bulk SMS Failed: ' + (err.response?.data?.error || err.message)
+        };
+    }
+}
+
 module.exports = {
     startBulkSmsFlow,
     handleBulkSmsFlow,
     getBulkSmsSession,
     clearBulkSmsSession,
-    calculateCost
+    calculateCost,
+    executePurchase
 };
