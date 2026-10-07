@@ -8,7 +8,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- Include your price list -->
+    <!-- Include the unified price list -->
     <script src="examprice.js"></script>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; }
@@ -87,14 +87,14 @@
     const database = firebase.database();
     const BACKEND_URL = "https://api.dlinks.name.ng";
 
-    // Populate dropdown dynamically from examprice.js on page load
+    // Populate the dropdown dynamically from examprice.js on page load
     window.addEventListener('DOMContentLoaded', () => {
         const selectElement = document.getElementById('examBody');
         if (typeof examPrices !== 'undefined') {
             selectElement.innerHTML = '';
             examPrices.forEach(item => {
                 const option = document.createElement('option');
-                option.value = `${item.id}|${item.price}|${item.name}`;
+                option.value = item.id; // Using clean ID as value
                 option.textContent = item.label;
                 selectElement.appendChild(option);
             });
@@ -140,10 +140,15 @@
         if (!user) return alert("Please login first");
 
         const btn = document.getElementById('procBtn');
-        const examData = document.getElementById('examBody').value.split('|');
-        const examType = examData[0];
-        const unitPrice = parseFloat(examData[1]);
-        const examName = examData[2];
+        const selectedExamId = document.getElementById('examBody').value;
+        
+        // Find matching exam details directly from examprice.js array
+        const examConfig = examPrices.find(e => e.id === selectedExamId);
+        if (!examConfig) return alert("Please select a valid exam type");
+
+        const examType = examConfig.id;
+        const unitPrice = examConfig.price;
+        const examName = examConfig.name;
         const qty = parseInt(document.getElementById('qty').value);
         const pin = document.getElementById('pin').value.trim();
         const totalAmt = unitPrice * qty;
