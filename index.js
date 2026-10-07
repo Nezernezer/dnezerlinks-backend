@@ -19,18 +19,14 @@ try {
 
 const app = express();
 
-// CORS
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-billstack-signature']
-}));
+// CORS Configuration
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-billstack-signature'] }));
 
-// Body parsers
+// 1. GLOBAL JSON PARSER MUST COME FIRST so req.body is universally available
 app.use(express.json({ type: ['application/json', 'text/plain', 'application/vnd.api+json'] }));
 app.use(express.urlencoded({ extended: true }));
 
-// Optional Firebase Auth token extractor
+// Firebase Auth token extractor middleware for sendmoney and other routes
 const extractUser = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -39,26 +35,26 @@ const extractUser = async (req, res, next) => {
             const decodedToken = await admin.auth().verifyIdToken(token);
             req.user = decodedToken;
         } catch (e) {
-            // ignore invalid token
+            // Ignore invalid token, let downstream logic handle missing sessions
         }
     }
     next();
 };
+
 app.use(extractUser);
 
-// Explicit public mounts
+// 2. Public webhook and account routes mounted explicitly
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/billstack/webhook', require('./routes/webhookRoutes'));
 app.use('/api/account', require('./routes/accountRoutes'));
 app.use('/api/sendmoney', require('./routes/sendmoneyRoutes'));
 app.use('/webhook', require('./routes/fbchat/controlroom'));
 
-// ====================== SECURITY GATEKEEPER ======================
-// PIN is checked for /bulksms and all other protected routes
-const securityGatekeeper = async (req, res, next) => {
-    console.log("Gatekeeper →", req.method, req.path);
+// --- ADDED: WhatsApp Webhook Route Integration ---
+app.use('/whatsapp-webhook', require('./routes/wachat/controlroom'));
 
-    // Only these paths skip the PIN check
+// Security gatekeeper for authenticated user actions
+const securityGatekeeper = async (req, res, next) => {
     if (
         req.method === 'GET' ||
         req.path === '/' ||
@@ -69,40 +65,25 @@ const securityGatekeeper = async (req, res, next) => {
         req.path.includes('/users') ||
         req.path.includes('/fund') ||
         req.path.includes('/sendmoney')
-        // /bulksms is NOT excluded → PIN will be checked
-    ) {
-        return next();
-    }
+    ) return next();
 
-    const { uid, userId, pin } = req.body || {};
+    const { uid, userId, pin } = req.body;
     const activeUid = uid || userId;
 
-    console.log("Gatekeeper PIN check → uid:", activeUid, "pin received:", !!pin);
-
     if (!activeUid || String(activeUid).includes('.')) {
-        console.log("Gatekeeper rejected: Invalid Session");
         return res.status(400).json({ success: false, error: 'Invalid Session' });
     }
 
-    if (!pin) {
-        console.log("Gatekeeper rejected: PIN missing");
-        return res.status(400).json({ success: false, error: 'PIN is required' });
-    }
-
     try {
-        const pinSnap = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
-        const altPinSnap = await admin.database().ref(`users/${activeUid}/pin`).once('value');
-        const storedPin = pinSnap.val() || altPinSnap.val();
+        const pinSnapshot = await admin.database().ref(`users/${activeUid}/transaction_pin`).once('value');
+        const altPinSnapshot = await admin.database().ref(`users/${activeUid}/pin`).once('value');
+        const storedPin = pinSnapshot.val() || altPinSnapshot.val();
 
-        if (!storedPin || String(storedPin).trim() !== String(pin).trim()) {
-            console.log("Gatekeeper rejected: Invalid PIN");
+        if (!storedPin || String(storedPin).trim() !== String(pin || '').trim()) {
             return res.status(400).json({ success: false, error: 'Invalid PIN' });
         }
-
-        console.log("Gatekeeper → PIN OK, continuing to route");
         next();
     } catch (e) {
-        console.error("Gatekeeper error:", e.message);
         res.status(500).json({ success: false, error: 'Authentication Error' });
     }
 };

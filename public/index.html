@@ -42,6 +42,21 @@
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0); }
         }
 
+        /* Facebook Chatbot Button */
+        .btn-facebook {
+            display: inline-block;
+            margin-top: 18px;
+            background: #1877F2;
+            color: #fff;
+            text-decoration: none;
+            padding: 14px 40px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 1.15rem;
+            transition: 0.3s;
+        }
+        .btn-facebook:hover { background: #0d65d9; }
+
         .features { padding: 50px 20px; text-align: center; background: #fff; padding-bottom: 120px; }
         .features h2 { font-size: 2.2rem; margin-bottom: 40px; color: #333; font-weight: 700; }
         .card-container { display: flex; flex-direction: column; gap: 20px; max-width: 380px; margin: 0 auto; }
@@ -104,7 +119,7 @@
         }
         .contact-modal-header h3 { margin: 0; color: #0D47A1; font-size: 1.3rem; font-weight: 700; }
         .contact-close-btn { font-size: 26px; font-weight: bold; cursor: pointer; color: #888; border: none; background: none; outline: none; }
-        
+
         .contact-channel-item {
             text-align: left;
             margin-bottom: 20px;
@@ -149,12 +164,14 @@
 <body>
     <section class="hero">
         <h1>Dnezerlinks</h1>
-	<h5>Shortened as Dlinks</h5>
+        <h5>Shortened as Dlinks</h5>
         <p>Premium Data, Airtime & Utility Services at<br>your fingertips.</p>
 
         <div class="status-msg" id="typeMsg"></div>
 
         <a href="login.html" class="btn-get-started">Get Started</a>
+        <br>
+        <a href="https://facebook.com/Dnezerlinks" class="btn-facebook" onclick="openFacebookChatbot(event)">or use Facebook chatbot instead</a>
     </section>
 
     <section class="features">
@@ -164,6 +181,7 @@
             <div class="card"><h3>CHEAP RATES</h3><p>Best prices for SME data.</p></div>
             <div class="card"><h3>SECURE</h3><p>Safe payment gateway.</p></div>
             <div class="card"><h3>SUPPORT</h3><p>24/7 customer support.</p></div>
+            <div class="card"><h3>FACEBOOK CHATBOT</h3><p>or use Facebook chatbot instead</p></div>
         </div>
     </section>
 
@@ -175,7 +193,7 @@
                 <h3>CONTACT US</h3>
                 <button class="contact-close-btn" onclick="closeContactModal()">&times;</button>
             </div>
-            
+
             <div class="contact-channel-item">
                 <label>Email Address</label>
                 <div class="contact-channel-value">dnezerlinks@gmail.com</div>
@@ -221,6 +239,43 @@
                 }
             }
             setTimeout(type, isDeleting ? 40 : speed);
+        }
+
+        // Check for Facebook / Facebook Lite app → open page inside app, else web
+        function openFacebookChatbot(e) {
+            e.preventDefault();
+            const pageUrl = 'https://www.facebook.com/Dnezerlinks';
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+            if (isAndroid) {
+                // Force Facebook Lite first (most common in Nigeria)
+                // If Lite is not installed, Android will ignore and we fall back
+                window.location.href = 'intent://www.facebook.com/Dnezerlinks#Intent;package=com.facebook.lite;scheme=https;S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
+
+                // After short delay try full Facebook app
+                setTimeout(function () {
+                    window.location.href = 'intent://www.facebook.com/Dnezerlinks#Intent;package=com.facebook.katana;scheme=https;S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
+                }, 700);
+
+                // Final fallback → open in browser
+                setTimeout(function () {
+                    window.location.href = pageUrl;
+                }, 1500);
+
+            } else if (isIOS) {
+                // iOS – try Facebook app
+                window.location.href = 'fb://facewebmodal/f?href=' + encodeURIComponent(pageUrl);
+
+                // Fallback to browser
+                setTimeout(function () {
+                    window.location.href = pageUrl;
+                }, 1000);
+
+            } else {
+                // Desktop
+                window.open(pageUrl, '_blank');
+            }
         }
 
         // Floating Modal Interactive Scripts
