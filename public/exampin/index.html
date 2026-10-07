@@ -8,8 +8,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- Include the unified price list -->
-    <script src="examprice.js"></script>
+    <!-- Include external file with cache-buster ?v=99 to force update on mobile -->
+    <script src="examprice.js?v=99"></script>
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; }
         body { font-family: 'Segoe UI', sans-serif; background:#f1f3f4; margin:0; padding-bottom:80px; }
@@ -51,7 +51,7 @@
     <div class="form-group">
         <label>Select Exam Body</label>
         <select id="examBody">
-            <!-- Dynamically populated from examprice.js -->
+            <!-- Populated from examprice.js -->
         </select>
     </div>
 
@@ -87,19 +87,20 @@
     const database = firebase.database();
     const BACKEND_URL = "https://api.dlinks.name.ng";
 
-    // Populate the dropdown dynamically from examprice.js on page load
+    // Populate dropdown using examPrices array loaded from examprice.js
     window.addEventListener('DOMContentLoaded', () => {
         const selectElement = document.getElementById('examBody');
         if (typeof examPrices !== 'undefined') {
             selectElement.innerHTML = '';
             examPrices.forEach(item => {
                 const option = document.createElement('option');
-                option.value = item.id; // Using clean ID as value
-                option.textContent = item.label;
+                option.value = item.id;
+                option.textContent = item.label; // Displays Item Name + Selling Price (Cost + Profit)
                 selectElement.appendChild(option);
             });
         } else {
-            console.error("examprice.js failed to load.");
+            console.error("examprice.js failed to load properly.");
+            alert("Error loading pricing configurations.");
         }
     });
 
@@ -142,12 +143,11 @@
         const btn = document.getElementById('procBtn');
         const selectedExamId = document.getElementById('examBody').value;
         
-        // Find matching exam details directly from examprice.js array
         const examConfig = examPrices.find(e => e.id === selectedExamId);
         if (!examConfig) return alert("Please select a valid exam type");
 
         const examType = examConfig.id;
-        const unitPrice = examConfig.price;
+        const unitPrice = examConfig.price; // Uses calculated Selling Price (Cost + Profit)
         const examName = examConfig.name;
         const qty = parseInt(document.getElementById('qty').value);
         const pin = document.getElementById('pin').value.trim();
