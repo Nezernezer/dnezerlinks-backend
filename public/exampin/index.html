@@ -87,7 +87,7 @@
     const database = firebase.database();
     const BACKEND_URL = "https://api.dlinks.name.ng";
 
-    // Populate the dropdown list dynamically on page load
+    // Populate dropdown dynamically from examprice.js on page load
     window.addEventListener('DOMContentLoaded', () => {
         const selectElement = document.getElementById('examBody');
         if (typeof examPrices !== 'undefined') {
@@ -98,6 +98,8 @@
                 option.textContent = item.label;
                 selectElement.appendChild(option);
             });
+        } else {
+            console.error("examprice.js failed to load.");
         }
     });
 
