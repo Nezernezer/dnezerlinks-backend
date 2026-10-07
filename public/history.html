@@ -116,6 +116,22 @@
         .logo-9mobile { background: #002d24; border-radius: 3px; border-left: 3.5px solid #b3c100; }
         .logo-9mobile::before { content: "9mobile"; color: #b3c100; font-size: 6px; font-family: sans-serif; font-weight: 900; transform: scale(0.9) translateX(-0.5px); }
 
+        /* Exam Logo Badges */
+        .logo-waic { background: #006633; border: 1px solid #000; border-radius: 50%; }
+        .logo-waic::before { content: "W"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
+
+        .logo-neco { background: #800000; border: 1px solid #000; border-radius: 50%; }
+        .logo-neco::before { content: "N"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
+
+        .logo-nabteb { background: #cc6600; border: 1px solid #000; border-radius: 50%; }
+        .logo-nabteb::before { content: "B"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
+
+        .logo-jamb { background: #003366; border: 1px solid #000; border-radius: 50%; }
+        .logo-jamb::before { content: "J"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
+
+        .logo-nbais { background: #0d47a1; border: 1px solid #000; border-radius: 50%; }
+        .logo-nbais::before { content: "I"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
+
         .paper-selector-bar { background: #eef2f7; border: 1px solid #dcdfe6; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 400px; margin: 15px auto; font-size: 13px; font-weight: bold; }
         .paper-selector-bar select { flex: 1; padding: 8px; border-radius: 6px; font-weight: bold; border: 1px solid #b4bccc; background: white; }
 
@@ -255,13 +271,13 @@
             };
 
             // ===== EXAM PIN DETECTION =====
-            if (typeNode === "EXAM PIN" || 
-                serviceNode.includes("WAEC") || serviceNode.includes("NECO") || 
-                serviceNode.includes("NABTEB") || serviceNode.includes("JAMB") || 
+            if (typeNode === "EXAM PIN" ||
+                serviceNode.includes("WAEC") || serviceNode.includes("NECO") ||
+                serviceNode.includes("NABTEB") || serviceNode.includes("JAMB") ||
                 serviceNode.includes("NBAIS") ||
                 desc.includes("EXAM PIN") || desc.includes("WAEC") || desc.includes("NECO") ||
                 desc.includes("NABTEB") || desc.includes("JAMB") || desc.includes("NBAIS")) {
-                
+
                 data.service = "Exam PIN";
                 data.network = serviceNode || "Exam";
                 if (data.phone === "N/A") data.phone = tx.service || "Exam Voucher";
@@ -363,7 +379,7 @@
                 const amountText = (isCredit ? '+' : '-') + '₦' + parseFloat(tx.amount || 0).toLocaleString();
                 const subText = (meta.network !== 'N/A' ? meta.network + ' | ' : '') + meta.phone;
 
-                card.innerHTML = 
+                card.innerHTML =
                     '<div class="card-top">' +
                         '<span class="card-title">' + meta.service + '</span>' +
                         '<span class="card-date">' + formatMyDate(tx.timestamp, tx.date) + '</span>' +
@@ -423,7 +439,7 @@
                 const pinRow = document.createElement('div');
                 pinRow.className = 'detail-row';
                 pinRow.id = 'detExamPin';
-                pinRow.innerHTML = 
+                pinRow.innerHTML =
                     '<span class="detail-label">Voucher PIN</span>' +
                     '<span class="detail-value" style="font-family: monospace; font-size: 15px; color: #0d47a1; font-weight: 800;">' +
                         (tx.pin || 'N/A') +
@@ -432,7 +448,7 @@
                 const serialRow = document.createElement('div');
                 serialRow.className = 'detail-row';
                 serialRow.id = 'detExamSerial';
-                serialRow.innerHTML = 
+                serialRow.innerHTML =
                     '<span class="detail-label">Serial Number</span>' +
                     '<span class="detail-value" style="font-family: monospace;">' +
                         (tx.serial || 'N/A') +
@@ -476,13 +492,13 @@
     function shareReceipt() {
         if (!selectedTx) return;
         const meta = parseMetaData(selectedTx);
-        let text = '*Dnezerlinks Receipt*\n\nService: ' + meta.service + 
-                   '\nAmount: ₦' + parseFloat(selectedTx.amount || 0).toLocaleString() + 
-                   '\nTarget: ' + meta.phone + 
+        let text = '*Dnezerlinks Receipt*\n\nService: ' + meta.service +
+                   '\nAmount: ₦' + parseFloat(selectedTx.amount || 0).toLocaleString() +
+                   '\nTarget: ' + meta.phone +
                    '\nDate: ' + formatMyDate(selectedTx.timestamp, selectedTx.date);
 
         if (meta.service === "Exam PIN") {
-            text += '\n\n*Voucher PIN:* ' + (selectedTx.pin || 'N/A') + 
+            text += '\n\n*Voucher PIN:* ' + (selectedTx.pin || 'N/A') +
                     '\n*Serial:* ' + (selectedTx.serial || 'N/A');
         }
 
@@ -520,7 +536,6 @@
 
         document.getElementById('appLayoutContainer').style.display = 'none';
         document.getElementById('detailModal').style.display = 'none';
-
         const wrapper = document.getElementById('ticketsWrapper');
         wrapper.innerHTML = '';
 
@@ -562,7 +577,7 @@
 
             const ticketCard = document.createElement('div');
             ticketCard.className = 'pin-ticket';
-            ticketCard.innerHTML = 
+            ticketCard.innerHTML =
                 '<div class="ticket-top-wrapper">' +
                     '<div class="ticket-header">' + corporateHeaderBrand + '</div>' +
                     '<div class="logo-box ' + logoClass + '"></div>' +
@@ -609,17 +624,30 @@
         const dateStr = formatMyDate(selectedTx.timestamp, selectedTx.date);
 
         let headerColor = '#0d47a1';
-        if (serviceName.includes('WAEC')) headerColor = '#006633';
-        else if (serviceName.includes('NECO')) headerColor = '#800000';
-        else if (serviceName.includes('NABTEB')) headerColor = '#cc6600';
-        else if (serviceName.includes('JAMB')) headerColor = '#003366';
-        else if (serviceName.includes('NBAIS')) headerColor = '#0d47a1';
+        let examLogoClass = 'logo-nbais';
+        if (serviceName.includes('WAEC')) {
+            headerColor = '#006633';
+            examLogoClass = 'logo-waic';
+        } else if (serviceName.includes('NECO')) {
+            headerColor = '#800000';
+            examLogoClass = 'logo-neco';
+        } else if (serviceName.includes('NABTEB')) {
+            headerColor = '#cc6600';
+            examLogoClass = 'logo-nabteb';
+        } else if (serviceName.includes('JAMB')) {
+            headerColor = '#003366';
+            examLogoClass = 'logo-jamb';
+        } else if (serviceName.includes('NBAIS')) {
+            headerColor = '#0d47a1';
+            examLogoClass = 'logo-nbais';
+        }
 
         const card = document.createElement('div');
-        card.style.cssText = 'border: 2px solid #333; border-radius: 12px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.1);';
+        card.style.cssText = 'border: 2px solid #333; border-radius: 12px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative;';
 
-        card.innerHTML = 
-            '<div style="background: ' + headerColor + '; color: white; padding: 16px; text-align: center;">' +
+        card.innerHTML =
+            '<div style="background: ' + headerColor + '; color: white; padding: 16px; text-align: center; position: relative;">' +
+                '<div class="logo-box ' + examLogoClass + '" style="top: 12px; right: 12px; width: 24px; height: 24px;"></div>' +
                 '<div style="font-size: 18px; font-weight: 800; letter-spacing: 1px;">' + serviceName + '</div>' +
                 '<div style="font-size: 12px; margin-top: 4px; opacity: 0.9;">DNEZERLINKS VIRTUAL SOLUTIONS</div>' +
             '</div>' +
@@ -656,8 +684,8 @@
         document.getElementById('detailModal').style.display = 'block';
     }
 
-    window.onclick = function(e) { 
-        if (e.target.className === 'modal') closeModal(); 
+    window.onclick = function(e) {
+        if (e.target.className === 'modal') closeModal();
     };
 </script>
 </body>

@@ -21,6 +21,12 @@
         select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
         .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
         .buy-btn:active { transform: scale(0.98); background: #1565c0; }
+        
+        /* Top Alert Banner */
+        #alertBanner { display: none; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; font-weight: 500; text-align: left; }
+        .alert-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .alert-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+
         .bottom-nav { position:fixed; bottom:0; width:100%; background:#fff; display:flex; justify-content:space-around; border-top:1px solid #ddd; padding:12px 0; z-index: 100; }
         .nav-item { text-align: center; font-size: 10px; color: #777; cursor: pointer; text-decoration: none; }
 
@@ -31,6 +37,7 @@
 </head>
 <body>
 
+<!-- Setup PIN Modal -->
 <div class="modal-overlay" id="customPromptModal">
     <div class="dialog-box">
         <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
@@ -42,12 +49,30 @@
     </div>
 </div>
 
+<!-- Success Card Details Modal -->
+<div class="modal-overlay" id="successModal">
+    <div class="dialog-box" style="text-align: left;">
+        <h3 style="color: #2e7d32; margin-top: 0; text-align: center;">✅ Purchase Successful</h3>
+        <div style="background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 13px;">
+            <p style="margin: 4px 0;"><strong>Exam:</strong> <span id="modalExamName">-</span></p>
+            <p style="margin: 4px 0;"><strong>PIN:</strong> <span id="modalPin" style="font-family: monospace; font-weight: bold; color: #0d47a1;">-</span></p>
+            <p style="margin: 4px 0;"><strong>Serial No:</strong> <span id="modalSerial" style="font-family: monospace;">-</span></p>
+            <p style="margin: 4px 0;"><strong>Total Paid:</strong> <span id="modalTotal">-</span></p>
+        </div>
+        <button onclick="printVoucherPDF()" style="background: #2e7d32; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 8px;">🖨️ Print / Download PDF Voucher</button>
+        <button onclick="closeSuccessModal()" style="background: #757575; color: white; width: 100%; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Close & Return</button>
+    </div>
+</div>
+
 <div class="header-card">
     <button class="back-btn" onclick="location.href='../home.html'">←</button>
     <h3 style="margin:0;">Exam PIN Purchase</h3>
 </div>
 
 <div class="card">
+    <!-- Top Alert Banner for Messages/Errors -->
+    <div id="alertBanner"></div>
+
     <div class="form-group">
         <label>Select Exam Body</label>
         <select id="examBody">
@@ -87,6 +112,22 @@
     const database = firebase.database();
     const BACKEND_URL = "https://api.dlinks.name.ng";
 
+    // Store latest success state for PDF generation
+    let lastTransaction = {};
+
+    function showAlert(message, type = 'error') {
+        const banner = document.getElementById('alertBanner');
+        banner.style.display = 'block';
+        banner.className = type === 'success' ? 'alert-success' : 'alert-error';
+        banner.textContent = message;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function hideAlert() {
+        const banner = document.getElementById('alertBanner');
+        banner.style.display = 'none';
+    }
+
     // Populate dropdown using examPrices array loaded from examprice.js
     window.addEventListener('DOMContentLoaded', () => {
         const selectElement = document.getElementById('examBody');
@@ -95,22 +136,26 @@
             examPrices.forEach(item => {
                 const option = document.createElement('option');
                 option.value = item.id;
-                option.textContent = item.label; // Displays Item Name + Selling Price (Cost + Profit)
+                option.textContent = item.label;
                 selectElement.appendChild(option);
             });
         } else {
             console.error("examprice.js failed to load properly.");
-            alert("Error loading pricing configurations.");
+            showAlert("Error loading pricing configurations.");
         }
     });
 
     async function handlePurchaseClick() {
+        hideAlert();
         const user = auth.currentUser;
-        if (!user) return alert("Please login first");
+        if (!user) {
+            showAlert("Please login first");
+            return;
+        }
 
         const pin = document.getElementById('pin').value.trim();
         if (!pin) {
-            alert("Transaction PIN is required");
+            showAlert("Transaction PIN is required");
             return;
         }
 
@@ -136,26 +181,30 @@
         document.getElementById('customPromptModal').style.display = 'none';
     }
 
+    function closeSuccessModal() {
+        document.getElementById('successModal').style.display = 'none';
+        document.getElementById('pin').value = "";
+        location.href = '../home.html';
+    }
+
     async function processExamPurchase() {
         const user = auth.currentUser;
-        if (!user) return alert("Please login first");
+        if (!user) return showAlert("Please login first");
 
         const btn = document.getElementById('procBtn');
         const selectedExamId = document.getElementById('examBody').value;
         
         const examConfig = examPrices.find(e => e.id === selectedExamId);
-        if (!examConfig) return alert("Please select a valid exam type");
+        if (!examConfig) return showAlert("Please select a valid exam type");
 
         const examType = examConfig.id;
-        const unitPrice = examConfig.price; // Uses calculated Selling Price (Cost + Profit)
+        const unitPrice = examConfig.price;
         const examName = examConfig.name;
         const qty = parseInt(document.getElementById('qty').value);
         const pin = document.getElementById('pin').value.trim();
         const totalAmt = unitPrice * qty;
 
-        if (isNaN(qty) || qty < 1) return alert("Enter a valid quantity");
-
-        if (!confirm(`Total Cost: ₦${totalAmt.toLocaleString()}\nPurchase ${qty} ${examName} PIN(s)?`)) return;
+        if (isNaN(qty) || qty < 1) return showAlert("Enter a valid quantity");
 
         btn.disabled = true;
         btn.innerText = "Processing...";
@@ -173,7 +222,9 @@
                     uid: user.uid,
                     examType: examType,
                     quantity: qty,
-                    pin: pin
+                    pin: pin,
+                    unitPrice: unitPrice,     // Sends exact calculated unit selling price
+                    totalAmount: totalAmt     // Sends exact calculated total price
                 })
             });
 
@@ -183,23 +234,50 @@
                 const pins = data.pin || 'N/A';
                 const serials = data.serial || 'N/A';
 
-                alert(`✅ Purchase Successful!\nPIN: ${pins}\nSerial: ${serials}`);
+                // Save details for the success dialog and PDF printing
+                lastTransaction = { examType, examName, pins, serials, qty, totalAmt };
 
-                generateExamCardPDF(examName, pins, serials, qty, totalAmt);
+                // Populate success modal elements
+                document.getElementById('modalExamName').textContent = examName;
+                document.getElementById('modalPin').textContent = pins;
+                document.getElementById('modalSerial').textContent = serials;
+                document.getElementById('modalTotal').textContent = `₦${totalAmt.toLocaleString()}`;
 
-                document.getElementById('pin').value = "";
-                location.href = '../home.html';
+                // Show success modal dialog box
+                document.getElementById('successModal').style.display = 'flex';
+                resetBtn();
             } else {
-                alert(data.message || data.error || "❌ Transaction failed");
+                showAlert(data.message || data.error || "❌ Transaction failed");
                 resetBtn();
             }
         } catch (err) {
-            alert("Network error. Please try again.");
+            showAlert("Network error. Please try again.");
             resetBtn();
         }
     }
 
-    function generateExamCardPDF(examName, pins, serials, qty, totalAmt) {
+    // Helper to load image as Base64 data URL for jsPDF embedding
+    function getBase64ImageFromURL(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    async function printVoucherPDF() {
+        const { examType, examName, pins, serials, qty, totalAmt } = lastTransaction;
+        if (!pins) return;
+
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
             orientation: 'portrait',
@@ -219,6 +297,30 @@
             primaryColor = [0, 51, 102];
         }
 
+        // Official logo mapping for exam bodies
+        const logoMap = {
+            waec: "https://upload.wikimedia.org/wikipedia/en/thumb/4/45/WAEC_Logo.svg/512px-WAEC_Logo.svg.png",
+            neco: "https://upload.wikimedia.org/wikipedia/en/thumb/9/97/National_Examinations_Council_%28NECO%29_logo.png/220px-National_Examinations_Council_%28NECO%29_logo.png",
+            jamb: "https://upload.wikimedia.org/wikipedia/en/thumb/8/87/JAMB_Logo.png/220px-JAMB_Logo.png",
+            nabteb: "https://upload.wikimedia.org/wikipedia/en/thumb/d/d1/NABTEB_logo.png/220px-NABTEB_logo.png"
+        };
+
+        let logoUrl = "";
+        const lowerId = (examType || "").toLowerCase();
+        const lowerName = (examName || "").toLowerCase();
+        
+        if (logoMap[lowerId]) {
+            logoUrl = logoMap[lowerId];
+        } else if (lowerName.includes('waec')) {
+            logoUrl = logoMap.waec;
+        } else if (lowerName.includes('neco')) {
+            logoUrl = logoMap.neco;
+        } else if (lowerName.includes('jamb')) {
+            logoUrl = logoMap.jamb;
+        } else if (lowerName.includes('nabteb')) {
+            logoUrl = logoMap.nabteb;
+        }
+
         const startX = 20;
         const startY = 20;
         const cardWidth = 170;
@@ -233,10 +335,20 @@
         doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.rect(startX, startY + 12, cardWidth, 10, 'F');
 
+        // Embed logo if available
+        if (logoUrl) {
+            const base64Logo = await getBase64ImageFromURL(logoUrl);
+            if (base64Logo) {
+                doc.setFillColor(255, 255, 255);
+                doc.circle(startX + 15, startY + 11, 8, 'F');
+                doc.addImage(base64Logo, 'PNG', startX + 8, startY + 3, 14, 16);
+            }
+        }
+
         doc.setTextColor(255, 255, 255);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
-        doc.text(headerTitle, startX + (cardWidth / 2), startY + 14, { align: 'center' });
+        doc.text(headerTitle, startX + (cardWidth / 2) + 5, startY + 14, { align: 'center' });
 
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
