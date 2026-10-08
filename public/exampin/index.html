@@ -21,7 +21,7 @@
         select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
         .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
         .buy-btn:active { transform: scale(0.98); background: #1565c0; }
-        
+
         /* Top Alert Banner */
         #alertBanner { display: none; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; font-weight: 500; text-align: left; }
         .alert-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
@@ -193,7 +193,7 @@
 
         const btn = document.getElementById('procBtn');
         const selectedExamId = document.getElementById('examBody').value;
-        
+
         const examConfig = examPrices.find(e => e.id === selectedExamId);
         if (!examConfig) return showAlert("Please select a valid exam type");
 
@@ -223,8 +223,8 @@
                     examType: examType,
                     quantity: qty,
                     pin: pin,
-                    unitPrice: unitPrice,     // Sends exact calculated unit selling price
-                    totalAmount: totalAmt     // Sends exact calculated total price
+                    unitPrice: unitPrice,
+                    totalAmount: totalAmt
                 })
             });
 
@@ -234,16 +234,13 @@
                 const pins = data.pin || 'N/A';
                 const serials = data.serial || 'N/A';
 
-                // Save details for the success dialog and PDF printing
                 lastTransaction = { examType, examName, pins, serials, qty, totalAmt };
 
-                // Populate success modal elements
                 document.getElementById('modalExamName').textContent = examName;
                 document.getElementById('modalPin').textContent = pins;
                 document.getElementById('modalSerial').textContent = serials;
                 document.getElementById('modalTotal').textContent = `₦${totalAmt.toLocaleString()}`;
 
-                // Show success modal dialog box
                 document.getElementById('successModal').style.display = 'flex';
                 resetBtn();
             } else {
@@ -295,20 +292,23 @@
             primaryColor = [204, 102, 0];
         } else if (examName.includes('JAMB')) {
             primaryColor = [0, 51, 102];
+        } else if (examName.includes('NBAIS')) {
+            primaryColor = [13, 71, 161];
         }
 
-        // Official logo mapping for exam bodies
+        // Official logo mapping
         const logoMap = {
-            waec: "https://upload.wikimedia.org/wikipedia/en/thumb/4/45/WAEC_Logo.svg/512px-WAEC_Logo.svg.png",
-            neco: "https://upload.wikimedia.org/wikipedia/en/thumb/9/97/National_Examinations_Council_%28NECO%29_logo.png/220px-National_Examinations_Council_%28NECO%29_logo.png",
-            jamb: "https://upload.wikimedia.org/wikipedia/en/thumb/8/87/JAMB_Logo.png/220px-JAMB_Logo.png",
-            nabteb: "https://upload.wikimedia.org/wikipedia/en/thumb/d/d1/NABTEB_logo.png/220px-NABTEB_logo.png"
+            waec:   "https://upload.wikimedia.org/wikipedia/commons/d/d9/Waec_logo.png",
+            neco:   "https://neco.gov.ng/assets/neco-logo.df6f9256.png",
+            nabteb: "https://nabteb.gov.ng/wp-content/uploads/2021/09/logo.png",
+            jamb:   "https://www.jamb.gov.ng/img/JAMB_logo_transparentBg.png",
+            nbais:  "https://www.nbais.com.ng/assets/img/logo/nbais-logo.png"
         };
 
         let logoUrl = "";
         const lowerId = (examType || "").toLowerCase();
         const lowerName = (examName || "").toLowerCase();
-        
+
         if (logoMap[lowerId]) {
             logoUrl = logoMap[lowerId];
         } else if (lowerName.includes('waec')) {
@@ -319,72 +319,88 @@
             logoUrl = logoMap.jamb;
         } else if (lowerName.includes('nabteb')) {
             logoUrl = logoMap.nabteb;
+        } else if (lowerName.includes('nbais')) {
+            logoUrl = logoMap.nbais;
         }
 
-        const startX = 20;
-        const startY = 20;
-        const cardWidth = 170;
-        const cardHeight = 110;
+        // ===== LEFT-ALIGNED CARD SIZED FOR 2 CARDS PER ROW ON A4 =====
+        // A4 = 210mm wide. Layout: 10mm margin + 90mm card + 10mm gap + 90mm card + 10mm margin
+        const startX = 10;          // Far left
+        const startY = 15;
+        const cardWidth = 90;       // Narrow enough for 2 side-by-side
+        const cardHeight = 95;
 
-        doc.setLineWidth(0.5);
-        doc.setDrawColor(150, 150, 150);
-        doc.roundedRect(startX, startY, cardWidth, cardHeight, 4, 4);
+        doc.setLineWidth(0.4);
+        doc.setDrawColor(120, 120, 120);
+        doc.roundedRect(startX, startY, cardWidth, cardHeight, 3, 3);
 
+        // Colored header bar
         doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.roundedRect(startX, startY, cardWidth, 22, 4, 4, 'F');
+        doc.roundedRect(startX, startY, cardWidth, 18, 3, 3, 'F');
         doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.rect(startX, startY + 12, cardWidth, 10, 'F');
+        doc.rect(startX, startY + 10, cardWidth, 8, 'F');
 
-        // Embed logo if available
+        // Embed official logo
         if (logoUrl) {
             const base64Logo = await getBase64ImageFromURL(logoUrl);
             if (base64Logo) {
                 doc.setFillColor(255, 255, 255);
-                doc.circle(startX + 15, startY + 11, 8, 'F');
-                doc.addImage(base64Logo, 'PNG', startX + 8, startY + 3, 14, 16);
+                doc.circle(startX + 11, startY + 9, 6.5, 'F');
+                doc.addImage(base64Logo, 'PNG', startX + 5.5, startY + 2.5, 11, 13);
             }
         }
 
+        // Exam name
         doc.setTextColor(255, 255, 255);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.text(headerTitle, startX + (cardWidth / 2) + 5, startY + 14, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text(headerTitle, startX + (cardWidth / 2) + 4, startY + 11.5, { align: 'center' });
 
-        doc.setFontSize(9);
+        // Subtitle
+        doc.setFontSize(6.5);
         doc.setFont("helvetica", "normal");
-        doc.text("DNEZERLINKS VIRTUAL SOLUTIONS - AUTHORIZED E-VOUCHER", startX + (cardWidth / 2), startY + 28, { align: 'center' });
+        doc.text("DNEZERLINKS AUTHORIZED E-VOUCHER", startX + (cardWidth / 2), startY + 24, { align: 'center' });
 
+        // Divider line
         doc.setDrawColor(200, 200, 200);
-        doc.line(startX + 10, startY + 33, startX + cardWidth - 10, startY + 33);
+        doc.line(startX + 6, startY + 27, startX + cardWidth - 6, startY + 27);
 
+        // PIN label + value
         doc.setTextColor(40, 40, 40);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.text("VOUCHER PIN:", startX + 15, startY + 48);
+        doc.setFontSize(8);
+        doc.text("VOUCHER PIN:", startX + 8, startY + 36);
 
         doc.setFont("courier", "bold");
-        doc.setFontSize(15);
+        doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
-        doc.text(String(pins), startX + 15, startY + 58);
+        doc.text(String(pins), startX + 8, startY + 44);
 
+        // Serial
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
+        doc.setFontSize(8);
         doc.setTextColor(40, 40, 40);
-        doc.text("SERIAL NUMBER:", startX + 15, startY + 73);
+        doc.text("SERIAL NUMBER:", startX + 8, startY + 55);
 
         doc.setFont("courier", "normal");
-        doc.setFontSize(13);
-        doc.text(String(serials), startX + 15, startY + 81);
+        doc.setFontSize(10);
+        doc.text(String(serials), startX + 8, startY + 62);
 
+        // Quantity & Amount
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.text(`Quantity: ${qty} | Total Paid: ₦${totalAmt.toLocaleString()}`, startX + 15, startY + 95);
-        doc.text(`Date Generated: ${new Date().toLocaleString()}`, startX + 15, startY + 101);
+        doc.setFontSize(7.5);
+        doc.setTextColor(50, 50, 50);
+        doc.text(`Qty: \( {qty}  |  Paid: ₦ \){totalAmt.toLocaleString()}`, startX + 8, startY + 73);
 
+        // Date
+        doc.setFontSize(7);
+        doc.text(`Date: ${new Date().toLocaleString()}`, startX + 8, startY + 80);
+
+        // Footer note
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
+        doc.setFontSize(6.5);
         doc.setTextColor(100, 100, 100);
-        doc.text("Keep your PIN safe. Do not expose to third parties.", startX + (cardWidth / 2), startY + 107, { align: 'center' });
+        doc.text("Keep your PIN safe. Do not share.", startX + (cardWidth / 2), startY + 90, { align: 'center' });
 
         doc.save(`${examName.replace(/\s+/g, '_')}_Voucher.pdf`);
     }

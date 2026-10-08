@@ -16,6 +16,27 @@
 
         .container { padding: 15px; max-width: 500px; margin: auto; }
 
+        /* Search / Filter Bar */
+        .filter-bar {
+            background: white; border-radius: 12px; padding: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin-bottom: 14px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .filter-bar input, .filter-bar select {
+            width: 100%; padding: 11px 12px; border: 1px solid #ddd;
+            border-radius: 10px; font-size: 14px; box-sizing: border-box; outline: none;
+        }
+        .filter-bar input:focus, .filter-bar select:focus { border-color: var(--primary); }
+        .filter-row { display: flex; gap: 8px; }
+        .filter-row select { flex: 1; }
+        .filter-clear {
+            background: #f5f5f5; border: 1px solid #ddd; border-radius: 10px;
+            padding: 0 14px; font-size: 13px; font-weight: 700; color: #555; cursor: pointer;
+            white-space: nowrap;
+        }
+        .filter-clear:active { background: #eee; }
+        .filter-meta { font-size: 12px; color: #888; padding: 0 2px; }
+
         /* Transaction Cards */
         .card {
             background: white; padding: 15px; border-radius: 12px;
@@ -75,7 +96,6 @@
 
         .ticket-top-wrapper { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: 0px; line-height: 1.0; }
         .ticket-header { font-weight: 900; font-size: 12px; color: #000; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.0; text-align: center; width: 100%; padding: 0 22px; box-sizing: border-box; }
-
         .layout-pos .ticket-header { font-size: 15px; }
 
         .ticket-brand { font-size: 10px; font-weight: 800; color: #0d47a1; margin: 0 0 1px 0; white-space: nowrap; line-height: 1.0; text-align: center; }
@@ -116,7 +136,7 @@
         .logo-9mobile { background: #002d24; border-radius: 3px; border-left: 3.5px solid #b3c100; }
         .logo-9mobile::before { content: "9mobile"; color: #b3c100; font-size: 6px; font-family: sans-serif; font-weight: 900; transform: scale(0.9) translateX(-0.5px); }
 
-        /* Exam Logo Badges */
+        /* Exam Logo Badges (fallback) */
         .logo-waic { background: #006633; border: 1px solid #000; border-radius: 50%; }
         .logo-waic::before { content: "W"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
 
@@ -132,12 +152,25 @@
         .logo-nbais { background: #0d47a1; border: 1px solid #000; border-radius: 50%; }
         .logo-nbais::before { content: "I"; color: #fff; font-size: 9px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.9); }
 
+        /* Official exam logo image styling */
+        .exam-logo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .logo-box.exam-official {
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+        }
+
         .paper-selector-bar { background: #eef2f7; border: 1px solid #dcdfe6; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 400px; margin: 15px auto; font-size: 13px; font-weight: bold; }
         .paper-selector-bar select { flex: 1; padding: 8px; border-radius: 6px; font-weight: bold; border: 1px solid #b4bccc; background: white; }
 
         @media print {
             body { background: white; margin: 0; padding: 0; }
-            body:not(.printing-vouchers) .header, body:not(.printing-vouchers) .btn-home, body:not(.printing-vouchers) .action-btns, body:not(.printing-vouchers) .btn-close, body:not(.printing-vouchers) #history-list, body:not(.printing-vouchers) .pagination { display: none !important; }
+            body:not(.printing-vouchers) .header, body:not(.printing-vouchers) .btn-home, body:not(.printing-vouchers) .action-btns, body:not(.printing-vouchers) .btn-close, body:not(.printing-vouchers) #history-list, body:not(.printing-vouchers) .pagination, body:not(.printing-vouchers) .filter-bar { display: none !important; }
             body:not(.printing-vouchers) .modal { position: absolute; background: white; display: block !important; }
             body:not(.printing-vouchers) .modal-content { margin: 0; width: 100%; border: none; box-shadow: none; padding: 0; }
 
@@ -154,6 +187,33 @@
     </div>
 
     <div class="container">
+        <!-- Search & Filter -->
+        <div class="filter-bar">
+            <input type="search" id="searchInput" placeholder="Search ref, network, phone, amount..." oninput="applyFilters()">
+            <div class="filter-row">
+                <select id="serviceFilter" onchange="applyFilters()">
+                    <option value="all">All Services</option>
+                    <option value="Recharge PIN">Recharge PIN</option>
+                    <option value="Airtime Top-up">Airtime</option>
+                    <option value="Data Bundle">Data</option>
+                    <option value="Exam PIN">Exam PIN</option>
+                    <option value="Cable TV Sub">Cable TV</option>
+                    <option value="Wallet Transfer">Wallet Transfer</option>
+                    <option value="Wallet Funding">Wallet Funding</option>
+                    <option value="Sms">SMS</option>
+                </select>
+                <select id="networkFilter" onchange="applyFilters()">
+                    <option value="all">All Networks</option>
+                    <option value="MTN">MTN</option>
+                    <option value="GLO">GLO</option>
+                    <option value="AIRTEL">AIRTEL</option>
+                    <option value="9MOBILE">9MOBILE</option>
+                </select>
+                <button type="button" class="filter-clear" onclick="clearFilters()">Clear</button>
+            </div>
+            <div class="filter-meta" id="filterMeta">Showing all transactions</div>
+        </div>
+
         <div id="history-list">
             <div class="no-history typing" id="loadingText"></div>
         </div>
@@ -226,6 +286,7 @@
     const db = firebase.database();
 
     let allRecords = [];
+    let filteredRecords = [];
     let currentPage = 1;
     const recordsPerPage = 40;
     let selectedTx = null;
@@ -257,15 +318,47 @@
         return fallBackDateString || "Recently";
     }
 
+    /** Resolve network from string name, description, or legacy numeric IDs */
+    function resolveNetwork(tx) {
+        const raw = String(tx.network || "").trim().toUpperCase();
+        const desc = String(tx.description || tx.desc || "").toUpperCase();
+        const service = String(tx.service || "").toUpperCase();
+
+        // Prefer explicit string network saved by backend (MTN, GLO, AIRTEL, 9MOBILE)
+        if (raw === "MTN" || raw === "1") return "MTN";
+        if (raw === "GLO" || raw === "3") return "GLO";
+        if (raw === "AIRTEL" || raw === "2" || raw === "4") {
+            // WisePay: 2=AIRTEL; some older maps used 4=AIRTEL
+            if (raw === "2" || raw === "AIRTEL") return "AIRTEL";
+            if (raw === "4") return "AIRTEL";
+        }
+        if (raw === "9MOBILE" || raw === "9MOBILE" || raw === "3") {
+            if (raw === "9MOBILE") return "9MOBILE";
+        }
+        // Numeric legacy (WisePay style: 1=MTN, 2=AIRTEL, 3=GLO, 4=9MOBILE)
+        if (raw === "1") return "MTN";
+        if (raw === "2") return "AIRTEL";
+        if (raw === "3") return "GLO";
+        if (raw === "4") return "9MOBILE";
+
+        if (service.includes("MTN") || desc.includes("MTN")) return "MTN";
+        if (service.includes("GLO") || desc.includes("GLO")) return "GLO";
+        if (service.includes("AIRTEL") || desc.includes("AIRTEL")) return "AIRTEL";
+        if (service.includes("9MOBILE") || desc.includes("9MOBILE") || desc.includes("ETISALAT")) return "9MOBILE";
+
+        return "N/A";
+    }
+
     function parseMetaData(tx) {
         try {
             const desc = String(tx.description || tx.desc || "").toUpperCase();
             const serviceNode = String(tx.service || "").toUpperCase();
             const typeNode = String(tx.type || "").toUpperCase();
+            const networkResolved = resolveNetwork(tx);
 
             let data = {
                 service: "Transaction Ledger",
-                network: "N/A",
+                network: networkResolved,
                 phone: tx.target_details || tx.targetDetails || tx.recipientName || tx.senderName || tx.phone || tx.mobile_number || tx.number || "N/A",
                 type: (typeNode === 'CREDIT' || tx.type === 'credit') ? "Credit" : "Debit"
             };
@@ -283,10 +376,23 @@
                 if (data.phone === "N/A") data.phone = tx.service || "Exam Voucher";
             }
             // ===== RECHARGE PIN =====
-            else if (typeNode === "RECHARGE PIN" || serviceNode.includes("PIN") || desc.includes("PIN") || desc.includes("VOUCHER")) {
+            else if (
+                typeNode === "RECHARGE PIN" ||
+                serviceNode === "RECHARGE PIN" ||
+                serviceNode.includes("RECHARGE PIN") ||
+                serviceNode.includes("PIN") ||
+                desc.includes("PIN") ||
+                desc.includes("VOUCHER") ||
+                (tx.pins && (Array.isArray(tx.pins) ? tx.pins.length : true))
+            ) {
                 data.service = "Recharge PIN";
-                if (data.phone === "N/A" && tx.service) {
-                    data.phone = tx.service;
+                // Prefer resolved network; fall back to description snippet
+                if (data.network === "N/A" && desc) {
+                    data.network = resolveNetwork(tx);
+                }
+                // Target details: show denomination × qty when available
+                if (data.phone === "N/A" || data.phone === tx.service) {
+                    data.phone = tx.description || (data.network !== "N/A" ? data.network + " Recharge PIN" : "Recharge PIN");
                 }
             } else if (desc.includes("AIRTIME") || serviceNode.includes("AIRTIME")) {
                 data.service = "Airtime Top-up";
@@ -306,15 +412,33 @@
                 }
             }
 
-            if (serviceNode.includes("MTN") || desc.includes("MTN") || tx.network === "1") data.network = "MTN";
-            else if (serviceNode.includes("GLO") || desc.includes("GLO") || tx.network === "2") data.network = "GLO";
-            else if (serviceNode.includes("9MOBILE") || desc.includes("9MOBILE") || tx.network === "3") data.network = "9MOBILE";
-            else if (serviceNode.includes("AIRTEL") || desc.includes("AIRTEL") || tx.network === "4") data.network = "AIRTEL";
-
             return data;
         } catch (e) {
             return { service: "Transaction Record", network: "N/A", phone: "Details", type: "Debit" };
         }
+    }
+
+    function getNetworkUssd(network) {
+        const n = String(network || "").toUpperCase();
+        if (n === "GLO") return { ussd: "*123*PIN#", care: "121" };
+        if (n === "AIRTEL") return { ussd: "*126*PIN#", care: "111" };
+        if (n === "9MOBILE") return { ussd: "*232*PIN#", care: "200" };
+        // MTN default
+        return { ussd: "*555*PIN#", care: "300" };
+    }
+
+    /** Try to get per-pin denomination from description e.g. "MTN ₦100 x 5" */
+    function getPinDenomination(tx) {
+        if (tx.pinAmount) return parseFloat(tx.pinAmount);
+        const desc = String(tx.description || "");
+        const m = desc.match(/₦?\s*(\d+(?:\.\d+)?)\s*x\s*\d+/i) || desc.match(/(\d+(?:\.\d+)?)\s*x\s*\d+/i);
+        if (m) return parseFloat(m[1]);
+        // fallback: total / qty if pins array length known
+        const pins = tx.pins || tx.pin_details;
+        if (Array.isArray(pins) && pins.length > 0 && tx.amount) {
+            return parseFloat(tx.amount) / pins.length;
+        }
+        return parseFloat(tx.amount || 0);
     }
 
     auth.onAuthStateChanged(user => {
@@ -326,6 +450,8 @@
 
             if (!snap.exists()) {
                 document.getElementById('history-list').innerHTML = '<div class="no-history">No history available yet.</div>';
+                filteredRecords = [];
+                updateFilterMeta();
                 return;
             }
 
@@ -349,9 +475,67 @@
             });
 
             allRecords.sort((a, b) => b.sortTime - a.sortTime);
-            renderPage();
+            applyFilters();
         });
     });
+
+    function applyFilters() {
+        const q = (document.getElementById('searchInput')?.value || "").trim().toLowerCase();
+        const serviceF = document.getElementById('serviceFilter')?.value || "all";
+        const networkF = document.getElementById('networkFilter')?.value || "all";
+
+        filteredRecords = allRecords.filter(tx => {
+            const meta = parseMetaData(tx);
+
+            if (serviceF !== "all" && meta.service !== serviceF) return false;
+            if (networkF !== "all" && meta.network !== networkF) return false;
+
+            if (!q) return true;
+
+            const hay = [
+                meta.service,
+                meta.network,
+                meta.phone,
+                meta.type,
+                tx.reference,
+                tx.id,
+                tx.description,
+                tx.desc,
+                tx.amount,
+                tx.brandName,
+                tx.status,
+                formatMyDate(tx.timestamp, tx.date)
+            ].join(" ").toLowerCase();
+
+            return hay.includes(q);
+        });
+
+        currentPage = 1;
+        updateFilterMeta();
+        renderPage();
+    }
+
+    function clearFilters() {
+        const si = document.getElementById('searchInput');
+        const sf = document.getElementById('serviceFilter');
+        const nf = document.getElementById('networkFilter');
+        if (si) si.value = "";
+        if (sf) sf.value = "all";
+        if (nf) nf.value = "all";
+        applyFilters();
+    }
+
+    function updateFilterMeta() {
+        const el = document.getElementById('filterMeta');
+        if (!el) return;
+        const total = allRecords.length;
+        const shown = filteredRecords.length;
+        if (shown === total) {
+            el.innerText = total ? `Showing all \( {total} transaction \){total === 1 ? "" : "s"}` : "No transactions yet";
+        } else {
+            el.innerText = `Showing ${shown} of \( {total} transaction \){total === 1 ? "" : "s"}`;
+        }
+    }
 
     function renderPage() {
         const list = document.getElementById('history-list');
@@ -360,10 +544,18 @@
 
         const start = (currentPage - 1) * recordsPerPage;
         const end = start + recordsPerPage;
-        const pageItems = allRecords.slice(start, end);
+        const pageItems = filteredRecords.slice(start, end);
 
         if (pageItems.length === 0) {
-            list.innerHTML = '<div class="no-history">No history available yet.</div>';
+            list.innerHTML = '<div class="no-history">' +
+                (allRecords.length === 0 ? "No history available yet." : "No transactions match your search/filter.") +
+                '</div>';
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const pageInfo = document.getElementById('pageInfo');
+            if (prevBtn) prevBtn.className = 'page-btn disabled';
+            if (nextBtn) nextBtn.className = 'page-btn disabled';
+            if (pageInfo) pageInfo.innerText = 'Page 0';
             return;
         }
 
@@ -377,18 +569,29 @@
                 card.onclick = () => showDetails(tx);
 
                 const amountText = (isCredit ? '+' : '-') + '₦' + parseFloat(tx.amount || 0).toLocaleString();
-                const subText = (meta.network !== 'N/A' ? meta.network + ' | ' : '') + meta.phone;
+
+                // Clear network label for recharge pins
+                let titleText = meta.service;
+                if (meta.service === "Recharge PIN" && meta.network !== "N/A") {
+                    titleText = meta.network + " Recharge PIN";
+                }
+
+                let subText = "";
+                if (meta.service === "Recharge PIN") {
+                    subText = (meta.network !== "N/A" ? meta.network + " · " : "") + (tx.description || meta.phone || "Recharge PIN");
+                } else {
+                    subText = (meta.network !== "N/A" ? meta.network + " | " : "") + meta.phone;
+                }
 
                 card.innerHTML =
                     '<div class="card-top">' +
-                        '<span class="card-title">' + meta.service + '</span>' +
+                        '<span class="card-title">' + titleText + '</span>' +
                         '<span class="card-date">' + formatMyDate(tx.timestamp, tx.date) + '</span>' +
                     '</div>' +
                     '<div class="card-amt" style="color: ' + (isCredit ? 'var(--success)' : '#222') + '">' +
                         amountText +
                     '</div>' +
                     '<div class="card-sub">' + subText + '</div>';
-
                 list.appendChild(card);
             } catch (err) {}
         });
@@ -396,18 +599,19 @@
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const pageInfo = document.getElementById('pageInfo');
+        const totalPages = Math.ceil(filteredRecords.length / recordsPerPage) || 1;
 
         if (prevBtn) prevBtn.className = currentPage === 1 ? 'page-btn disabled' : 'page-btn';
-        if (nextBtn) nextBtn.className = end >= allRecords.length ? 'page-btn disabled' : 'page-btn';
-        if (pageInfo) pageInfo.innerText = 'Page ' + currentPage + ' of ' + (Math.ceil(allRecords.length / recordsPerPage) || 1);
+        if (nextBtn) nextBtn.className = end >= filteredRecords.length ? 'page-btn disabled' : 'page-btn';
+        if (pageInfo) pageInfo.innerText = 'Page ' + currentPage + ' of ' + totalPages;
     }
 
     function changePage(dir) {
         const newPage = currentPage + dir;
-        if (newPage < 1 || (newPage - 1) * recordsPerPage >= allRecords.length) return;
+        if (newPage < 1 || (newPage - 1) * recordsPerPage >= filteredRecords.length) return;
         currentPage = newPage;
         renderPage();
-        window.scrollTo(0,0);
+        window.scrollTo(0, 0);
     }
 
     function showDetails(tx) {
@@ -457,7 +661,6 @@
                 amountRow.after(serialRow);
                 amountRow.after(pinRow);
 
-                // Green button
                 const viewExamBtn = document.createElement('button');
                 viewExamBtn.className = 'btn-view-pins';
                 viewExamBtn.innerHTML = '👁️ VIEW & PRINT EXAM PIN';
@@ -482,7 +685,6 @@
         const modal = document.getElementById('detailModal');
         if (modal) modal.style.display = 'none';
 
-        // Clean exam pin rows
         const oldPin = document.getElementById('detExamPin');
         const oldSerial = document.getElementById('detExamSerial');
         if (oldPin) oldPin.remove();
@@ -493,6 +695,7 @@
         if (!selectedTx) return;
         const meta = parseMetaData(selectedTx);
         let text = '*Dnezerlinks Receipt*\n\nService: ' + meta.service +
+                   '\nNetwork: ' + meta.network +
                    '\nAmount: ₦' + parseFloat(selectedTx.amount || 0).toLocaleString() +
                    '\nTarget: ' + meta.phone +
                    '\nDate: ' + formatMyDate(selectedTx.timestamp, selectedTx.date);
@@ -546,14 +749,18 @@
         const corporateHeaderBrand = selectedTx.brandName || "DNEZERLINKS";
         const txDateString = formatMyDate(selectedTx.timestamp, selectedTx.date);
 
-        let targetNetwork = meta.network !== 'N/A' ? meta.network : 'MTN';
-        let logoClass = 'logo-mtn';
-        let loadUssd = '*311*PIN#';
-        let customerCare = '300';
+        let targetNetwork = meta.network !== 'N/A' ? meta.network : resolveNetwork(selectedTx);
+        if (targetNetwork === "N/A") targetNetwork = "MTN";
 
+        let logoClass = 'logo-mtn';
         if (targetNetwork === 'GLO') logoClass = 'logo-glo';
         else if (targetNetwork === 'AIRTEL') logoClass = 'logo-airtel';
         else if (targetNetwork === '9MOBILE') logoClass = 'logo-9mobile';
+
+        const ussdInfo = getNetworkUssd(targetNetwork);
+        const loadUssd = ussdInfo.ussd;
+        const customerCare = ussdInfo.care;
+        const pinDenom = getPinDenomination(selectedTx);
 
         let finalPinsArray = [];
         if (Array.isArray(targetPins)) {
@@ -573,7 +780,7 @@
         finalPinsArray.forEach(function(item) {
             const voucherPinValue = item.pin || item.pin_code || (typeof item === 'string' ? item : 'N/A');
             const voucherSerialValue = item.serial || item.serial_number || selectedTx.serial || 'N/A';
-            const individualCardAmount = selectedTx.pinAmount || selectedTx.amount || '0';
+            const individualCardAmount = item.denomination || pinDenom || selectedTx.pinAmount || selectedTx.amount || '0';
 
             const ticketCard = document.createElement('div');
             ticketCard.className = 'pin-ticket';
@@ -601,7 +808,7 @@
         window.scrollTo(0, 0);
     }
 
-    // ===== EXAM PIN VOUCHER =====
+    // ===== EXAM PIN VOUCHER (LEFT-ALIGNED, 2-PER-ROW SIZE) =====
     function launchExamVoucher() {
         if (!selectedTx) return;
 
@@ -614,8 +821,9 @@
         const gridContainer = document.createElement('div');
         gridContainer.className = 'tickets-grid layout-a4';
         gridContainer.style.gridTemplateColumns = '1fr';
-        gridContainer.style.maxWidth = '400px';
-        gridContainer.style.margin = '30px auto';
+        gridContainer.style.maxWidth = '95mm';
+        gridContainer.style.margin = '15px 0 15px 10px';
+        gridContainer.style.padding = '0';
 
         const serviceName = (selectedTx.service || 'EXAM PIN').toUpperCase();
         const pin = selectedTx.pin || 'N/A';
@@ -623,44 +831,55 @@
         const amount = parseFloat(selectedTx.amount || 0).toLocaleString();
         const dateStr = formatMyDate(selectedTx.timestamp, selectedTx.date);
 
+        const officialLogos = {
+            WAEC:   'https://upload.wikimedia.org/wikipedia/commons/d/d9/Waec_logo.png',
+            NECO:   'https://neco.gov.ng/assets/neco-logo.df6f9256.png',
+            NABTEB: 'https://nabteb.gov.ng/wp-content/uploads/2021/09/logo.png',
+            JAMB:   'https://www.jamb.gov.ng/img/JAMB_logo_transparentBg.png',
+            NBAIS:  'https://www.nbais.com.ng/assets/img/logo/nbais-logo.png'
+        };
+
         let headerColor = '#0d47a1';
-        let examLogoClass = 'logo-nbais';
+        let logoUrl = officialLogos.NBAIS;
+
         if (serviceName.includes('WAEC')) {
             headerColor = '#006633';
-            examLogoClass = 'logo-waic';
+            logoUrl = officialLogos.WAEC;
         } else if (serviceName.includes('NECO')) {
             headerColor = '#800000';
-            examLogoClass = 'logo-neco';
+            logoUrl = officialLogos.NECO;
         } else if (serviceName.includes('NABTEB')) {
             headerColor = '#cc6600';
-            examLogoClass = 'logo-nabteb';
+            logoUrl = officialLogos.NABTEB;
         } else if (serviceName.includes('JAMB')) {
             headerColor = '#003366';
-            examLogoClass = 'logo-jamb';
+            logoUrl = officialLogos.JAMB;
         } else if (serviceName.includes('NBAIS')) {
             headerColor = '#0d47a1';
-            examLogoClass = 'logo-nbais';
+            logoUrl = officialLogos.NBAIS;
         }
 
         const card = document.createElement('div');
-        card.style.cssText = 'border: 2px solid #333; border-radius: 12px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative;';
+        card.style.cssText = 'border: 2px solid #333; border-radius: 8px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,0.08); position: relative; width: 90mm; max-width: 100%; box-sizing: border-box;';
 
         card.innerHTML =
-            '<div style="background: ' + headerColor + '; color: white; padding: 16px; text-align: center; position: relative;">' +
-                '<div class="logo-box ' + examLogoClass + '" style="top: 12px; right: 12px; width: 24px; height: 24px;"></div>' +
-                '<div style="font-size: 18px; font-weight: 800; letter-spacing: 1px;">' + serviceName + '</div>' +
-                '<div style="font-size: 12px; margin-top: 4px; opacity: 0.9;">DNEZERLINKS VIRTUAL SOLUTIONS</div>' +
-            '</div>' +
-            '<div style="padding: 20px;">' +
-                '<div style="font-size: 11px; color: #777; font-weight: 600; margin-bottom: 4px;">VOUCHER PIN</div>' +
-                '<div style="font-family: Courier New, monospace; font-size: 22px; font-weight: 900; color: #111; margin-bottom: 18px; letter-spacing: 1px;">' + pin + '</div>' +
-                '<div style="font-size: 11px; color: #777; font-weight: 600; margin-bottom: 4px;">SERIAL NUMBER</div>' +
-                '<div style="font-family: Courier New, monospace; font-size: 16px; font-weight: 700; color: #333; margin-bottom: 18px;">' + serial + '</div>' +
-                '<div style="display: flex; justify-content: space-between; font-size: 13px; color: #555; border-top: 1px dashed #ccc; padding-top: 12px;">' +
-                    '<div><div>Amount Paid</div><div style="font-weight: 800; color: #111; margin-top: 2px;">₦' + amount + '</div></div>' +
-                    '<div style="text-align: right;"><div>Date Generated</div><div style="font-weight: 600; margin-top: 2px;">' + dateStr + '</div></div>' +
+            '<div style="background: ' + headerColor + '; color: white; padding: 10px 12px; text-align: center; position: relative;">' +
+                '<div class="logo-box exam-official" style="top: 8px; right: 10px; width: 32px; height: 32px;">' +
+                    '<img src="' + logoUrl + '" alt="' + serviceName + ' Logo" class="exam-logo-img" onerror="this.style.display=\'none\'">' +
                 '</div>' +
-                '<div style="margin-top: 16px; text-align: center; font-size: 11px; color: #888; font-style: italic;">Keep your PIN safe. Do not share with anyone.</div>' +
+                '<div style="font-size: 14px; font-weight: 800; letter-spacing: 0.5px;">' + serviceName + '</div>' +
+                '<div style="font-size: 9px; margin-top: 2px; opacity: 0.9;">DNEZERLINKS AUTHORIZED E-VOUCHER</div>' +
+            '</div>' +
+            '<div style="padding: 12px 14px;">' +
+                '<div style="font-size: 9px; color: #777; font-weight: 600; margin-bottom: 2px;">VOUCHER PIN</div>' +
+                '<div style="font-family: Courier New, monospace; font-size: 16px; font-weight: 900; color: #111; margin-bottom: 12px; letter-spacing: 0.5px;">' + pin + '</div>' +
+                '<div style="font-size: 9px; color: #777; font-weight: 600; margin-bottom: 2px;">SERIAL NUMBER</div>' +
+                '<div style="font-family: Courier New, monospace; font-size: 13px; font-weight: 700; color: #333; margin-bottom: 12px;">' + serial + '</div>' +
+                '<div style="display: flex; justify-content: space-between; font-size: 11px; color: #555; border-top: 1px dashed #ccc; padding-top: 8px;">' +
+                    '<div><div style="font-size: 9px;">Amount Paid</div><div style="font-weight: 800; color: #111; margin-top: 1px;">₦' + amount + '</div></div>' +
+                    '<div style="text-align: right;"><div style="font-size: 9px;">Date Generated</div><div style="font-weight: 600; margin-top: 1px; font-size: 10px;">' + dateStr + '</div></div>' +
+                '</div>' +
+                '<div style="margin-top: 10px; text-align: center; font-size: 9px; color: #888; font-style: italic;">Keep your PIN safe. Do not share.</div>' +
             '</div>';
 
         gridContainer.appendChild(card);
