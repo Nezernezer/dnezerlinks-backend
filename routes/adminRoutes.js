@@ -17,7 +17,6 @@ router.get('/verify-status', async (req, res) => {
         const idToken = authHeader.split('Bearer ')[1];
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-        // Dynamic comparison check against Render's environment variable
         const isMaster = decodedToken.uid === MASTER_ADMIN_UID;
 
         if (isMaster) {
@@ -31,7 +30,7 @@ router.get('/verify-status', async (req, res) => {
     }
 });
 
-// Maps to: GET /api/admin/user  (Vtunaija balance - already working)
+// Maps to: GET /api/admin/user  (Vtunaija)
 router.get('/user', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -128,22 +127,17 @@ router.get('/balance/bulksmslive', async (req, res) => {
         const data = response.data;
         console.log("BulkSMSLive raw response:", JSON.stringify(data));
 
-        // Try every possible field they might use
-        const balance = data.balance 
+        // Correct field is "amount"
+        const balance = data.amount 
+                    ?? data.balance 
                     ?? data.Balance 
                     ?? data.units 
-                    ?? data.Units 
-                    ?? data.credit 
-                    ?? data.credits 
-                    ?? data.data?.balance 
-                    ?? data.data?.Balance 
                     ?? 0;
 
         return res.json({
             success: true,
             balance: Number(balance) || 0,
-            unit: 'SMS Units',
-            raw: data
+            unit: 'SMS Units'
         });
 
     } catch (err) {
@@ -170,7 +164,8 @@ router.get('/balance/wisepay', async (req, res) => {
             return res.status(403).json({ error: "Access Denied" });
         }
 
-        const response = await axios.post('https://wisepay.com.ng/api/v1/load/wallet-balance', {
+        // Correct production URL (with /live)
+        const response = await axios.post('https://wisepay.com.ng/api/live/v1/load/wallet-balance', {
             email: process.env.WISEPAY_EMAIL || ''
         }, {
             headers: {
@@ -188,14 +183,12 @@ router.get('/balance/wisepay', async (req, res) => {
                      ?? data?.data?.wallet 
                      ?? data?.wallet 
                      ?? data?.balance 
-                     ?? data?.data?.balance 
                      ?? 0;
 
         return res.json({
             success: true,
             balance: parseFloat(balance) || 0,
-            unit: 'NGN',
-            raw: data
+            unit: 'NGN'
         });
 
     } catch (err) {
