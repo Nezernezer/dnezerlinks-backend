@@ -119,23 +119,39 @@ router.get('/balance/bulksmslive', async (req, res) => {
         const response = await axios.post('https://api.bulksmslive.com/v2/app/balance', {}, {
             headers: {
                 'Authorization': `Bearer ${process.env.BULKSMSLIVE_API_KEY}`,
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             },
-            timeout: 10000
+            timeout: 15000
         });
 
         const data = response.data;
-        const balance = data.balance ?? data.Balance ?? data.units ?? 0;
+        console.log("BulkSMSLive raw response:", JSON.stringify(data));
+
+        // Try every possible field they might use
+        const balance = data.balance 
+                    ?? data.Balance 
+                    ?? data.units 
+                    ?? data.Units 
+                    ?? data.credit 
+                    ?? data.credits 
+                    ?? data.data?.balance 
+                    ?? data.data?.Balance 
+                    ?? 0;
 
         return res.json({
             success: true,
-            balance: balance,
-            unit: 'SMS Units'
+            balance: Number(balance) || 0,
+            unit: 'SMS Units',
+            raw: data
         });
 
     } catch (err) {
-        console.error("BulkSMSLive balance error:", err.message);
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("BulkSMSLive balance error:", err.response?.data || err.message);
+        return res.status(500).json({ 
+            success: false, 
+            error: err.response?.data || err.message 
+        });
     }
 });
 
@@ -162,21 +178,32 @@ router.get('/balance/wisepay', async (req, res) => {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            timeout: 10000
+            timeout: 15000
         });
 
         const data = response.data;
-        const balance = data?.data?.product?.wallet ?? data?.wallet ?? data?.balance ?? 0;
+        console.log("WisePay raw response:", JSON.stringify(data));
+
+        const balance = data?.data?.product?.wallet 
+                     ?? data?.data?.wallet 
+                     ?? data?.wallet 
+                     ?? data?.balance 
+                     ?? data?.data?.balance 
+                     ?? 0;
 
         return res.json({
             success: true,
             balance: parseFloat(balance) || 0,
-            unit: 'NGN'
+            unit: 'NGN',
+            raw: data
         });
 
     } catch (err) {
-        console.error("WisePay balance error:", err.message);
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("WisePay balance error:", err.response?.data || err.message);
+        return res.status(500).json({ 
+            success: false, 
+            error: err.response?.data || err.message 
+        });
     }
 });
 
