@@ -18,17 +18,26 @@ router.post('/generate', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid request. Please check your details.' });
     }
 
-    // Network mapping according to WisePay docs
+    // PairGate provider_id (lowercase slug)
+    const pairgateNetworkMap = {
+        'MTN': 'mtn',
+        'AIRTEL': 'airtel',
+        'GLO': 'glo',
+        '9MOBILE': '9mobile'
+    };
+    const pairgateProviderId = pairgateNetworkMap[String(network).toUpperCase()];
+
+    // WisePay network mapping (kept for fallback)
     // 1 = MTN, 2 = AIRTEL, 3 = GLO, 4 = 9MOBILE
-    const networkMap = {
+    const wiseNetworkMap = {
         'MTN': '1',
         'AIRTEL': '2',
         'GLO': '3',
         '9MOBILE': '4'
     };
-    const apiNetworkId = networkMap[String(network).toUpperCase()];
+    const wiseNetworkId = wiseNetworkMap[String(network).toUpperCase()];
 
-    if (!apiNetworkId) {
+    if (!pairgateProviderId || !wiseNetworkId) {
         return res.status(400).json({ success: false, error: 'Unsupported network selected.' });
     }
 
@@ -71,30 +80,30 @@ router.post('/generate', async (req, res) => {
         }
 
         // ============================================
-        // 3. TRY WISEPAY FIRST
+        // 3. TRY PAIRGATE FIRST
         // ============================================
         let pinsGenerated = [];
         let providerUsed = null;
         let providerError = null;
 
         try {
-            const wisePayKey = process.env.WISEPAY_API_KEY?.trim();
+            const pairgateKey = process.env.PAIRGATE_API_KEY?.trim();
 
-            if (!wisePayKey) {
-                throw new Error("WISEPAY_API_KEY not configured");
+            if (!pairgateKey) {
+                throw new Error("PAIRGATE_API_KEY not configured");
             }
 
-            const wiseResponse = await axios.post(
-                'https://wisepay.com.ng/api/live/v1/topup/recharge-card',
+            const pairResponse = await axios.post(
+                'https://pairgate.com/api/v1/epin/purchase',
                 {
-                    network: apiNetworkId,
-                    denomination: String(parsedAmt),
-                    quantity: String(parsedQty),
+                    provider_id: pairgateProviderId,
+                    quantity: parsedQty,
+                    denomination: parsedAmt,
                     reference: requestId
                 },
                 {
                     headers: {
-                        'Authorization': `Bearer ${wisePayKey}`,
+                        'Authorization': `Bearer ${pairgateKey}`,
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
@@ -102,115 +111,89 @@ router.post('/generate', async (req, res) => {
                 }
             );
 
-            const data = wiseResponse.data || {};
+            const data = pairResponse.data || {};
 
-            if (data.status === true && data.code === 200 && data.data?.pins) {
+            if (
+                (data.code === 200 || data.status === 'success' || data.status === true) &&
+                data.data?.pins &&
+                Array.isArray(data.data.pins)
+            ) {
                 pinsGenerated = data.data.pins.map(item => ({
                     pin: String(item.pin || '').trim(),
-                    serial: String(item.sn || item.serial || 'N/A').trim()
+                    serial: String(item.serial || item.sn || 'N/A').trim()
                 })).filter(p => p.pin !== "");
 
                 if (pinsGenerated.length > 0) {
-                    providerUsed = "WisePay";
+                    providerUsed = "PairGate";
                 } else {
-                    throw new Error("WisePay returned empty pins");
+                    throw new Error("PairGate returned empty pins");
                 }
             } else {
-                throw new Error(data.data?.message || data.message || "WisePay rejected the request");
+                throw new Error(data.message || data.data?.message || "PairGate rejected the request");
             }
 
-        } catch (wiseError) {
-            // Full error only in Render logs
-            console.error("🔥 WisePay failed:", wiseError.message);
-            if (wiseError.response) {
-                console.error("WisePay status:", wiseError.response.status);
-                console.error("WisePay response:", JSON.stringify(wiseError.response.data, null, 2));
+        } catch (pairError) {
+            console.error("🔥 PairGate failed:", pairError.message);
+            if (pairError.response) {
+                console.error("PairGate status:", pairError.response.status);
+                console.error("PairGate response:", JSON.stringify(pairError.response.data, null, 2));
             }
-            providerError = wiseError.response?.data?.data?.message
-                || wiseError.response?.data?.message
-                || wiseError.message;
+            providerError = pairError.response?.data?.message
+                || pairError.response?.data?.data?.message
+                || pairError.message;
         }
 
         // ============================================
-        // 4. FALLBACK TO VTU NAIJA IF WISEPAY FAILED
+        // 4. FALLBACK TO WISEPAY IF PAIRGATE FAILED
         // ============================================
         if (!providerUsed) {
             try {
-                const vtuKey = process.env.VTUNAIJA_API_KEY?.trim();
+                const wisePayKey = process.env.WISEPAY_API_KEY?.trim();
 
-                if (!vtuKey) {
-                    throw new Error("VTUNAIJA_API_KEY not configured");
+                if (!wisePayKey) {
+                    throw new Error("WISEPAY_API_KEY not configured");
                 }
 
-                // Note: VTU Naija requires min qty 10
-                if (parsedQty < 10) {
-                    throw new Error(`VTU Naija requires minimum quantity of 10 (you requested ${parsedQty})`);
-                }
-
-                // VTU Naija network mapping is different
-                const vtuNetworkMap = { 'MTN': '1', 'GLO': '2', '9MOBILE': '3', 'AIRTEL': '4' };
-                const vtuNetworkId = vtuNetworkMap[String(network).toUpperCase()];
-
-                const vtuResponse = await axios.post(
-                    'https://vtunaija.com.ng/api/rechargepin/',
+                const wiseResponse = await axios.post(
+                    'https://wisepay.com.ng/api/live/v1/topup/recharge-card',
                     {
-                        network: vtuNetworkId,
-                        network_amount: String(parsedAmt),
+                        network: wiseNetworkId,
+                        denomination: String(parsedAmt),
                         quantity: String(parsedQty),
-                        name_on_card: finalBrandValue,
-                        "request-id": requestId
+                        reference: requestId
                     },
                     {
                         headers: {
-                            'Authorization': `Token ${vtuKey}`,
-                            'Content-Type': 'application/json'
+                            'Authorization': `Bearer ${wisePayKey}`,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
                         },
                         timeout: 60000
                     }
                 );
 
-                const data = vtuResponse.data || {};
-                const apiStatus = String(data.status || data.Status || "").toLowerCase();
+                const data = wiseResponse.data || {};
 
-                if (apiStatus !== 'success' && apiStatus !== 'successful') {
-                    throw new Error(data.api_response || data.message || data.msg || 'VTU Naija rejected request');
+                if (data.status === true && data.code === 200 && data.data?.pins) {
+                    pinsGenerated = data.data.pins.map(item => ({
+                        pin: String(item.pin || '').trim(),
+                        serial: String(item.sn || item.serial || 'N/A').trim()
+                    })).filter(p => p.pin !== "");
+
+                    if (pinsGenerated.length > 0) {
+                        providerUsed = "WisePay";
+                    } else {
+                        throw new Error("WisePay returned empty pins");
+                    }
+                } else {
+                    throw new Error(data.data?.message || data.message || "WisePay rejected the request");
                 }
 
-                // Parse pins
-                let pinStringArray = [];
-                let serialStringArray = [];
-
-                if (typeof data.pin === 'string') {
-                    pinStringArray = data.pin.split(',');
-                } else if (Array.isArray(data.pin)) {
-                    pinStringArray = data.pin;
-                }
-
-                if (typeof data.serial === 'string') {
-                    serialStringArray = data.serial.split(',');
-                } else if (Array.isArray(data.serial)) {
-                    serialStringArray = data.serial;
-                }
-
-                pinsGenerated = pinStringArray
-                    .map((pinCode, index) => ({
-                        pin: String(pinCode).trim(),
-                        serial: serialStringArray[index] ? String(serialStringArray[index]).trim() : 'N/A'
-                    }))
-                    .filter(p => p.pin !== "");
-
-                if (pinsGenerated.length === 0) {
-                    throw new Error("VTU Naija returned empty pins");
-                }
-
-                providerUsed = "VTU Naija";
-
-            } catch (vtuError) {
-                // Full error only in Render logs
-                console.error("🔥 VTU Naija also failed:", vtuError.message);
-                if (vtuError.response) {
-                    console.error("VTU Naija status:", vtuError.response.status);
-                    console.error("VTU Naija response:", JSON.stringify(vtuError.response.data, null, 2));
+            } catch (wiseError) {
+                console.error("🔥 WisePay also failed:", wiseError.message);
+                if (wiseError.response) {
+                    console.error("WisePay status:", wiseError.response.status);
+                    console.error("WisePay response:", JSON.stringify(wiseError.response.data, null, 2));
                 }
 
                 // Both providers failed → Refund
@@ -219,7 +202,6 @@ router.post('/generate', async (req, res) => {
                     return currentNumericBal + totalCost;
                 });
 
-                // Generic message only for the user
                 return res.status(502).json({
                     success: false,
                     error: "Unable to generate PINs at the moment. Your funds have been refunded. Please try again later."

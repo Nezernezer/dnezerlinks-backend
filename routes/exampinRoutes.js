@@ -3,9 +3,10 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const db = require('../config/firebase');
+const examPrices = require('../public/exampin/examprice'); // Adjust path based on your folder structure
 
 router.post('/buy', async (req, res) => {
-    const { uid, examType, quantity, pin } = req.body;
+    const { uid, examType, quantity, pin, unitPrice: clientUnitPrice, totalAmount: clientTotalAmount } = req.body;
 
     // Validate required fields
     if (!uid || !examType || !quantity || !pin) {
@@ -17,23 +18,18 @@ router.post('/buy', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid quantity' });
     }
 
-    const examMapping = {
-        'waec': '1',
-        'neco': '2',
-        'nabteb': '3',
-        'jamb': '4',
-        'waecreg': '5',
-        'nbais': '6'
-    };
-
-    const vtunaijaExamId = examMapping[String(examType).toLowerCase()];
-    if (!vtunaijaExamId) {
+    // Find the exam configuration from examprice.js
+    const examConfig = examPrices.find(e => e.id === String(examType).toLowerCase());
+    if (!examConfig) {
         return res.status(400).json({ success: false, error: 'Invalid exam type' });
     }
 
-    const unitPrices = { '1': 3500, '2': 1200, '3': 1500, '4': 4500, '5': 18000, '6': 3500 };
-    const unitPrice = unitPrices[vtunaijaExamId] || 1500;
-    const totalAmount = unitPrice * qty;
+    const vtunaijaExamId = examConfig.vtunaijaId;
+    
+    // Use the server-side price from examprice.js to ensure security and consistency,
+    // falling back to client payload if necessary.
+    const unitPrice = examConfig.price;
+    const totalAmount = clientTotalAmount && !isNaN(clientTotalAmount) ? parseFloat(clientTotalAmount) : (unitPrice * qty);
 
     const userRef = db.ref(`users/${uid}`);
 
@@ -46,7 +42,7 @@ router.post('/buy', async (req, res) => {
             return res.status(404).json({ success: false, error: "User profile not found." });
         }
 
-        // 2. PIN Security Validation (same as dataRoutes)
+        // 2. PIN Security Validation
         const savedPin = String(userData.transaction_pin || userData.pin || '');
         if (String(pin) !== savedPin) {
             return res.status(401).json({ success: false, error: "Incorrect Transaction PIN!" });
@@ -59,7 +55,7 @@ router.post('/buy', async (req, res) => {
         }
 
         // 4. Generate unique request-id (required by VTU Naija)
-        const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        const requestId = `${uid}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
         // 5. Call VTU Naija API
         const response = await axios.post(
@@ -95,7 +91,7 @@ router.post('/buy', async (req, res) => {
                 type: 'Exam PIN',
                 service: `${String(examType).toUpperCase()} PIN`,
                 quantity: qty,
-                amount: totalAmount,
+                amount: totalAmount, // Logs the exact correct total price
                 pin: pins,
                 serial: serials,
                 status: 'successful',
@@ -104,7 +100,7 @@ router.post('/buy', async (req, res) => {
                 description: `${String(examType).toUpperCase()} Exam PIN Purchase`
             });
 
-            console.log(`✅ Exam PIN bought: ${qty} ${examType} (UID: ${uid})`);
+            console.log(`✅ Exam PIN bought: ${qty} ${examType} for ₦${totalAmount} (UID: ${uid})`);
             return res.json({
                 success: true,
                 message: 'Purchase successful',
