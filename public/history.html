@@ -4,122 +4,473 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Transaction History - Dnezerlinks</title>
+    <!-- Firebase App (Core) SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <!-- Firebase Auth SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <!-- Firebase Realtime Database SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        :root { --primary: #0d47a1; --success: #2e7d32; --danger: #c62828; --light: #f8f9fa; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 30px; color: #333; }
+        :root {
+            --primary: #0d47a1;
+            --success: #2e7d32;
+            --danger: #c62828;
+            --light: #f8f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding-bottom: 30px;
+            color: #333;
+        }
 
-        .header { background: var(--primary); color: white; padding: 25px 15px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 25px 15px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header h2 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
 
-        .container { padding: 15px; max-width: 500px; margin: auto; }
+        .container {
+            padding: 15px;
+            max-width: 500px;
+            margin: auto;
+        }
 
         /* Search / Filter Bar */
         .filter-bar {
-            background: white; border-radius: 12px; padding: 12px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin-bottom: 14px;
-            display: flex; flex-direction: column; gap: 10px;
+            background: white;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         .filter-bar input, .filter-bar select {
-            width: 100%; padding: 11px 12px; border: 1px solid #ddd;
-            border-radius: 10px; font-size: 14px; box-sizing: border-box; outline: none;
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
         }
-        .filter-bar input:focus, .filter-bar select:focus { border-color: var(--primary); }
-        .filter-row { display: flex; gap: 8px; }
-        .filter-row select { flex: 1; }
+        .filter-bar input:focus, .filter-bar select:focus {
+            border-color: var(--primary);
+        }
+        .filter-row {
+            display: flex;
+            gap: 8px;
+        }
+        .filter-row select {
+            flex: 1;
+        }
         .filter-clear {
-            background: #f5f5f5; border: 1px solid #ddd; border-radius: 10px;
-            padding: 0 14px; font-size: 13px; font-weight: 700; color: #555; cursor: pointer;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 0 14px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #555;
+            cursor: pointer;
             white-space: nowrap;
         }
-        .filter-clear:active { background: #eee; }
-        .filter-meta { font-size: 12px; color: #888; padding: 0 2px; }
+        .filter-clear:active {
+            background: #eee;
+        }
+        .filter-meta {
+            font-size: 12px;
+            color: #888;
+            padding: 0 2px;
+        }
 
         /* Transaction Cards */
         .card {
-            background: white; padding: 15px; border-radius: 12px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.05); margin-bottom: 12px;
-            border-left: 5px solid var(--primary); cursor: pointer;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.05);
+            margin-bottom: 12px;
+            border-left: 5px solid var(--primary);
+            cursor: pointer;
             transition: transform 0.1s;
         }
-        .card:active { transform: scale(0.97); }
-        .card-top { display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-weight: 700; font-size: 14px; color: var(--primary); text-transform: uppercase; }
-        .card-date { font-size: 11px; color: #888; }
-        .card-amt { font-size: 18px; font-weight: 800; margin: 8px 0; color: #222; }
-        .card-sub { font-size: 12px; color: #666; font-weight: 500; }
+        .card:active {
+            transform: scale(0.97);
+        }
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-title {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--primary);
+            text-transform: uppercase;
+        }
+        .card-date {
+            font-size: 11px;
+            color: #888;
+        }
+        .card-amt {
+            font-size: 18px;
+            font-weight: 800;
+            margin: 8px 0;
+            color: #222;
+        }
+        .card-sub {
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
+        }
 
         /* Pagination Styling */
-        .pagination { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 5px; }
-        .page-btn { color: var(--primary); font-weight: 700; cursor: pointer; font-size: 14px; user-select: none; }
-        .page-btn.disabled { color: #ccc; cursor: not-allowed; }
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 0 5px;
+        }
+        .page-btn {
+            color: var(--primary);
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 14px;
+            user-select: none;
+        }
+        .page-btn.disabled {
+            color: #ccc;
+            cursor: not-allowed;
+        }
 
         /* Modal Styles */
-        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
-        .modal-content {
-            background: white; margin: 10% auto; padding: 25px; border-radius: 20px;
-            width: 88%; max-width: 380px; position: relative; box-sizing: border-box;
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
         }
-        .receipt-header { text-align: center; border-bottom: 1px dashed #ccc; padding-bottom: 15px; margin-bottom: 15px; }
-        .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f1f1; font-size: 14px; }
-        .detail-label { color: #777; font-weight: 500; }
-        .detail-value { font-weight: 700; color: #222; text-align: right; }
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 25px;
+            border-radius: 20px;
+            width: 88%;
+            max-width: 380px;
+            position: relative;
+            box-sizing: border-box;
+        }
+        .receipt-header {
+            text-align: center;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f1f1;
+            font-size: 14px;
+        }
+        .detail-label {
+            color: #777;
+            font-weight: 500;
+        }
+        .detail-value {
+            font-weight: 700;
+            color: #222;
+            text-align: right;
+        }
 
-        .action-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 25px; }
-        .action-row-btns { display: flex; gap: 12px; width: 100%; }
-        .btn { flex: 1; padding: 13px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; font-size: 14px; text-align: center; }
-        .btn-print { background: var(--primary); color: white; }
-        .btn-share { background: #e3f2fd; color: var(--primary); }
-        .btn-close { background: #eee; color: #555; }
+        .action-btns {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 25px;
+        }
+        .action-row-btns {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+        }
+        .btn {
+            flex: 1;
+            padding: 13px;
+            border-radius: 10px;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 14px;
+            text-align: center;
+        }
+        .btn-print {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-share {
+            background: #e3f2fd;
+            color: var(--primary);
+        }
+        .btn-close {
+            background: #eee;
+            color: #555;
+        }
 
-        .btn-view-pins { background: #2e7d32; color: white; width: 100%; padding: 14px; border-radius: 10px; border: none; font-weight: 800; cursor: pointer; font-size: 14px; text-transform: uppercase; box-shadow: 0 3px 6px rgba(46,125,50,0.2); }
-        .btn-view-pins:active { background: #1b5e20; }
+        .btn-view-pins {
+            background: #2e7d32;
+            color: white;
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-weight: 800;
+            cursor: pointer;
+            font-size: 14px;
+            text-transform: uppercase;
+            box-shadow: 0 3px 6px rgba(46,125,50,0.2);
+        }
+        .btn-view-pins:active {
+            background: #1b5e20;
+        }
 
         /* Typing Animation System */
-        .no-history { text-align: center; padding: 40px 20px; color: #666; font-weight: 600; min-height: 20px; }
-        .typing::after { content: '|'; animation: blink 0.7s infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
-        .btn-home { display: block; text-align: center; color: var(--primary); font-weight: 700; text-decoration: none; margin-top: 10px; padding: 10px; }
+        .no-history {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            font-weight: 600;
+            min-height: 20px;
+        }
+        .typing::after {
+            content: '|';
+            animation: blink 0.7s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .btn-home {
+            display: block;
+            text-align: center;
+            color: var(--primary);
+            font-weight: 700;
+            text-decoration: none;
+            margin-top: 10px;
+            padding: 10px;
+        }
 
         /* --- OPTIMIZED MULTI-FORMAT PRINT ENGINE --- */
-        #printArea { display: none; background: white; padding: 0; margin: 0; width: 100%; }
+        #printArea {
+            display: none;
+            background: white;
+            padding: 0;
+            margin: 0;
+            width: 100%;
+        }
 
-        .tickets-grid.layout-a4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 100%; padding: 0; box-sizing: border-box; }
-        .tickets-grid.layout-pos { display: flex; flex-direction: column; gap: 15px; max-width: 58mm; margin: 0 auto; padding: 5px; box-sizing: border-box; }
+        .tickets-grid.layout-a4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            max-width: 100%;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        .tickets-grid.layout-pos {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 58mm;
+            margin: 0 auto;
+            padding: 5px;
+            box-sizing: border-box;
+        }
 
-        .pin-ticket { border: 1px solid #333; padding: 3px 5px; background: #fff; border-radius: 4px; box-sizing: border-box; page-break-inside: avoid; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; position: relative; line-height: 1.0; }
+        .pin-ticket {
+            border: 1px solid #333;
+            padding: 3px 5px;
+            background: #fff;
+            border-radius: 4px;
+            box-sizing: border-box;
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            position: relative;
+            line-height: 1.0;
+        }
 
-        .layout-a4 .pin-ticket { height: 28mm; }
-        .layout-pos .pin-ticket { height: auto; padding: 10px 6px; border-bottom: 2px dashed #000; border-top: none; border-left: none; border-right: none; border-radius: 0; }
+        .layout-a4 .pin-ticket {
+            height: 28mm;
+        }
+        .layout-pos .pin-ticket {
+            height: auto;
+            padding: 10px 6px;
+            border-bottom: 2px dashed #000;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            border-radius: 0;
+        }
 
-        .ticket-top-wrapper { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: 0px; line-height: 1.0; }
-        .ticket-header { font-weight: 900; font-size: 12px; color: #000; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.0; text-align: center; width: 100%; padding: 0 22px; box-sizing: border-box; }
-        .layout-pos .ticket-header { font-size: 15px; }
+        .ticket-top-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 0px;
+            line-height: 1.0;
+        }
+        .ticket-header {
+            font-weight: 900;
+            font-size: 12px;
+            color: #000;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.0;
+            text-align: center;
+            width: 100%;
+            padding: 0 22px;
+            box-sizing: border-box;
+        }
+        .layout-pos .ticket-header {
+            font-size: 15px;
+        }
 
-        .ticket-brand { font-size: 10px; font-weight: 800; color: #0d47a1; margin: 0 0 1px 0; white-space: nowrap; line-height: 1.0; text-align: center; }
-        .layout-pos .ticket-brand { font-size: 13px; margin: 4px 0; }
+        .ticket-brand {
+            font-size: 10px;
+            font-weight: 800;
+            color: #0d47a1;
+            margin: 0 0 1px 0;
+            white-space: nowrap;
+            line-height: 1.0;
+            text-align: center;
+        }
+        .layout-pos .ticket-brand {
+            font-size: 13px;
+            margin: 4px 0;
+        }
 
-        .pin-row { display: flex; align-items: center; justify-content: center; gap: 4px; line-height: 1.0; margin: 0; padding: 0; background: none; border: none; }
-        .pin-label { font-size: 8px; color: #444; font-weight: bold; text-transform: uppercase; line-height: 1.0; }
-        .layout-pos .pin-label { font-size: 11px; }
+        .pin-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            line-height: 1.0;
+            margin: 0;
+            padding: 0;
+            background: none;
+            border: none;
+        }
+        .pin-label {
+            font-size: 8px;
+            color: #444;
+            font-weight: bold;
+            text-transform: uppercase;
+            line-height: 1.0;
+        }
+        .layout-pos .pin-label {
+            font-size: 11px;
+        }
 
-        .pin-code { font-size: 13px; font-weight: 900; color: #000; letter-spacing: 0.2px; line-height: 1.0; }
-        .layout-pos .pin-code { font-size: 18px; letter-spacing: 0.5px; margin: 4px 0; }
+        .pin-code {
+            font-size: 13px;
+            font-weight: 900;
+            color: #000;
+            letter-spacing: 0.2px;
+            line-height: 1.0;
+        }
+        .layout-pos .pin-code {
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            margin: 4px 0;
+        }
 
-        .serial-row { font-size: 8px; font-weight: 800; color: #222; line-height: 1.0; margin: 0 0 1px 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .layout-pos .serial-row { font-size: 10px; margin: 2px 0; }
+        .serial-row {
+            font-size: 8px;
+            font-weight: 800;
+            color: #222;
+            line-height: 1.0;
+            margin: 0 0 1px 0;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .layout-pos .serial-row {
+            font-size: 10px;
+            margin: 2px 0;
+        }
 
-        .ticket-footer { font-size: 8.5px; color: #111; line-height: 1.1; border-top: none; padding-top: 0px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
-        .layout-pos .ticket-footer { font-size: 10px; line-height: 1.3; white-space: normal; }
+        .ticket-footer {
+            font-size: 8.5px;
+            color: #111;
+            line-height: 1.1;
+            border-top: none;
+            padding-top: 0px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 700;
+        }
+        .layout-pos .ticket-footer {
+            font-size: 10px;
+            line-height: 1.3;
+            white-space: normal;
+        }
 
-        .ticket-timestamp { font-size: 7.5px; color: #333; margin-top: 1px; font-weight: bold; line-height: 1.0; }
-        .layout-pos .ticket-timestamp { font-size: 9px; margin-top: 3px; }
+        .ticket-timestamp {
+            font-size: 7.5px;
+            color: #333;
+            margin-top: 1px;
+            font-weight: bold;
+            line-height: 1.0;
+        }
+        .layout-pos .ticket-timestamp {
+            font-size: 9px;
+            margin-top: 3px;
+        }
 
         /* Logos */
-        .logo-box { position: absolute; top: 3px; right: 4px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box; }
-        .layout-pos .logo-box { width: 22px; height: 22px; top: 6px; right: 2px; }
+        .logo-box {
+            position: absolute;
+            top: 3px;
+            right: 4px;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        .layout-pos .logo-box {
+            width: 22px;
+            height: 22px;
+            top: 6px;
+            right: 2px;
+        }
 
         .logo-mtn { background: #ffcc00; border: 1px solid #000; border-radius: 50%; }
         .logo-mtn::before { content: "MTN"; color: #000; font-size: 5px; font-family: 'Arial Black', sans-serif; font-weight: 900; transform: scale(0.8); }
@@ -165,16 +516,45 @@
             border-radius: 0 !important;
         }
 
-        .paper-selector-bar { background: #eef2f7; border: 1px solid #dcdfe6; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 400px; margin: 15px auto; font-size: 13px; font-weight: bold; }
-        .paper-selector-bar select { flex: 1; padding: 8px; border-radius: 6px; font-weight: bold; border: 1px solid #b4bccc; background: white; }
+        .paper-selector-bar {
+            background: #eef2f7;
+            border: 1px solid #dcdfe6;
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            max-width: 400px;
+            margin: 15px auto;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .paper-selector-bar select {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            border: 1px solid #b4bccc;
+            background: white;
+        }
 
         @media print {
             body { background: white; margin: 0; padding: 0; }
-            body:not(.printing-vouchers) .header, body:not(.printing-vouchers) .btn-home, body:not(.printing-vouchers) .action-btns, body:not(.printing-vouchers) .btn-close, body:not(.printing-vouchers) #history-list, body:not(.printing-vouchers) .pagination, body:not(.printing-vouchers) .filter-bar { display: none !important; }
+            body:not(.printing-vouchers) .header,
+            body:not(.printing-vouchers) .btn-home,
+            body:not(.printing-vouchers) .action-btns,
+            body:not(.printing-vouchers) .btn-close,
+            body:not(.printing-vouchers) #history-list,
+            body:not(.printing-vouchers) .pagination,
+            body:not(.printing-vouchers) .filter-bar { display: none !important; }
             body:not(.printing-vouchers) .modal { position: absolute; background: white; display: block !important; }
             body:not(.printing-vouchers) .modal-content { margin: 0; width: 100%; border: none; box-shadow: none; padding: 0; }
 
-            body.printing-vouchers #appLayoutContainer, body.printing-vouchers .modal, body.printing-vouchers #printControlsEngine, body.printing-vouchers #paperSelectionControl { display: none !important; }
+            body.printing-vouchers #appLayoutContainer,
+            body.printing-vouchers .modal,
+            body.printing-vouchers #printControlsEngine,
+            body.printing-vouchers #paperSelectionControl { display: none !important; }
             body.printing-vouchers #printArea { display: block !important; position: absolute; left: 0; top: 0; margin: 0; padding: 0; width: 100%; }
         }
     </style>
@@ -187,7 +567,7 @@
     </div>
 
     <div class="container">
-        <!-- Search & Filter -->
+        <!-- Search & Filter Bar -->
         <div class="filter-bar">
             <input type="search" id="searchInput" placeholder="Search ref, network, phone, amount..." oninput="applyFilters()">
             <div class="filter-row">
@@ -228,6 +608,7 @@
     </div>
 </div>
 
+<!-- Transaction Details Modal -->
 <div id="detailModal" class="modal">
     <div class="modal-content">
         <div class="receipt-header">
@@ -255,6 +636,7 @@
     </div>
 </div>
 
+<!-- Dedicated Print Area Canvas for Vouchers -->
 <div id="printArea">
     <div id="paperSelectionControl" class="paper-selector-bar">
         <span>📄 Paper Type:</span>
@@ -273,6 +655,7 @@
 </div>
 
 <script>
+    // Initialize Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
         authDomain: "dnezerlinks.firebaseapp.com",
@@ -324,18 +707,14 @@
         const desc = String(tx.description || tx.desc || "").toUpperCase();
         const service = String(tx.service || "").toUpperCase();
 
-        // Prefer explicit string network saved by backend (MTN, GLO, AIRTEL, 9MOBILE)
         if (raw === "MTN" || raw === "1") return "MTN";
         if (raw === "GLO" || raw === "3") return "GLO";
         if (raw === "AIRTEL" || raw === "2" || raw === "4") {
-            // WisePay: 2=AIRTEL; some older maps used 4=AIRTEL
             if (raw === "2" || raw === "AIRTEL") return "AIRTEL";
             if (raw === "4") return "AIRTEL";
         }
-        if (raw === "9MOBILE" || raw === "9MOBILE" || raw === "3") {
-            if (raw === "9MOBILE") return "9MOBILE";
-        }
-        // Numeric legacy (WisePay style: 1=MTN, 2=AIRTEL, 3=GLO, 4=9MOBILE)
+        if (raw === "9MOBILE") return "9MOBILE";
+
         if (raw === "1") return "MTN";
         if (raw === "2") return "AIRTEL";
         if (raw === "3") return "GLO";
@@ -370,7 +749,6 @@
                 serviceNode.includes("NBAIS") ||
                 desc.includes("EXAM PIN") || desc.includes("WAEC") || desc.includes("NECO") ||
                 desc.includes("NABTEB") || desc.includes("JAMB") || desc.includes("NBAIS")) {
-
                 data.service = "Exam PIN";
                 data.network = serviceNode || "Exam";
                 if (data.phone === "N/A") data.phone = tx.service || "Exam Voucher";
@@ -386,11 +764,9 @@
                 (tx.pins && (Array.isArray(tx.pins) ? tx.pins.length : true))
             ) {
                 data.service = "Recharge PIN";
-                // Prefer resolved network; fall back to description snippet
                 if (data.network === "N/A" && desc) {
                     data.network = resolveNetwork(tx);
                 }
-                // Target details: show denomination × qty when available
                 if (data.phone === "N/A" || data.phone === tx.service) {
                     data.phone = tx.description || (data.network !== "N/A" ? data.network + " Recharge PIN" : "Recharge PIN");
                 }
@@ -423,17 +799,14 @@
         if (n === "GLO") return { ussd: "*123*PIN#", care: "121" };
         if (n === "AIRTEL") return { ussd: "*126*PIN#", care: "111" };
         if (n === "9MOBILE") return { ussd: "*232*PIN#", care: "200" };
-        // MTN default
         return { ussd: "*555*PIN#", care: "300" };
     }
 
-    /** Try to get per-pin denomination from description e.g. "MTN ₦100 x 5" */
     function getPinDenomination(tx) {
         if (tx.pinAmount) return parseFloat(tx.pinAmount);
         const desc = String(tx.description || "");
         const m = desc.match(/₦?\s*(\d+(?:\.\d+)?)\s*x\s*\d+/i) || desc.match(/(\d+(?:\.\d+)?)\s*x\s*\d+/i);
         if (m) return parseFloat(m[1]);
-        // fallback: total / qty if pins array length known
         const pins = tx.pins || tx.pin_details;
         if (Array.isArray(pins) && pins.length > 0 && tx.amount) {
             return parseFloat(tx.amount) / pins.length;
@@ -531,9 +904,9 @@
         const total = allRecords.length;
         const shown = filteredRecords.length;
         if (shown === total) {
-            el.innerText = total ? `Showing all \( {total} transaction \){total === 1 ? "" : "s"}` : "No transactions yet";
+            el.innerText = total ? `Showing all ${total} transaction${total === 1 ? "" : "s"}` : "No transactions yet";
         } else {
-            el.innerText = `Showing ${shown} of \( {total} transaction \){total === 1 ? "" : "s"}`;
+            el.innerText = `Showing ${shown} of ${total} transaction${total === 1 ? "" : "s"}`;
         }
     }
 
@@ -570,7 +943,6 @@
 
                 const amountText = (isCredit ? '+' : '-') + '₦' + parseFloat(tx.amount || 0).toLocaleString();
 
-                // Clear network label for recharge pins
                 let titleText = meta.service;
                 if (meta.service === "Recharge PIN" && meta.network !== "N/A") {
                     titleText = meta.network + " Recharge PIN";
@@ -627,7 +999,6 @@
             document.getElementById('detDate').innerText = formatMyDate(tx.timestamp, tx.date);
             document.getElementById('detRef').innerText = tx.reference || tx.id;
 
-            // Clean previous Exam PIN rows
             const oldPin = document.getElementById('detExamPin');
             const oldSerial = document.getElementById('detExamSerial');
             if (oldPin) oldPin.remove();
@@ -808,7 +1179,6 @@
         window.scrollTo(0, 0);
     }
 
-    // ===== EXAM PIN VOUCHER (LEFT-ALIGNED, 2-PER-ROW SIZE) =====
     function launchExamVoucher() {
         if (!selectedTx) return;
 
@@ -861,7 +1231,6 @@
 
         const card = document.createElement('div');
         card.style.cssText = 'border: 2px solid #333; border-radius: 8px; overflow: hidden; background: white; font-family: Segoe UI, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,0.08); position: relative; width: 90mm; max-width: 100%; box-sizing: border-box;';
-
         card.innerHTML =
             '<div style="background: ' + headerColor + '; color: white; padding: 10px 12px; text-align: center; position: relative;">' +
                 '<div class="logo-box exam-official" style="top: 8px; right: 10px; width: 32px; height: 32px;">' +
@@ -881,7 +1250,6 @@
                 '</div>' +
                 '<div style="margin-top: 10px; text-align: center; font-size: 9px; color: #888; font-style: italic;">Keep your PIN safe. Do not share.</div>' +
             '</div>';
-
         gridContainer.appendChild(card);
         wrapper.appendChild(gridContainer);
 

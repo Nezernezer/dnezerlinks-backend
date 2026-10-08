@@ -1,4 +1,3 @@
-// routes/rechargepinRoutes.js
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
@@ -7,7 +6,6 @@ const axios = require('axios');
 // Handles: POST /api/rechargepin/generate
 router.post('/generate', async (req, res) => {
     const { uid, network, amount, qty, brandName } = req.body;
-
     const parsedAmt = parseFloat(amount);
     const parsedQty = parseInt(qty);
     const totalCost = parsedAmt * parsedQty;
@@ -43,7 +41,7 @@ router.post('/generate', async (req, res) => {
 
     const db = admin.database();
     const userRef = db.ref(`users/${uid}`);
-    const requestId = `\( {uid}- \){Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    const requestId = `${uid}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
     try {
         // 1. Pre-check balance
@@ -63,12 +61,10 @@ router.post('/generate', async (req, res) => {
             if (currentBal === null) {
                 return Number(liveServerBalance) - totalCost;
             }
-
             const numericBalance = Number(currentBal);
             if (isNaN(numericBalance) || numericBalance < totalCost) {
                 return; // abort
             }
-
             return numericBalance - totalCost;
         });
 
@@ -216,7 +212,7 @@ router.post('/generate', async (req, res) => {
         await txRef.set({
             type: 'debit',
             service: 'Recharge PIN',
-            description: `\( {network} ₦ \){parsedAmt} x ${parsedQty}`,
+            description: `${network} ₦${parsedAmt} x ${parsedQty}`,
             amount: totalCost,
             status: 'successful',
             timestamp: Date.now(),
