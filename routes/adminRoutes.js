@@ -16,7 +16,7 @@ router.get('/verify-status', async (req, res) => {
 
         const idToken = authHeader.split('Bearer ')[1];
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        
+
         // Dynamic comparison check against Render's environment variable
         const isMaster = decodedToken.uid === MASTER_ADMIN_UID;
 
@@ -31,7 +31,7 @@ router.get('/verify-status', async (req, res) => {
     }
 });
 
-// Maps to: GET /api/admin/user
+// Maps to: GET /api/admin/user  (Vtunaija balance - already working)
 router.get('/user', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -59,6 +59,124 @@ router.get('/user', async (req, res) => {
     } catch (err) {
         console.error("Intercepted System Error:", err.message);
         return res.status(200).json({ balance: "0.00", error: err.message });
+    }
+});
+
+// ====================== MASTER PROVIDER BALANCES ======================
+
+// GET /api/admin/balance/pairgate
+router.get('/balance/pairgate', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: "Missing token" });
+        }
+
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+        if (decodedToken.uid !== MASTER_ADMIN_UID) {
+            return res.status(403).json({ error: "Access Denied" });
+        }
+
+        const response = await axios.get('https://pairgate.com/api/v1/wallet/balance', {
+            headers: {
+                'Authorization': `Bearer ${process.env.PAIRGATE_API_KEY}`,
+                'Cache-Control': 'no-cache',
+                'Accept': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        const data = response.data;
+        return res.json({
+            success: true,
+            balance: data?.data?.balance ?? 0,
+            unit: data?.data?.currency || 'NGN'
+        });
+
+    } catch (err) {
+        console.error("Pairgate balance error:", err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/admin/balance/bulksmslive
+router.get('/balance/bulksmslive', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: "Missing token" });
+        }
+
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+        if (decodedToken.uid !== MASTER_ADMIN_UID) {
+            return res.status(403).json({ error: "Access Denied" });
+        }
+
+        const response = await axios.post('https://api.bulksmslive.com/v2/app/balance', {}, {
+            headers: {
+                'Authorization': `Bearer ${process.env.BULKSMSLIVE_API_KEY}`,
+                'Accept': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        const data = response.data;
+        const balance = data.balance ?? data.Balance ?? data.units ?? 0;
+
+        return res.json({
+            success: true,
+            balance: balance,
+            unit: 'SMS Units'
+        });
+
+    } catch (err) {
+        console.error("BulkSMSLive balance error:", err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/admin/balance/wisepay
+router.get('/balance/wisepay', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: "Missing token" });
+        }
+
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+        if (decodedToken.uid !== MASTER_ADMIN_UID) {
+            return res.status(403).json({ error: "Access Denied" });
+        }
+
+        const response = await axios.post('https://wisepay.com.ng/api/v1/load/wallet-balance', {
+            email: process.env.WISEPAY_EMAIL || ''
+        }, {
+            headers: {
+                'Authorization': process.env.WISEPAY_API_KEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        const data = response.data;
+        const balance = data?.data?.product?.wallet ?? data?.wallet ?? data?.balance ?? 0;
+
+        return res.json({
+            success: true,
+            balance: parseFloat(balance) || 0,
+            unit: 'NGN'
+        });
+
+    } catch (err) {
+        console.error("WisePay balance error:", err.message);
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
