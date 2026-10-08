@@ -164,12 +164,12 @@ router.get('/balance/wisepay', async (req, res) => {
             return res.status(403).json({ error: "Access Denied" });
         }
 
-        // Correct production URL (with /live)
+        // Correct production URL + Bearer prefix
         const response = await axios.post('https://wisepay.com.ng/api/live/v1/load/wallet-balance', {
             email: process.env.WISEPAY_EMAIL || ''
         }, {
             headers: {
-                'Authorization': process.env.WISEPAY_API_KEY,
+                'Authorization': `Bearer ${process.env.WISEPAY_API_KEY}`,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
