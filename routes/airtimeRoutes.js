@@ -24,7 +24,7 @@ router.post('/buy', async (req, res) => {
             return res.status(400).json({ success: false, error: "Insufficient Balance" });
         }
 
-        // 2. Generate a unique request ID for gateway tracking
+        // 2. Generate a unique request ID properly using template literals
         const requestId = `${uid}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
         let vtuSuccess = false;
@@ -51,7 +51,7 @@ router.post('/buy', async (req, res) => {
                 }
             );
 
-            if (response.data.Status === "successful" || response.data.status === "success") {
+            if (response.data && (response.data.Status === "successful" || response.data.status === "success")) {
                 vtuSuccess = true;
                 responseData = response.data;
             }
@@ -64,7 +64,7 @@ router.post('/buy', async (req, res) => {
             console.log("🔄 Attempting WisePay API fallback...");
             
             const wisePayResponse = await axios.post(
-                'https://wisepay.com.ng/api/v1/airtime', // Update endpoint URL if your specific integration path differs
+                'https://wisepay.com.ng/api/v1/airtime',
                 {
                     network: String(networkID),
                     phone: String(phone),
@@ -129,4 +129,3 @@ router.post('/buy', async (req, res) => {
 });
 
 module.exports = router;
-s
