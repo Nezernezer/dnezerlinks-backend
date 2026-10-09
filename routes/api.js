@@ -10,7 +10,7 @@ router.use('/exampin', require('./exampinRoutes'));
 router.use('/bulksms', require('./bulksmsRoutes'));
 router.use('/rechargepin', require('./rechargepinRoutes'));
 router.use('/electricity', require('./electricityRoutes'));
-router.use('/airtimeswap', require('./airtimeswapRoutes'));
+router.use('/airtimeswap', require('./bettingRoutes'));
 router.use('/sendmoney', require('./sendmoneyRoutes'));
 router.use('/admin', require('./adminRoutes'));
 router.use('/balance', require('./balanceRoutes'));
