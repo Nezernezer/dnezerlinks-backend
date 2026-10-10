@@ -128,10 +128,10 @@ router.get('/balance/bulksmslive', async (req, res) => {
         console.log("BulkSMSLive raw response:", JSON.stringify(data));
 
         // Correct field is "amount"
-        const balance = data.amount
-                    ?? data.balance
-                    ?? data.Balance
-                    ?? data.units
+        const balance = data.amount 
+                    ?? data.balance 
+                    ?? data.Balance 
+                    ?? data.units 
                     ?? 0;
 
         return res.json({
@@ -142,9 +142,9 @@ router.get('/balance/bulksmslive', async (req, res) => {
 
     } catch (err) {
         console.error("BulkSMSLive balance error:", err.response?.data || err.message);
-        return res.status(500).json({
-            success: false,
-            error: err.response?.data || err.message
+        return res.status(500).json({ 
+            success: false, 
+            error: err.response?.data || err.message 
         });
     }
 });
@@ -179,10 +179,10 @@ router.get('/balance/wisepay', async (req, res) => {
         const data = response.data;
         console.log("WisePay raw response:", JSON.stringify(data));
 
-        const balance = data?.data?.product?.wallet
-                     ?? data?.data?.wallet
-                     ?? data?.wallet
-                     ?? data?.balance
+        const balance = data?.data?.product?.wallet 
+                     ?? data?.data?.wallet 
+                     ?? data?.wallet 
+                     ?? data?.balance 
                      ?? 0;
 
         return res.json({
@@ -193,9 +193,9 @@ router.get('/balance/wisepay', async (req, res) => {
 
     } catch (err) {
         console.error("WisePay balance error:", err.response?.data || err.message);
-        return res.status(500).json({
-            success: false,
-            error: err.response?.data || err.message
+        return res.status(500).json({ 
+            success: false, 
+            error: err.response?.data || err.message 
         });
     }
 });
