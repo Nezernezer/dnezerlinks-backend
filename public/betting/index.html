@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Betting Wallet - Dnezerlinks</title>
+    <style>
+        :root { --primary: #007bff; }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 20px;
+        }
+
+        #mainContent {
+            width: 100%;
+            max-width: 450px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            width: 100%;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
+
+        #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
+        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+
+        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
+        input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
+
+        button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #verifyBtn {
+            margin-top: 12px;
+            padding: 12px;
+            background: #6c757d;
+            font-size: 0.95rem;
+        }
+
+        #customerNameBox {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 8px;
+            color: #1565c0;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+        #customerNameBox strong { color: #0d47a1; }
+
+        #pinModal, #customPromptModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+        }
+        .pin-input {
+            font-size: 2rem;
+            text-align: center;
+            letter-spacing: 10px;
+            width: 100%;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        .cancel-btn {
+            background: #f44336;
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 360px) {
+            .card { padding: 15px; }
+            body { padding-top: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="mainContent">
+    <a href="../home.html" style="color: var(--primary); text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 10px;">← Back to Dashboard</a>
+    <div class="card">
+        <h2>⚽ Fund Betting Wallet</h2>
+        <div id="statusMsg"></div>
+
+        <label>Select Betting Provider</label>
+        <select id="provider" onchange="resetVerification()">
+            <option value="">Choose Provider</option>
+            <option value="accessbet">Accessbet</option>
+            <option value="bangbet">Bangbet</option>
+            <option value="bet9ja">Bet9ja</option>
+            <option value="betbaba">Betbaba</option>
+            <option value="betgr8">Betgr8</option>
+            <option value="betking">Betking</option>
+            <option value="betland">Betland</option>
+            <option value="betway">Betway</option>
+            <option value="cloudbet">Cloudbet</option>
+            <option value="frapapa">Frapapa</option>
+            <option value="greenlotto">Greenlotto</option>
+            <option value="hallabet">Hallabet</option>
+            <option value="merrybet">Merrybet</option>
+            <option value="mlotto">Mlotto</option>
+            <option value="msport">Msport</option>
+            <option value="naijabet">Naijabet</option>
+            <option value="nairabet">Nairabet</option>
+            <option value="sportybet">Sportybet</option>
+            <option value="supabet">Supabet</option>
+            <option value="surebet">Surebet</option>
+        </select>
+
+        <label>Customer / Account ID</label>
+        <input type="text" id="customerId" placeholder="Enter Customer ID" list="recentCustomers" oninput="saveRecentCustomerInput(); resetVerification()">
+        <datalist id="recentCustomers"></datalist>
+
+        <button id="verifyBtn" onclick="verifyAccount()">Verify Account</button>
+
+        <div id="customerNameBox">
+            Account Name: <strong id="verifiedName"></strong>
+        </div>
+
+        <label>Amount (₦)</label>
+        <input type="number" id="amount" placeholder="Min 100" min="100">
+
+        <button id="fundBtn" onclick="validateUserAndOpenModal()" disabled>Fund Wallet</button>
+    </div>
+</div>
+
+<!-- PIN Input Modal -->
+<div id="pinModal">
+    <div class="modal-content">
+        <h3>Enter PIN</h3>
+        <div id="pinError" style="color: red; font-size: 0.8rem; margin-bottom: 5px;"></div>
+        <input type="password" id="txnPin" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric">
+        <button onclick="togglePinVisibility()" style="background: #6c757d; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="toggleBtn">Show PIN</button>
+
+        <div id="processingSpinner" class="spinner"></div>
+
+        <button id="confirmBtn" onclick="verifyAndPay()" style="background: var(--primary); color: white; width:100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer;">Confirm Payment</button>
+        <button class="cancel-btn" onclick="closePinModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Polite Dialog Modal for Missing Transaction PIN -->
+<div id="customPromptModal">
+    <div class="modal-content">
+        <h3 style="color: #0D47A1; margin-bottom: 10px;">Transaction PIN Required</h3>
+        <p style="font-size: 0.95rem; color: #555; line-height: 1.4; margin-bottom: 20px;">
+            You have not set up your transaction PIN yet. Would you like to set it up now to proceed with your transaction?
+        </p>
+        <button onclick="redirectToPinSetup()" style="background: var(--primary); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Yes</button>
+        <button onclick="closeCustomPrompt()" style="background: #f44336; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">No</button>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+        authDomain: "dnezerlinks.firebaseapp.com",
+        databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+        projectId: "dnezerlinks",
+        appId: "1:1028450580168:web:d7a48462a128f02aa657fd"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+    const backendDomain = "https://dnezerlinks-backend.onrender.com";
+
+    let isVerified = false;
+    let verifiedCustomerName = "";
+
+    window.onload = () => {
+        fetch(`${backendDomain}/`).catch(() => {});
+        loadRecentCustomer();
+    };
+
+    function showMessage(msg, isError = true) {
+        const msgDiv = document.getElementById('statusMsg');
+        msgDiv.textContent = msg;
+        msgDiv.style.display = 'block';
+        msgDiv.className = isError ? 'error-msg' : 'success-msg';
+    }
+
+    function loadRecentCustomer() {
+        const savedCustomer = localStorage.getItem('last_betting_customer');
+        if (savedCustomer) {
+            const list = document.getElementById('recentCustomers');
+            list.innerHTML = `<option value="${savedCustomer}">Recently Used</option>`;
+            document.getElementById('customerId').value = savedCustomer;
+        }
+    }
+
+    function saveRecentCustomerInput() {
+        let customerId = document.getElementById('customerId').value.trim();
+        if (customerId.length > 3) {
+            localStorage.setItem('last_betting_customer', customerId);
+        }
+    }
+
+    function resetVerification() {
+        isVerified = false;
+        verifiedCustomerName = "";
+        document.getElementById('customerNameBox').style.display = 'none';
+        document.getElementById('fundBtn').disabled = true;
+        document.getElementById('statusMsg').style.display = 'none';
+    }
+
+    auth.onAuthStateChanged(user => {
+        if (!user) window.location.href = "../login.html";
+    });
+
+    // ========== VERIFY ACCOUNT ==========
+    async function verifyAccount() {
+        const provider = document.getElementById('provider').value;
+        const customerId = document.getElementById('customerId').value.trim();
+        const verifyBtn = document.getElementById('verifyBtn');
+
+        if (!provider || !customerId) {
+            return showMessage("Please select a provider and enter Customer ID.");
+        }
+
+        verifyBtn.disabled = true;
+        verifyBtn.innerText = "Verifying...";
+        document.getElementById('statusMsg').style.display = 'none';
+        document.getElementById('customerNameBox').style.display = 'none';
+
+        try {
+            const user = auth.currentUser;
+            const idToken = await user.getIdToken(true);
+
+            const response = await fetch(`${backendDomain}/api/airtimeswap/verify`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + idToken
+                },
+                body: JSON.stringify({
+                    providerID: provider,
+                    customerID: customerId
+                })
+            });
+
+            const res = await response.json();
+
+            if (response.ok && res.success && res.customer_name) {
+                isVerified = true;
+                verifiedCustomerName = res.customer_name;
+                document.getElementById('verifiedName').textContent = res.customer_name;
+                document.getElementById('customerNameBox').style.display = 'block';
+                document.getElementById('fundBtn').disabled = false;
+                showMessage("Account verified successfully!", false);
+            } else {
+                isVerified = false;
+                document.getElementById('fundBtn').disabled = true;
+                showMessage(res.error || "Could not verify this account. Check Customer ID.");
+            }
+        } catch (e) {
+            isVerified = false;
+            document.getElementById('fundBtn').disabled = true;
+            showMessage("Network error while verifying. Try again.");
+        } finally {
+            verifyBtn.disabled = false;
+            verifyBtn.innerText = "Verify Account";
+        }
+    }
+
+    async function validateUserAndOpenModal() {
+        if (!isVerified) {
+            return showMessage("Please verify the account first.");
+        }
+
+        const user = auth.currentUser;
+        const provider = document.getElementById('provider').value;
+        const customerId = document.getElementById('customerId').value.trim();
+        const amount = document.getElementById('amount').value;
+        const fundBtn = document.getElementById('fundBtn');
+
+        if (!provider || !customerId || !amount || amount < 100) {
+            return showMessage("Please enter valid details (min ₦100).");
+        }
+
+        fundBtn.disabled = true;
+        fundBtn.innerText = "Checking status...";
+
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val() || {};
+
+            if (!data.transaction_pin && !data.pin) {
+                document.getElementById('customPromptModal').style.display = 'flex';
+                return;
+            }
+
+            document.getElementById('pinModal').style.display = 'flex';
+            document.getElementById('txnPin').value = '';
+            document.getElementById('pinError').textContent = '';
+
+        } catch (e) {
+            showMessage("Error validating account.");
+        } finally {
+            fundBtn.disabled = false;
+            fundBtn.innerText = "Fund Wallet";
+        }
+    }
+
+    function redirectToPinSetup() {
+        window.location.href = "../pinsetup.html?return=betting";
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('customPromptModal').style.display = 'none';
+    }
+
+    function closePinModal() {
+        document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('confirmBtn').style.display = 'inline-block';
+        document.getElementById('processingSpinner').style.display = 'none';
+    }
+
+    function togglePinVisibility() {
+        const pinInput = document.getElementById('txnPin');
+        const toggleBtn = document.getElementById('toggleBtn');
+        pinInput.type = (pinInput.type === "password") ? "text" : "password";
+        toggleBtn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
+    }
+
+    async function verifyAndPay() {
+        const enteredPin = document.getElementById('txnPin').value;
+        const user = auth.currentUser;
+        const btn = document.getElementById('confirmBtn');
+        const pinErr = document.getElementById('pinError');
+        const spinner = document.getElementById('processingSpinner');
+
+        if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
+
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+        btn.style.display = 'none';
+        spinner.style.display = 'block';
+        pinErr.textContent = "";
+
+        try {
+            const snap = await database.ref('users/' + user.uid).once('value');
+            const data = snap.val();
+            const storedPin = data.transaction_pin || data.pin;
+
+            if (String(enteredPin) === String(storedPin)) {
+                await executeFunding(data.balance, user.uid);
+            } else {
+                pinErr.textContent = "Incorrect PIN!";
+                btn.disabled = false;
+                btn.innerText = "Confirm Payment";
+                btn.style.display = 'inline-block';
+                spinner.style.display = 'none';
+            }
+        } catch(e) {
+            pinErr.textContent = "Validation error.";
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
+        }
+    }
+
+    async function executeFunding(balance, uid) {
+        const providerID = document.getElementById("provider").value;
+        const customerID = document.getElementById("customerId").value.trim();
+        const amount = Number(document.getElementById("amount").value);
+        const pin = document.getElementById("txnPin").value.trim();
+        const btn = document.getElementById('confirmBtn');
+        const pinErr = document.getElementById('pinError');
+        const spinner = document.getElementById('processingSpinner');
+
+        if (balance < amount) {
+            closePinModal();
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
+            return showMessage("Insufficient Balance");
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            const user = auth.currentUser;
+            const idToken = await user.getIdToken(true);
+
+            const response = await fetch(`${backendDomain}/api/airtimeswap/fund`, {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + idToken
+                },
+                body: JSON.stringify({ pin, uid, customerID, providerID, amount }),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            const res = await response.json();
+
+            if (response.ok && res.success) {
+                localStorage.setItem('last_betting_customer', customerID);
+                closePinModal();
+                showMessage("Betting Wallet Funded Successfully!", false);
+                setTimeout(() => { window.location.href = "../home.html"; }, 2000);
+            } else {
+                pinErr.textContent = res.error || "Transaction Failed";
+                btn.disabled = false;
+                btn.innerText = "Confirm Payment";
+                btn.style.display = 'inline-block';
+                spinner.style.display = 'none';
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                pinErr.textContent = "Request timed out (Server waking up). Please try again.";
+            } else {
+                pinErr.textContent = "Network Error. Try again.";
+            }
+            btn.disabled = false;
+            btn.innerText = "Confirm Payment";
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
+        }
+    }
+</script>
+</body>
+</html>

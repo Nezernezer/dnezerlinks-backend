@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Balances | Dnezerlinks Admin</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root {
+            --primary: #0d47a1;
+            --accent: #ffab00;
+            --bg: #f4f7f6;
+            --success: #2e7d32;
+            --danger: #c62828;
+            --card-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: #222;
+            min-height: 100vh;
+        }
+        #loadingScreen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            gap: 16px;
+        }
+        #loadingScreen .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #ddd;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        #loadingScreen p { color: #555; font-size: 15px; }
+        #mainContent { display: none; }
+        .header {
+            background: white;
+            padding: 18px 20px;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .header h1 {
+            font-size: 1.35rem;
+            color: var(--primary);
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-exit { background: #444; color: white; }
+        .container {
+            max-width: 900px;
+            margin: 24px auto;
+            padding: 0 16px 40px;
+        }
+        .status-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--card-shadow);
+            font-size: 0.95rem;
+        }
+        .status-bar .last-updated { color: #666; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+        .balance-card {
+            background: white;
+            border-radius: 14px;
+            padding: 22px 20px;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        .balance-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+        }
+        .balance-card.bulksmslive::before { background: #1565c0; }
+        .balance-card.pairgate::before { background: #6a1b9a; }
+        .balance-card.vtunaija::before { background: #00897b; }
+        .balance-card.wisepay::before { background: #ef6c00; }
+        .balance-card.users-total::before { background: #2e7d32; }
+        .balance-card.richest::before { background: #c62828; }
+        .provider-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #555;
+        }
+        .balance-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #111;
+            letter-spacing: -0.5px;
+        }
+        .balance-value.loading {
+            font-size: 1rem;
+            color: #888;
+            font-weight: 500;
+        }
+        .balance-value.error {
+            font-size: 0.95rem;
+            color: var(--danger);
+            font-weight: 500;
+        }
+        .balance-meta {
+            font-size: 0.8rem;
+            color: #777;
+            margin-top: 4px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid #ddd;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-banner {
+            background: #ffebee;
+            color: var(--danger);
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 18px;
+            display: none;
+            font-size: 0.95rem;
+        }
+        .section-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 28px 0 14px;
+        }
+        .note {
+            margin-top: 28px;
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 0.88rem;
+            color: #1565c0;
+            line-height: 1.5;
+        }
+        @media (max-width: 500px) {
+            .header { flex-direction: column; align-items: flex-start; }
+            .balance-value { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Immediate loading screen so the page is never blank -->
+    <div id="loadingScreen">
+        <div class="spinner"></div>
+        <p>Verifying admin access...</p>
+    </div>
+
+    <div id="mainContent">
+        <div class="header">
+            <h1>Master Provider Balances</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" id="btnRefresh" onclick="loadBalances()">↻ Refresh</button>
+                <a href="index.html" class="btn btn-exit">← Back to Hub</a>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="status-bar">
+                <span id="accessStatus">● Master Access</span>
+                <span class="last-updated" id="lastUpdated">Never updated</span>
+            </div>
+
+            <div class="error-banner" id="errorBanner"></div>
+
+            <!-- Provider Balances -->
+            <div class="section-title">Provider Wallets</div>
+            <div class="grid">
+                <div class="balance-card bulksmslive">
+                    <div class="provider-name">BulkSMSLive</div>
+                    <div class="balance-value loading" id="bal-bulksmslive">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-bulksmslive">SMS Units</div>
+                </div>
+
+                <div class="balance-card pairgate">
+                    <div class="provider-name">Pairgate</div>
+                    <div class="balance-value loading" id="bal-pairgate">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-pairgate">Wallet (NGN)</div>
+                </div>
+
+                <div class="balance-card vtunaija">
+                    <div class="provider-name">Vtunaija</div>
+                    <div class="balance-value loading" id="bal-vtunaija">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-vtunaija">Wallet (NGN)</div>
+                </div>
+
+                <div class="balance-card wisepay">
+                    <div class="provider-name">WisePay</div>
+                    <div class="balance-value loading" id="bal-wisepay">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-wisepay">Wallet (NGN)</div>
+                </div>
+            </div>
+
+            <!-- Users Summary -->
+            <div class="section-title">Users Overview (Firebase)</div>
+            <div class="grid">
+                <div class="balance-card users-total">
+                    <div class="provider-name">Total Users Balance</div>
+                    <div class="balance-value loading" id="bal-users-total">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-users-total">Sum of all wallets</div>
+                </div>
+
+                <div class="balance-card richest">
+                    <div class="provider-name">Highest Balance</div>
+                    <div class="balance-value loading" id="bal-richest">
+                        <span class="spinner"></span> Loading…
+                    </div>
+                    <div class="balance-meta" id="meta-richest">—</div>
+                </div>
+            </div>
+
+            <div class="note">
+                Provider balances are fetched securely through the backend using the API keys stored in the Render environment variables.
+                Users total & richest user are calculated live from Firebase Realtime Database.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const backendDomain = "https://dnezerlinks-backend.onrender.com";
+        const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
+
+        // Firebase config (same as other admin pages)
+        const config = {
+            apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
+            authDomain: "dnezerlinks.firebaseapp.com",
+            databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
+            projectId: "dnezerlinks"
+        };
+        firebase.initializeApp(config);
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = '../login.html';
+                return;
+            }
+
+            try {
+                // 1. Verify admin status with backend
+                const idToken = await user.getIdToken(true);
+                const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.isAdmin) {
+                    alert("Access Denied: You do not possess the required administrator rights.");
+                    window.location.href = '../home.html';
+                    return;
+                }
+
+                // 2. Master-only check
+                if (user.uid !== MASTER_UID) {
+                    alert("This page is restricted to Master Admin only.");
+                    window.location.href = 'index.html';
+                    return;
+                }
+
+                // 3. Show the page
+                document.getElementById('loadingScreen').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+
+                // 4. Load everything
+                loadBalances();
+                loadUsersSummary();
+
+            } catch (error) {
+                console.error("Auth security gate failed:", error);
+                alert("Security connection validation dropped. Returning to safety.");
+                window.location.href = '../home.html';
+            }
+        });
+
+        async function loadBalances() {
+            const errorBanner = document.getElementById('errorBanner');
+            errorBanner.style.display = 'none';
+            errorBanner.textContent = '';
+
+            setLoading('bulksmslive');
+            setLoading('pairgate');
+            setLoading('vtunaija');
+            setLoading('wisepay');
+
+            document.getElementById('btnRefresh').disabled = true;
+
+            try {
+                const user = auth.currentUser;
+                if (!user) throw new Error("Not authenticated");
+
+                const idToken = await user.getIdToken(true);
+
+                await Promise.all([
+                    fetchVtunaijaBalance(idToken),
+                    fetchProviderBalance('bulksmslive', idToken),
+                    fetchProviderBalance('pairgate', idToken),
+                    fetchProviderBalance('wisepay', idToken)
+                ]);
+
+                document.getElementById('lastUpdated').textContent =
+                    "Updated: " + new Date().toLocaleTimeString();
+
+            } catch (err) {
+                console.error(err);
+                errorBanner.textContent = "Failed to load some balances: " + err.message;
+                errorBanner.style.display = 'block';
+            } finally {
+                document.getElementById('btnRefresh').disabled = false;
+            }
+        }
+
+        // Exact same pattern used on home.html
+        async function fetchVtunaijaBalance(idToken) {
+            const el = document.getElementById('bal-vtunaija');
+            try {
+                const response = await fetch(`${backendDomain}/api/admin/user`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                if (!response.ok) throw new Error("HTTP Status: " + response.status);
+
+                const data = await response.json();
+                const balance = data.balance || (data.user && data.user.balance) || "0.00";
+                el.className = 'balance-value';
+                el.innerText = "₦" + Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2 });
+            } catch (error) {
+                console.error("Vtunaija balance error:", error);
+                el.className = 'balance-value error';
+                el.innerText = "Error";
+            }
+        }
+
+        async function fetchProviderBalance(provider, idToken) {
+            const el = document.getElementById(`bal-${provider}`);
+            try {
+                const response = await fetch(`${backendDomain}/api/admin/balance/${provider}`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    }
+                });
+
+                if (!response.ok) throw new Error("HTTP " + response.status);
+
+                const data = await response.json();
+                const balance = data.balance ?? data.units ?? 0;
+
+                el.className = 'balance-value';
+                if (provider === 'bulksmslive') {
+                    el.innerText = Number(balance).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                } else {
+                    el.innerText = "₦" + Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                }
+            } catch (error) {
+                console.error(`${provider} balance error:`, error);
+                el.className = 'balance-value error';
+                el.innerText = "Error";
+            }
+        }
+
+        // ===== Users Summary (Total + Richest) =====
+        function loadUsersSummary() {
+            const totalEl = document.getElementById('bal-users-total');
+            const richestEl = document.getElementById('bal-richest');
+            const richestMeta = document.getElementById('meta-richest');
+
+            totalEl.className = 'balance-value loading';
+            totalEl.innerHTML = '<span class="spinner"></span> Loading…';
+            richestEl.className = 'balance-value loading';
+            richestEl.innerHTML = '<span class="spinner"></span> Loading…';
+            richestMeta.innerText = '—';
+
+            db.ref('users').once('value')
+                .then(snap => {
+                    let total = 0;
+                    let maxBalance = -1;
+                    let richestName = 'No users';
+                    let richestBalance = 0;
+
+                    snap.forEach(child => {
+                        const user = child.val() || {};
+                        const bal = parseFloat(user.balance || 0);
+
+                        total += bal;
+
+                        if (bal > maxBalance) {
+                            maxBalance = bal;
+                            richestBalance = bal;
+                            richestName = user.name || user.email || child.key || 'Unknown';
+                        }
+                    });
+
+                    // Total
+                    totalEl.className = 'balance-value';
+                    totalEl.innerText = "₦" + total.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    document.getElementById('meta-users-total').innerText = 
+                        `Across ${snap.numChildren()} users`;
+
+                    // Richest
+                    richestEl.className = 'balance-value';
+                    richestEl.innerText = "₦" + richestBalance.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    richestMeta.innerText = richestName;
+                })
+                .catch(err => {
+                    console.error("Users summary error:", err);
+                    totalEl.className = 'balance-value error';
+                    totalEl.innerText = "Error";
+                    richestEl.className = 'balance-value error';
+                    richestEl.innerText = "Error";
+                });
+        }
+
+        function setLoading(id) {
+            const el = document.getElementById(`bal-${id}`);
+            el.className = 'balance-value loading';
+            el.innerHTML = '<span class="spinner"></span> Loading…';
+        }
+    </script>
+</body>
+</html>

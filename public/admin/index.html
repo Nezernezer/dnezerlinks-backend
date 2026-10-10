@@ -18,6 +18,7 @@
         .btn-history { background: #607d8b; }
         .btn-acts { background: #7c3aed; color: white; }
         .btn-exit { background: #444; margin-top: 10px; }
+        .btn-balances { background: #00695c; color: white; }
     </style>
 </head>
 <body>
@@ -33,6 +34,7 @@
         <a href="adminroles.html" id="nav-roles" class="card btn-wallet" style="display: none;">Admin Privileges</a>
         <a href="audit.html" id="nav-audit" class="card btn-history" style="background: #e91e63; display: none;">Audit History</a>
         <button id="nav-acts" class="card btn-acts" style="display: none;" onclick="window.location.href='adminactivity.html'">Admin Acts</button>
+        <button id="nav-balances" class="card btn-balances" style="display: none;" onclick="window.location.href='balance.html'">Master balances</button>
         <a href="../home.html" class="card btn-exit">Exit Admin</a>
     </div>
 
@@ -64,6 +66,7 @@
                     document.getElementById('nav-roles').style.display = isMaster ? 'flex' : 'none';
                     document.getElementById('nav-audit').style.display = isMaster ? 'flex' : 'none';
                     document.getElementById('nav-acts').style.display = isMaster ? 'flex' : 'none';
+                    document.getElementById('nav-balances').style.display = isMaster ? 'flex' : 'none';
                 } else {
                     window.location.href = "../home.html";
                 }
