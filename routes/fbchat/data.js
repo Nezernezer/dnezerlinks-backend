@@ -9,43 +9,27 @@ let extractDuration = null;
 console.log('🔄 Loading plans.js ...');
 
 try {
-    // Try relative path first
     let plansModule;
     try {
         plansModule = require('../../public/data/plans');
     } catch (e) {
-        console.log('First path failed, trying absolute path...');
         plansModule = require(path.join(__dirname, '../../public/data/plans'));
     }
 
-    console.log('📦 Module loaded. Keys:', Object.keys(plansModule || {}));
+    console.log('📦 Module keys:', Object.keys(plansModule || {}));
 
-    // Support different export styles
-    if (plansModule.groupedPlans) {
-        groupedPlans = plansModule.groupedPlans;
-    } else if (plansModule.default && plansModule.default.groupedPlans) {
-        groupedPlans = plansModule.default.groupedPlans;
-    } else {
-        groupedPlans = plansModule;
-    }
-
-    extractDuration = plansModule.extractDuration || (plansModule.default && plansModule.default.extractDuration) || null;
+    groupedPlans = plansModule.groupedPlans || plansModule || {};
+    extractDuration = plansModule.extractDuration || null;
 
     console.log('✅ Plans loaded successfully');
-    console.log('📡 Networks found:', Object.keys(groupedPlans));
-
-    if (Object.keys(groupedPlans).length === 0) {
-        console.error('❌ groupedPlans is EMPTY after loading!');
-    }
+    console.log('📡 Networks:', Object.keys(groupedPlans));
 } catch (err) {
-    console.error('❌ CRITICAL: Failed to load plans.js');
-    console.error(err.message);
+    console.error('❌ Failed to load plans.js:', err.message);
     groupedPlans = {};
 }
 
 // Fallback extractDuration
 if (typeof extractDuration !== 'function') {
-    console.log('⚠️ Using fallback extractDuration function');
     extractDuration = function (name) {
         const matches = name.match(/\((\d+\s*Days?)\)/gi);
         if (matches && matches.length > 0) {
@@ -115,7 +99,7 @@ async function handleDataFlow(psid, text, session) {
     try {
         const input = text.trim();
 
-        // ===== STEP 1: Phone =====
+        // STEP 1: Phone
         if (session.step === 'DATA_PHONE') {
             let phone = input.replace(/\D/g, '');
             if (phone.length < 10 || phone.length > 14) {
@@ -137,7 +121,7 @@ async function handleDataFlow(psid, text, session) {
             };
         }
 
-        // ===== STEP 2: Network → show durations =====
+        // STEP 2: Network → Durations
         if (session.step === 'DATA_NETWORK') {
             const key = input.toLowerCase();
             const network = NETWORK_MAP[key] || NETWORK_MAP[input];
@@ -148,21 +132,17 @@ async function handleDataFlow(psid, text, session) {
                 };
             }
 
-            console.log('🔍 Selected network:', network);
-            console.log('📡 Available networks in memory:', Object.keys(groupedPlans));
-
             if (!groupedPlans || !groupedPlans[network]) {
-                console.error('❌ No plans found for network:', network);
+                console.error('No plans found for network:', network);
                 clearDataSession(psid);
                 return {
-                    text: '❌ Data plans are currently unavailable for ' + network.toUpperCase() + '.\n\nPlease try again later or contact support.\n\nType "menu" to go back.'
+                    text: '❌ Data plans are currently unavailable. Please try again later or contact support.\n\nType "menu" to go back.'
                 };
             }
 
             session.data.network = network;
             session.step = 'DATA_DURATION';
 
-            // Collect unique durations
             const durationSet = {};
             Object.values(groupedPlans[network]).forEach(plans => {
                 plans.forEach(plan => {
@@ -190,7 +170,7 @@ async function handleDataFlow(psid, text, session) {
             return { text: msg };
         }
 
-        // ===== STEP 3: Duration → show plans =====
+        // STEP 3: Duration → Plans
         if (session.step === 'DATA_DURATION') {
             const durations = session.data.durations || [];
             const idx = parseInt(input, 10) - 1;
@@ -209,7 +189,6 @@ async function handleDataFlow(psid, text, session) {
             session.data.duration = selectedDuration;
             session.step = 'DATA_PLAN';
 
-            // Collect all plans that match this duration
             let matching = [];
             Object.values(groupedPlans[session.data.network]).forEach(plans => {
                 plans.forEach(plan => {
@@ -219,7 +198,6 @@ async function handleDataFlow(psid, text, session) {
                 });
             });
 
-            // Sort by price
             matching.sort((a, b) => a.price - b.price);
 
             if (matching.length === 0) {
@@ -240,7 +218,7 @@ async function handleDataFlow(psid, text, session) {
             return { text: msg };
         }
 
-        // ===== STEP 4: Plan selected =====
+        // STEP 4: Plan selected
         if (session.step === 'DATA_PLAN') {
             const plans = session.data.plans || [];
             const idx = parseInt(input, 10) - 1;
