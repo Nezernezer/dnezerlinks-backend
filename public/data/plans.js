@@ -264,11 +264,11 @@ const processPlans = (data) => {
     return processed;
 };
 
-// Make it available globally for the browser
+// Global for browser
 window.groupedPlans = processPlans(rawPlans);
 window.extractDuration = extractDuration;
 
-// Keep Node.js compatibility
+// Node.js support
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         groupedPlans: window.groupedPlans,

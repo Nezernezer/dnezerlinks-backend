@@ -104,11 +104,11 @@
     const auth = firebase.auth();
     const networkMap = { "mtn": "1", "glo": "2", "9mobile": "3", "airtel": "4" };
 
-    window.onload = () => {
+    window.onload = function() {
         loadRecentPhones();
-        const pending = sessionStorage.getItem('pending_data_order');
+        var pending = sessionStorage.getItem('pending_data_order');
         if (pending) {
-            const order = JSON.parse(pending);
+            var order = JSON.parse(pending);
             document.getElementById('phone').value = order.phone;
             document.getElementById('network').value = order.network;
             updateDataTypes();
@@ -116,43 +116,44 @@
             updateDataPlans();
             document.getElementById('variation').value = order.variation;
             sessionStorage.removeItem('pending_data_order');
-            setTimeout(() => { document.getElementById('pinModal').style.display = 'flex'; }, 800);
+            setTimeout(function() { document.getElementById('pinModal').style.display = 'flex'; }, 800);
         }
     };
 
     function loadRecentPhones() {
-        const phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
-        document.getElementById('recentNumbers').innerHTML = phones.map(p => `<option value="${p}">`).join('');
+        var phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
+        document.getElementById('recentNumbers').innerHTML = phones.map(function(p) { return '<option value="' + p + '">'; }).join('');
     }
 
     function saveRecentPhone(phone) {
-        let phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
+        var phones = JSON.parse(localStorage.getItem('recent_phones') || '[]');
         if (!phones.includes(phone)) {
-            phones = [phone, ...phones].slice(0, 5);
+            phones = [phone].concat(phones).slice(0, 5);
             localStorage.setItem('recent_phones', JSON.stringify(phones));
             loadRecentPhones();
         }
     }
 
-    function showMessage(msg, isError = true) {
-        const msgDiv = document.getElementById('statusMsg');
+    function showMessage(msg, isError) {
+        if (isError === undefined) isError = true;
+        var msgDiv = document.getElementById('statusMsg');
         msgDiv.textContent = msg;
         msgDiv.style.display = 'block';
         msgDiv.className = isError ? 'error-msg' : 'success-msg';
     }
 
     function autoLookupNetwork() {
-        let phone = document.getElementById('phone').value.trim();
+        var phone = document.getElementById('phone').value.trim();
         if (phone.length >= 4) {
-            const prefix = phone.substring(0, 4);
-            const networks = {
+            var prefix = phone.substring(0, 4);
+            var networks = {
                 'mtn': ['0803', '0806', '0810', '0813', '0814', '0816', '0703', '0706', '0903', '0906', '0913', '0916', '0702', '0704', '0707'],
                 'glo': ['0805', '0807', '0811', '0815', '0705', '0905', '0915'],
                 'airtel': ['0802', '0808', '0812', '0701', '0708', '0901', '0902', '0904', '0907', '0912', '0911'],
                 '9mobile': ['0809', '0817', '0818', '0908', '0909']
             };
-            for (const [name, prefixes] of Object.entries(networks)) {
-                if (prefixes.includes(prefix)) {
+            for (var name in networks) {
+                if (networks[name].includes(prefix)) {
                     document.getElementById('network').value = name;
                     updateDataTypes();
                     break;
@@ -162,26 +163,25 @@
     }
 
     function updateDataTypes() {
-        const network = document.getElementById('network').value;
-        const dataTypeSelect = document.getElementById('dataType');
+        var network = document.getElementById('network').value;
+        var dataTypeSelect = document.getElementById('dataType');
         dataTypeSelect.innerHTML = '<option value="">Choose Data Type</option>';
 
         if (network && window.groupedPlans && window.groupedPlans[network]) {
-            const durations = new Set();
+            var durations = {};
 
-            Object.values(window.groupedPlans[network]).forEach(plans => {
-                plans.forEach(plan => {
-                    durations.add(window.extractDuration(plan.name));
+            Object.values(window.groupedPlans[network]).forEach(function(plans) {
+                plans.forEach(function(plan) {
+                    var dur = window.extractDuration(plan.name);
+                    durations[dur] = true;
                 });
             });
 
-            const sorted = Array.from(durations).sort((a, b) => {
-                const numA = parseInt(a) || 999;
-                const numB = parseInt(b) || 999;
-                return numA - numB;
+            var sorted = Object.keys(durations).sort(function(a, b) {
+                return (parseInt(a) || 999) - (parseInt(b) || 999);
             });
 
-            sorted.forEach(d => {
+            sorted.forEach(function(d) {
                 dataTypeSelect.add(new Option(d, d));
             });
         }
@@ -189,55 +189,66 @@
     }
 
     function updateDataPlans() {
-        const network = document.getElementById('network').value;
-        const duration = document.getElementById('dataType').value;
-        const variationSelect = document.getElementById('variation');
+        var network = document.getElementById('network').value;
+        var duration = document.getElementById('dataType').value;
+        var variationSelect = document.getElementById('variation');
         variationSelect.innerHTML = '<option value="">Choose Plan</option>';
 
         if (network && duration && window.groupedPlans && window.groupedPlans[network]) {
-            let matching = [];
+            var matching = [];
 
-            Object.values(window.groupedPlans[network]).forEach(plans => {
-                plans.forEach(plan => {
+            Object.values(window.groupedPlans[network]).forEach(function(plans) {
+                plans.forEach(function(plan) {
                     if (window.extractDuration(plan.name) === duration) {
                         matching.push(plan);
                     }
                 });
             });
 
-            matching.sort((a, b) => a.price - b.price);
+            // Sort by price
+            matching.sort(function(a, b) { return a.price - b.price; });
 
-            matching.forEach(plan => {
-                const cleanName = plan.name.split(' - ₦')[0];
-                const displayName = `\( {cleanName} - ₦ \){plan.price}`;
+            matching.forEach(function(plan) {
+                // SAFE string construction (no template literals)
+                var cleanName = plan.name.split(' - ₦')[0];
+                var displayName = cleanName + ' - ₦' + plan.price;
                 variationSelect.add(new Option(displayName, JSON.stringify(plan)));
             });
         }
     }
 
     async function validateUserAndOpenModal() {
-        const btn = document.getElementById('buyBtn');
-        const user = auth.currentUser;
-        const phone = document.getElementById('phone').value;
-        const network = document.getElementById('network').value;
-        const variation = document.getElementById('variation').value;
+        var btn = document.getElementById('buyBtn');
+        var user = auth.currentUser;
+        var phone = document.getElementById('phone').value;
+        var network = document.getElementById('network').value;
+        var variation = document.getElementById('variation').value;
 
         if (!network || !variation || phone.length < 11) return showMessage("Please fill all fields.");
 
         btn.disabled = true;
         btn.textContent = "Checking...";
         try {
-            const snap = await database.ref('users/' + user.uid).once('value');
-            const data = snap.val() || {};
+            var snap = await database.ref('users/' + user.uid).once('value');
+            var data = snap.val() || {};
 
             if (!data.transaction_pin && !data.pin) {
-                sessionStorage.setItem('pending_data_order', JSON.stringify({ phone, network, dataType: document.getElementById('dataType').value, variation }));
+                sessionStorage.setItem('pending_data_order', JSON.stringify({
+                    phone: phone,
+                    network: network,
+                    dataType: document.getElementById('dataType').value,
+                    variation: variation
+                }));
                 document.getElementById('customPromptModal').style.display = 'flex';
                 return;
             }
             document.getElementById('pinModal').style.display = 'flex';
-        } catch (e) { showMessage("Error validating."); }
-        finally { btn.disabled = false; btn.textContent = "Subscribe Now"; }
+        } catch (e) {
+            showMessage("Error validating.");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Subscribe Now";
+        }
     }
 
     function redirectToPinSetup() {
@@ -249,20 +260,23 @@
     }
 
     function togglePinVisibility() {
-        const pinInput = document.getElementById('txnPin');
-        const btn = document.getElementById('toggleBtn');
+        var pinInput = document.getElementById('txnPin');
+        var btn = document.getElementById('toggleBtn');
         pinInput.type = (pinInput.type === "password") ? "text" : "password";
         btn.textContent = (pinInput.type === "password") ? "Show PIN" : "Hide PIN";
     }
 
     async function verifyAndPay() {
-        const btn = document.getElementById('confirmBtn');
-        const pin = document.getElementById('txnPin').value;
-        const user = auth.currentUser;
-        const pinError = document.getElementById('pinError');
-        const spinner = document.getElementById('processingSpinner');
+        var btn = document.getElementById('confirmBtn');
+        var pin = document.getElementById('txnPin').value;
+        var user = auth.currentUser;
+        var pinError = document.getElementById('pinError');
+        var spinner = document.getElementById('processingSpinner');
 
-        if (pin.length < 4) { pinError.textContent = "Enter 4 digits"; return; }
+        if (pin.length < 4) {
+            pinError.textContent = "Enter 4 digits";
+            return;
+        }
 
         btn.disabled = true;
         btn.style.display = 'none';
@@ -270,8 +284,8 @@
         pinError.textContent = "";
 
         try {
-            const snap = await database.ref('users/' + user.uid).once('value');
-            const userData = snap.val() || {};
+            var snap = await database.ref('users/' + user.uid).once('value');
+            var userData = snap.val() || {};
             if (pin === String(userData.transaction_pin || userData.pin || '')) {
                 executePurchase(userData.balance, user.uid, JSON.parse(document.getElementById('variation').value));
             } else {
@@ -289,9 +303,9 @@
     }
 
     async function executePurchase(balance, uid, plan) {
-        const btn = document.getElementById('confirmBtn');
-        const phone = document.getElementById("phone").value;
-        const spinner = document.getElementById('processingSpinner');
+        var btn = document.getElementById('confirmBtn');
+        var phone = document.getElementById("phone").value;
+        var spinner = document.getElementById('processingSpinner');
 
         if (balance < plan.price) {
             showMessage("Insufficient Balance");
@@ -299,18 +313,25 @@
             return;
         }
         try {
-            const res = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
+            var res = await fetch("https://dnezerlinks-backend.onrender.com/api/data/buy", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ pin: document.getElementById("txnPin").value, uid, phone, dataPlan: plan.id, networkID: networkMap[document.getElementById("network").value], amount: plan.price })
+                body: JSON.stringify({
+                    pin: document.getElementById("txnPin").value,
+                    uid: uid,
+                    phone: phone,
+                    dataPlan: plan.id,
+                    networkID: networkMap[document.getElementById("network").value],
+                    amount: plan.price
+                })
             });
-            const data = await res.json();
+            var data = await res.json();
             if (data.success) {
                 saveRecentPhone(phone);
                 closePinModal();
                 showMessage("Success!", false);
                 document.getElementById('phone').value = '';
-                setTimeout(() => window.location.href = "../home.html", 2000);
+                setTimeout(function() { window.location.href = "../home.html"; }, 2000);
             } else {
                 throw new Error(data.error || "Failed");
             }
@@ -332,7 +353,9 @@
         document.getElementById('processingSpinner').style.display = 'none';
     }
 
-    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
+    auth.onAuthStateChanged(function(user) {
+        if (!user) window.location.href = "../login.html";
+    });
 </script>
 </body>
 </html>
