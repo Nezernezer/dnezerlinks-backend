@@ -233,8 +233,7 @@ const rawPlans = {
 
 const addProfit = (price) => Math.ceil(price + (price * 0.11));
 
-const extractDuration = (name) => {
-    // Prefer the LAST occurrence of (X Day / X Days)
+function extractDuration(name) {
     const matches = name.match(/\((\d+\s*Days?)\)/gi);
     if (matches && matches.length > 0) {
         return matches[matches.length - 1]
@@ -242,16 +241,14 @@ const extractDuration = (name) => {
             .replace(/\s+/g, ' ')
             .trim();
     }
-
     if (/weekly/i.test(name)) return '7 Days';
     if (/monthly/i.test(name)) return '30 Days';
     if (/2-Month/i.test(name)) return '60 Days';
     if (/3-Month/i.test(name)) return '90 Days';
     if (/365 Days|1 Year/i.test(name)) return '365 Days';
     if (/120 Days/i.test(name)) return '120 Days';
-
     return 'Other';
-};
+}
 
 const processPlans = (data) => {
     let processed = {};
@@ -267,9 +264,17 @@ const processPlans = (data) => {
     return processed;
 };
 
-const groupedPlans = processPlans(rawPlans);
+// Make it available globally for the browser
+window.groupedPlans = processPlans(rawPlans);
+window.extractDuration = extractDuration;
 
-// Safe for both browser and Node
+// Keep Node.js compatibility
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { groupedPlans, rawPlans, addProfit, processPlans, extractDuration };
+    module.exports = {
+        groupedPlans: window.groupedPlans,
+        rawPlans,
+        addProfit,
+        processPlans,
+        extractDuration
+    };
 }

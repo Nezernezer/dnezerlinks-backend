@@ -161,34 +161,17 @@
         }
     }
 
-    function extractDuration(name) {
-        const matches = name.match(/\((\d+\s*Days?)\)/gi);
-        if (matches && matches.length > 0) {
-            return matches[matches.length - 1]
-                .replace(/[()]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-        if (/weekly/i.test(name)) return '7 Days';
-        if (/monthly/i.test(name)) return '30 Days';
-        if (/2-Month/i.test(name)) return '60 Days';
-        if (/3-Month/i.test(name)) return '90 Days';
-        if (/365 Days|1 Year/i.test(name)) return '365 Days';
-        if (/120 Days/i.test(name)) return '120 Days';
-        return 'Other';
-    }
-
     function updateDataTypes() {
         const network = document.getElementById('network').value;
         const dataTypeSelect = document.getElementById('dataType');
         dataTypeSelect.innerHTML = '<option value="">Choose Data Type</option>';
 
-        if (network && typeof groupedPlans !== 'undefined' && groupedPlans[network]) {
+        if (network && window.groupedPlans && window.groupedPlans[network]) {
             const durations = new Set();
 
-            Object.values(groupedPlans[network]).forEach(plans => {
+            Object.values(window.groupedPlans[network]).forEach(plans => {
                 plans.forEach(plan => {
-                    durations.add(extractDuration(plan.name));
+                    durations.add(window.extractDuration(plan.name));
                 });
             });
 
@@ -211,12 +194,12 @@
         const variationSelect = document.getElementById('variation');
         variationSelect.innerHTML = '<option value="">Choose Plan</option>';
 
-        if (network && duration && typeof groupedPlans !== 'undefined' && groupedPlans[network]) {
+        if (network && duration && window.groupedPlans && window.groupedPlans[network]) {
             let matching = [];
 
-            Object.values(groupedPlans[network]).forEach(plans => {
+            Object.values(window.groupedPlans[network]).forEach(plans => {
                 plans.forEach(plan => {
-                    if (extractDuration(plan.name) === duration) {
+                    if (window.extractDuration(plan.name) === duration) {
                         matching.push(plan);
                     }
                 });
