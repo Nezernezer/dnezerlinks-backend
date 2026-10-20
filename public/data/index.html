@@ -12,8 +12,10 @@
         .card { width: 100%; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
         h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
         #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
-        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }                       .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }                                                                                                            input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
+        .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
+        input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
         button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
         #pinModal, #customPromptModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
@@ -137,7 +139,8 @@
     function showMessage(msg, isError = true) {
         const msgDiv = document.getElementById('statusMsg');
         msgDiv.textContent = msg;
-        msgDiv.style.display = 'block';                                                                      msgDiv.className = isError ? 'error-msg' : 'success-msg';
+        msgDiv.style.display = 'block';
+        msgDiv.className = isError ? 'error-msg' : 'success-msg';
     }
 
     function autoLookupNetwork() {
@@ -154,27 +157,79 @@
                 if (prefixes.includes(prefix)) {
                     document.getElementById('network').value = name;
                     updateDataTypes();
-                    break;                                                                                           }                                                                                                }
+                    break;
+                }
+            }
         }
-    }                                                                                                
+    }
+
+    function extractDuration(name) {
+        const match = name.match(/\((\d+\s*Days?)\)/i);
+        if (match) return match[1].replace(/\s+/g, ' ').trim();
+
+        if (/weekly/i.test(name)) return '7 Days';
+        if (/monthly/i.test(name)) return '30 Days';
+        if (/2-Month|60 Days/i.test(name)) return '60 Days';
+        if (/3-Month|90 Days/i.test(name)) return '90 Days';
+        if (/365 Days|1 Year|1TB \(365/i.test(name)) return '365 Days';
+        if (/120 Days/i.test(name)) return '120 Days';
+
+        return 'Other';
+    }
+
     function updateDataTypes() {
         const network = document.getElementById('network').value;
         const dataTypeSelect = document.getElementById('dataType');
         dataTypeSelect.innerHTML = '<option value="">Choose Data Type</option>';
+
         if (network && groupedPlans[network]) {
-            Object.keys(groupedPlans[network]).forEach(group => { dataTypeSelect.add(new Option(group, group)); });
+            const durations = new Set();
+
+            Object.values(groupedPlans[network]).forEach(plans => {
+                plans.forEach(plan => {
+                    durations.add(extractDuration(plan.name));
+                });
+            });
+
+            // Sort durations: 1 Day, 2 Days, 3 Days, 7 Days, 10 Days... 
+            const sorted = Array.from(durations).sort((a, b) => {
+                const numA = parseInt(a) || 999;
+                const numB = parseInt(b) || 999;
+                return numA - numB;
+            });
+
+            sorted.forEach(d => {
+                dataTypeSelect.add(new Option(d, d));
+            });
         }
         updateDataPlans();
     }
 
     function updateDataPlans() {
         const network = document.getElementById('network').value;
-        const dataType = document.getElementById('dataType').value;
+        const duration = document.getElementById('dataType').value;
         const variationSelect = document.getElementById('variation');
         variationSelect.innerHTML = '<option value="">Choose Plan</option>';
-        if (network && dataType && groupedPlans[network] && groupedPlans[network][dataType]) {                   groupedPlans[network][dataType].forEach(plan => {                                                        const cleanName = plan.name.split(' - ₦')[0];
-                const displayName = `${cleanName} - ₦${plan.price}`;
-                variationSelect.add(new Option(displayName, JSON.stringify(plan)));                              });
+
+        if (network && duration && groupedPlans[network]) {
+            let matching = [];
+
+            Object.values(groupedPlans[network]).forEach(plans => {
+                plans.forEach(plan => {
+                    if (extractDuration(plan.name) === duration) {
+                        matching.push(plan);
+                    }
+                });
+            });
+
+            // Sort by price (lowest first)
+            matching.sort((a, b) => a.price - b.price);
+
+            matching.forEach(plan => {
+                const cleanName = plan.name.split(' - ₦')[0];
+                const displayName = `\( {cleanName} - ₦ \){plan.price}`;
+                variationSelect.add(new Option(displayName, JSON.stringify(plan)));
+            });
         }
     }
 
@@ -192,13 +247,14 @@
         try {
             const snap = await database.ref('users/' + user.uid).once('value');
             const data = snap.val() || {};
-            
+
             if (!data.transaction_pin && !data.pin) {
                 sessionStorage.setItem('pending_data_order', JSON.stringify({ phone, network, dataType: document.getElementById('dataType').value, variation }));
                 document.getElementById('customPromptModal').style.display = 'flex';
                 return;
             }
-            document.getElementById('pinModal').style.display = 'flex';                                      } catch (e) { showMessage("Error validating."); }
+            document.getElementById('pinModal').style.display = 'flex';
+        } catch (e) { showMessage("Error validating."); }
         finally { btn.disabled = false; btn.textContent = "Subscribe Now"; }
     }
 
@@ -249,7 +305,8 @@
             spinner.style.display = 'none';
         }
     }
-                                                                                                         async function executePurchase(balance, uid, plan) {
+
+    async function executePurchase(balance, uid, plan) {
         const btn = document.getElementById('confirmBtn');
         const phone = document.getElementById("phone").value;
         const spinner = document.getElementById('processingSpinner');
@@ -268,21 +325,32 @@
             const data = await res.json();
             if (data.success) {
                 saveRecentPhone(phone);
-                closePinModal();                                                                                     showMessage("Success!", false);
-                document.getElementById('phone').value = '';                                                         setTimeout(() => window.location.href = "../home.html", 2000);
-            } else {                                                                                                 throw new Error(data.error || "Failed");
+                closePinModal();
+                showMessage("Success!", false);
+                document.getElementById('phone').value = '';
+                setTimeout(() => window.location.href = "../home.html", 2000);
+            } else {
+                throw new Error(data.error || "Failed");
             }
-        } catch (e) {                                                                                            showMessage(e.message || "Error processing transaction.");
+        } catch (e) {
+            showMessage(e.message || "Error processing transaction.");
             closePinModal();
         } finally {
-            btn.disabled = false;                                                                                btn.style.display = 'inline-block';
-            spinner.style.display = 'none';                                                                  }
-    }                                                                                                
-    function closePinModal() {                                                                               document.getElementById('pinModal').style.display = 'none';
-        document.getElementById('txnPin').value = '';                                                        document.getElementById('pinError').textContent = '';
+            btn.disabled = false;
+            btn.style.display = 'inline-block';
+            spinner.style.display = 'none';
+        }
+    }
+
+    function closePinModal() {
+        document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('txnPin').value = '';
+        document.getElementById('pinError').textContent = '';
         document.getElementById('confirmBtn').style.display = 'inline-block';
-        document.getElementById('processingSpinner').style.display = 'none';                             }
-                                                                                                         auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
+        document.getElementById('processingSpinner').style.display = 'none';
+    }
+
+    auth.onAuthStateChanged(user => { if (!user) window.location.href = "../login.html"; });
 </script>
 </body>
 </html>

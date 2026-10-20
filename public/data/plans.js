@@ -1,4 +1,3 @@
-
 const rawPlans = {
     "mtn": {
         "Special Data": [
@@ -237,6 +236,20 @@ const rawPlans = {
 // This function processes the plans to include the final price
 const addProfit = (price) => Math.ceil(price + (price * 0.11));
 
+const extractDuration = (name) => {
+    const match = name.match(/\((\d+\s*Days?)\)/i);
+    if (match) return match[1].replace(/\s+/g, ' ').trim();
+
+    if (/weekly/i.test(name)) return '7 Days';
+    if (/monthly/i.test(name)) return '30 Days';
+    if (/2-Month|60 Days/i.test(name)) return '60 Days';
+    if (/3-Month|90 Days/i.test(name)) return '90 Days';
+    if (/365 Days|1 Year|1TB \(365/i.test(name)) return '365 Days';
+    if (/120 Days/i.test(name)) return '120 Days';
+
+    return 'Other';
+};
+
 const processPlans = (data) => {
     let processed = {};
     for (let network in data) {
@@ -253,4 +266,4 @@ const processPlans = (data) => {
 
 const groupedPlans = processPlans(rawPlans);
 
-module.exports = { groupedPlans, rawPlans, addProfit, processPlans };
+module.exports = { groupedPlans, rawPlans, addProfit, processPlans, extractDuration };
