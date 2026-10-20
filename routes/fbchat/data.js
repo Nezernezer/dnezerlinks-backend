@@ -4,14 +4,18 @@ const axios = require('axios');
 
 // ---- SAFE LOAD OF PLANS ----
 let groupedPlans = {};
+let extractDuration = null;
+
 try {
     const plansModule = require('../../public/data/plans');
-    groupedPlans = plansModule.groupedPlans || plansModule || {};
+    groupedPlans = plansModule.groupedPlans || {};
+    extractDuration = plansModule.extractDuration;
     console.log('✅ Plans loaded successfully. Networks:', Object.keys(groupedPlans));
 } catch (err1) {
     try {
         const plansModule = require(path.join(__dirname, '../../public/data/plans'));
-        groupedPlans = plansModule.groupedPlans || plansModule || {};
+        groupedPlans = plansModule.groupedPlans || {};
+        extractDuration = plansModule.extractDuration;
         console.log('✅ Plans loaded via fallback path. Networks:', Object.keys(groupedPlans));
     } catch (err2) {
         console.error('❌ CRITICAL: Could not load plans.js');
@@ -19,6 +23,26 @@ try {
         console.error('Error 2:', err2.message);
         groupedPlans = {};
     }
+}
+
+// Fallback extractDuration (in case plans.js doesn't export it)
+if (typeof extractDuration !== 'function') {
+    extractDuration = function (name) {
+        const matches = name.match(/\((\d+\s*Days?)\)/gi);
+        if (matches && matches.length > 0) {
+            return matches[matches.length - 1]
+                .replace(/[()]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        if (/weekly/i.test(name)) return '7 Days';
+        if (/monthly/i.test(name)) return '30 Days';
+        if (/2-Month/i.test(name)) return '60 Days';
+        if (/3-Month/i.test(name)) return '90 Days';
+        if (/365 Days|1 Year/i.test(name)) return '365 Days';
+        if (/120 Days/i.test(name)) return '120 Days';
+        return 'Other';
+    };
 }
 
 const dataSessions = {};
@@ -72,6 +96,7 @@ async function handleDataFlow(psid, text, session) {
     try {
         const input = text.trim();
 
+        // ===== STEP 1: Phone =====
         if (session.step === 'DATA_PHONE') {
             let phone = input.replace(/\D/g, '');
             if (phone.length < 10 || phone.length > 14) {
@@ -93,6 +118,7 @@ async function handleDataFlow(psid, text, session) {
             };
         }
 
+        // ===== STEP 2: Network → show durations =====
         if (session.step === 'DATA_NETWORK') {
             const key = input.toLowerCase();
             const network = NETWORK_MAP[key] || NETWORK_MAP[input];
@@ -112,64 +138,88 @@ async function handleDataFlow(psid, text, session) {
             }
 
             session.data.network = network;
-            session.step = 'DATA_TYPE';
+            session.step = 'DATA_DURATION';
 
-            const categories = Object.keys(groupedPlans[network]);
-            if (categories.length === 0) {
+            // Collect unique durations
+            const durationSet = {};
+            Object.values(groupedPlans[network]).forEach(plans => {
+                plans.forEach(plan => {
+                    const dur = extractDuration(plan.name);
+                    durationSet[dur] = true;
+                });
+            });
+
+            const durations = Object.keys(durationSet).sort((a, b) => {
+                return (parseInt(a) || 999) - (parseInt(b) || 999);
+            });
+
+            if (durations.length === 0) {
                 clearDataSession(psid);
                 return { text: '❌ No data plans available for this network right now.' };
             }
 
-            let msg = 'Network: ' + network.toUpperCase() + '\n\nSelect Data Type:\n\n';
-            categories.forEach(function (cat, i) {
-                msg += (i + 1) + '. ' + cat + '\n';
+            let msg = 'Network: ' + network.toUpperCase() + '\n\nSelect Duration:\n\n';
+            durations.forEach((d, i) => {
+                msg += (i + 1) + '. ' + d + '\n';
             });
-            msg += '\nReply with the number of the data type.';
+            msg += '\nReply with the number of the duration.';
 
-            session.data.categories = categories;
+            session.data.durations = durations;
             return { text: msg };
         }
 
-        if (session.step === 'DATA_TYPE') {
-            const categories = session.data.categories || [];
+        // ===== STEP 3: Duration → show plans =====
+        if (session.step === 'DATA_DURATION') {
+            const durations = session.data.durations || [];
             const idx = parseInt(input, 10) - 1;
 
-            let selectedCategory = null;
-            if (!isNaN(idx) && idx >= 0 && idx < categories.length) {
-                selectedCategory = categories[idx];
+            let selectedDuration = null;
+            if (!isNaN(idx) && idx >= 0 && idx < durations.length) {
+                selectedDuration = durations[idx];
             } else {
-                selectedCategory = categories.find(function (c) {
-                    return c.toLowerCase() === input.toLowerCase();
-                });
+                selectedDuration = durations.find(d => d.toLowerCase() === input.toLowerCase());
             }
 
-            if (!selectedCategory) {
+            if (!selectedDuration) {
                 return { text: '❌ Invalid selection. Please reply with a valid number from the list:' };
             }
 
-            session.data.dataType = selectedCategory;
+            session.data.duration = selectedDuration;
             session.step = 'DATA_PLAN';
 
-            const plans = (groupedPlans[session.data.network] &&
-                           groupedPlans[session.data.network][selectedCategory]) || [];
+            // Collect all plans that match this duration (across all categories)
+            let matching = [];
+            Object.values(groupedPlans[session.data.network]).forEach(plans => {
+                plans.forEach(plan => {
+                    if (extractDuration(plan.name) === selectedDuration) {
+                        matching.push(plan);
+                    }
+                });
+            });
 
-            if (plans.length === 0) {
+            // Sort by price
+            matching.sort((a, b) => a.price - b.price);
+
+            if (matching.length === 0) {
                 clearDataSession(psid);
-                return { text: '❌ No plans found in this category.' };
+                return { text: '❌ No plans found for this duration.' };
             }
 
-            let msg = 'Data Type: ' + selectedCategory + '\n\nSelect Plan:\n\n';
-            plans.forEach(function (plan, i) {
-                var cleanName = (plan.name || '').split(' - ₦')[0].trim();
-                var finalPrice = Number(plan.price).toLocaleString();
-                msg += (i + 1) + '. ' + cleanName + ' - ₦' + finalPrice + '\n';
+            let msg = 'Duration: ' + selectedDuration + '\n\nSelect Plan:\n\n';
+            matching.forEach((plan, i) => {
+                const cleanName = (plan.name || '').split(' - ₦')[0].trim();
+                const category = plan.category || '';
+                const finalPrice = Number(plan.price).toLocaleString();
+                // Format: 1.5GB (3 Days) Corporate - ₦1,620
+                msg += (i + 1) + '. ' + cleanName + ' ' + category + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the plan.';
 
-            session.data.plans = plans;
+            session.data.plans = matching;
             return { text: msg };
         }
 
+        // ===== STEP 4: Plan selected =====
         if (session.step === 'DATA_PLAN') {
             const plans = session.data.plans || [];
             const idx = parseInt(input, 10) - 1;
@@ -180,6 +230,7 @@ async function handleDataFlow(psid, text, session) {
 
             const selectedPlan = plans[idx];
             const cleanPlanName = (selectedPlan.name || '').split(' - ₦')[0].trim();
+            const category = selectedPlan.category || '';
 
             return {
                 type: 'READY_FOR_PIN',
@@ -190,7 +241,7 @@ async function handleDataFlow(psid, text, session) {
                     networkID: NETWORK_ID_MAP[session.data.network],
                     planId: selectedPlan.id,
                     amount: selectedPlan.price,
-                    planName: cleanPlanName
+                    planName: cleanPlanName + (category ? ' ' + category : '')
                 }
             };
         }
