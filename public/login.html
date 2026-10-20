@@ -8,10 +8,31 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --main: #0d47a1; --warn: #f57c00; }
+        :root {
+            --main: #0d47a1;
+            --main-dark: #002171;
+            --main-light: #5472d3;
+            --main-soft: #e3f2fd;
+            --warn: #f57c00;
+            --warn-light: #ffe0b2;
+            --success: #2e7d32;
+            --error: #c62828;
+            --surface: #ffffff;
+            --bg: #e8eef7;
+            --text: #1a237e;
+            --muted: #5c6bc0;
+            --border: #bbdefb;
+            --shadow: 0 12px 40px rgba(13, 71, 161, 0.15);
+            --shadow-soft: 0 4px 16px rgba(13, 71, 161, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #f0f2f5;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(160deg, #e3f2fd 0%, #f0f4ff 40%, #e8eef7 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -19,13 +40,13 @@
             min-height: 100vh;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            color: var(--text);
         }
 
         /* Persistent Top Brand Header Banner */
         .top-banner {
             width: 100%;
-            background: var(--main);
+            background: linear-gradient(135deg, var(--main) 0%, var(--main-dark) 50%, #1565c0 100%);
             color: white;
             padding: 18px 15px;
             text-align: center;
@@ -33,8 +54,18 @@
             font-weight: 800;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            box-sizing: border-box;
+            box-shadow: 0 4px 20px rgba(13, 71, 161, 0.35);
+            position: relative;
+            overflow: hidden;
+        }
+        .top-banner::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--warn), #ffb74d, var(--warn));
         }
 
         .auth-wrapper-container {
@@ -44,27 +75,51 @@
             justify-content: center;
             width: 100%;
             padding: 20px 15px;
-            box-sizing: border-box;
         }
 
         .card {
-            background: #fff;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            background: var(--surface);
+            padding: 28px 25px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
             width: 100%;
             max-width: 380px;
-            box-sizing: border-box;
             z-index: 10;
+            border: 1px solid rgba(13, 71, 161, 0.08);
+            position: relative;
+            overflow: hidden;
         }
-        h2 { color: var(--main); text-align: center; margin-top: 0; margin-bottom: 5px; }
-        h3 { color: #555; text-align: center; margin: 0 0 5px 0; font-size: 18px; }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--main), var(--main-light), var(--warn));
+        }
+
+        h2 {
+            color: var(--main);
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+        h3 {
+            color: var(--muted);
+            text-align: center;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
 
         .status-msg {
-            height: 45px; /* Expanded slightly for dynamic structural mobile padding balance */
+            height: 45px;
             text-align: center;
             font-size: 12px;
-            color: #666;
+            color: var(--muted);
             margin-bottom: 15px;
             font-weight: 500;
             display: flex;
@@ -72,55 +127,159 @@
             justify-content: center;
             padding: 0 5px;
             transition: color 0.3s ease;
+            background: linear-gradient(90deg, transparent, var(--main-soft), transparent);
+            border-radius: 8px;
         }
         .status-msg.error-active {
-            color: #c62828 !important;
+            color: var(--error) !important;
             font-weight: 700;
+            background: linear-gradient(90deg, transparent, #ffebee, transparent);
         }
-        .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
+        .status-msg::after {
+            content: '|';
+            animation: blink 0.7s infinite;
+            margin-left: 2px;
+            color: var(--main-light);
+        }
         @keyframes blink { 50% { opacity: 0; } }
 
         input, select {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-sizing: border-box;
+            padding: 13px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
             font-size: 15px;
             margin-bottom: 10px;
-            background: white;
+            background: #fafcff;
             font-family: inherit;
+            color: var(--text);
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
         }
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--main-light);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(13, 71, 161, 0.12);
+        }
+        input::placeholder {
+            color: #90a4ae;
+        }
+
         .password-wrapper { margin: 0 0 8px 0; }
         .password-container {
             display: flex;
             align-items: center;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: white;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: #fafcff;
             padding-right: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .password-container input { border: none; flex: 1; padding: 12px 15px; margin: 0; font-size: 15px; }
-        .show-label { display: flex; align-items: center; font-size: 13px; color: #666; cursor: pointer; font-weight: 600; }
-        .show-label input { width: 16px; height: 16px; margin-right: 5px; }
+        .password-container:focus-within {
+            border-color: var(--main-light);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(13, 71, 161, 0.12);
+        }
+        .password-container input {
+            border: none;
+            flex: 1;
+            padding: 13px 15px;
+            margin: 0;
+            font-size: 15px;
+            background: transparent;
+            box-shadow: none;
+        }
+        .password-container input:focus {
+            box-shadow: none;
+        }
+        .show-label {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--muted);
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .show-label input {
+            width: 16px;
+            height: 16px;
+            margin-right: 5px;
+            accent-color: var(--main);
+        }
 
         button {
-            width: 100%; padding: 12px; background: var(--main); color: #fff;
-            border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px;
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, var(--main) 0%, var(--main-dark) 100%);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            margin-top: 10px;
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 14px rgba(13, 71, 161, 0.35);
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
         }
-        button:disabled { opacity: 0.5; }
-        .link { text-align: center; font-size: 13px; color: var(--main); cursor: pointer; margin-top: 15px; font-weight: 600; }
+        button:hover {
+            box-shadow: 0 6px 20px rgba(13, 71, 161, 0.45);
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(13, 71, 161, 0.3);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .link {
+            text-align: center;
+            font-size: 13px;
+            color: var(--main);
+            cursor: pointer;
+            margin-top: 15px;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .link:hover {
+            color: var(--main-dark);
+            text-decoration: underline;
+        }
+
         .hidden { display: none; }
-        .loading { width: 100%; height: 3px; background: #eee; margin: 10px 0; display: none; overflow: hidden; }
-        .bar { width: 100%; height: 100%; background: var(--warn); animation: pulse 1.2s infinite linear; }
-        @keyframes pulse { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+        .loading {
+            width: 100%;
+            height: 3px;
+            background: #e3f2fd;
+            margin: 10px 0;
+            display: none;
+            overflow: hidden;
+            border-radius: 2px;
+        }
+        .bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--warn), #ffb74d, var(--warn));
+            animation: pulse 1.2s infinite linear;
+        }
+        @keyframes pulse {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
 
         /* ==================== 📞 FLOATING CONTACT MODULE STYLES ==================== */
         .contact-fab {
             position: fixed;
             bottom: 25px;
             right: 25px;
-            background: var(--main);
+            background: linear-gradient(135deg, var(--main) 0%, var(--main-dark) 100%);
             color: white;
             border: none;
             width: 60px;
@@ -128,12 +287,16 @@
             border-radius: 50%;
             font-size: 24px;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(13, 71, 161, 0.4);
+            box-shadow: 0 6px 20px rgba(13, 71, 161, 0.45);
             z-index: 3000;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .contact-fab:hover {
+            transform: scale(1.08);
+            box-shadow: 0 8px 28px rgba(13, 71, 161, 0.55);
         }
         .contact-fab:active { transform: scale(0.92); }
 
@@ -145,49 +308,80 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(4px);
+            background: rgba(13, 71, 161, 0.35);
+            backdrop-filter: blur(6px);
         }
         .contact-modal-content {
             background: white;
-            margin: 20vh auto;
-            padding: 25px;
+            margin: 18vh auto;
+            padding: 28px 25px;
             border-radius: 20px;
             width: 85%;
             max-width: 360px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 0 20px 50px rgba(13, 71, 161, 0.25);
             text-align: center;
             position: relative;
-            box-sizing: border-box;
+            border: 1px solid rgba(13, 71, 161, 0.08);
+            overflow: hidden;
+        }
+        .contact-modal-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--main), var(--main-light), var(--warn));
         }
         .contact-modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 12px;
+            border-bottom: 1px solid #e3f2fd;
+            padding-bottom: 14px;
             margin-bottom: 20px;
         }
-        .contact-modal-header h3 { margin: 0; color: var(--main); font-size: 1.3rem; font-weight: 700; }
-        .contact-close-btn { font-size: 26px; font-weight: bold; cursor: pointer; color: #888; border: none; background: none; outline: none; }
-        
+        .contact-modal-header h3 {
+            margin: 0;
+            color: var(--main);
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+        .contact-close-btn {
+            font-size: 26px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #90a4ae;
+            border: none;
+            background: none;
+            outline: none;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+        .contact-close-btn:hover { color: var(--error); }
+
         .contact-channel-item {
             text-align: left;
             margin-bottom: 20px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #f8fbff;
+            border: 1px solid #e3f2fd;
         }
         .contact-channel-item label {
             font-size: 11px;
             font-weight: 700;
-            color: #666;
+            color: var(--muted);
             text-transform: uppercase;
             display: block;
             margin-bottom: 4px;
+            letter-spacing: 0.5px;
         }
         .contact-channel-value {
             font-size: 14px;
-            color: #222;
+            color: var(--text);
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             word-break: break-all;
         }
         .contact-action-btn {
@@ -198,18 +392,159 @@
             width: 100%;
             padding: 12px;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-weight: bold;
             font-size: 14px;
             text-decoration: none;
             cursor: pointer;
-            transition: opacity 0.2s;
-            box-sizing: border-box;
+            transition: opacity 0.2s, transform 0.15s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
-        .contact-action-btn:active { opacity: 0.85; }
-        .btn-email { background: #e3f2fd; color: #0D47A1; }
-        .btn-whatsapp { background: #e8f5e9; color: #2e7d32; }
-        .btn-call { background: #fff8e1; color: #ff8f00; }
+        .contact-action-btn:hover { transform: translateY(-1px); }
+        .contact-action-btn:active { opacity: 0.85; transform: none; }
+        .btn-email {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            color: #0D47A1;
+        }
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            color: #2e7d32;
+        }
+        .btn-call {
+            background: linear-gradient(135deg, #fff8e1, #ffe0b2);
+            color: #e65100;
+        }
+
+        /* ==================== LOGIN SUCCESS ANIMATION ==================== */
+        .success-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 5000;
+            background: rgba(13, 71, 161, 0.55);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+        .success-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+        .success-card {
+            background: #fff;
+            border-radius: 24px;
+            padding: 40px 36px;
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(13, 71, 161, 0.35);
+            max-width: 320px;
+            width: 85%;
+            transform: scale(0.7);
+            opacity: 0;
+            transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .success-overlay.show .success-card {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .success-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #43a047, #66bb6a, #f57c00);
+        }
+        .checkmark-circle {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #43a047, #2e7d32);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(46, 125, 50, 0.4);
+            position: relative;
+            animation: checkPop 0.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        @keyframes checkPop {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+        .checkmark-circle svg {
+            width: 44px;
+            height: 44px;
+            stroke: #fff;
+            stroke-width: 3.5;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-dasharray: 60;
+            stroke-dashoffset: 60;
+            animation: drawCheck 0.5s 0.45s ease forwards;
+        }
+        @keyframes drawCheck {
+            to { stroke-dashoffset: 0; }
+        }
+        .success-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--main);
+            margin: 0 0 6px;
+            opacity: 0;
+            animation: fadeUp 0.4s 0.6s ease forwards;
+        }
+        .success-sub {
+            font-size: 14px;
+            color: var(--muted);
+            margin: 0 0 18px;
+            opacity: 0;
+            animation: fadeUp 0.4s 0.75s ease forwards;
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .success-bar {
+            height: 4px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeUp 0.3s 0.9s ease forwards;
+        }
+        .success-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #43a047, #66bb6a, #f57c00);
+            border-radius: 4px;
+            animation: fillBar 1.4s 1s ease forwards;
+        }
+        @keyframes fillBar {
+            to { width: 100%; }
+        }
+        /* Floating particles */
+        .particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .success-overlay.show .particle {
+            animation: particleFly 1.2s ease-out forwards;
+        }
+        @keyframes particleFly {
+            0% { opacity: 1; transform: translate(0, 0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+        }
     </style>
 </head>
 <body>
@@ -289,7 +624,7 @@
             <h3>CONTACT US</h3>
             <button class="contact-close-btn" onclick="closeContactModal()">&times;</button>
         </div>
-        
+
         <div class="contact-channel-item">
             <label>Email Address</label>
             <div class="contact-channel-value">dnezerlinks@gmail.com</div>
@@ -307,6 +642,21 @@
             <div class="contact-channel-value">08117776509</div>
             <a href="tel:08117776509" class="contact-action-btn btn-call">📞 Call Center</a>
         </div>
+    </div>
+</div>
+
+<!-- Login Success Overlay -->
+<div class="success-overlay" id="successOverlay">
+    <div class="success-card">
+        <div class="checkmark-circle">
+            <svg viewBox="0 0 52 52">
+                <path d="M14 27 L22 35 L38 17"/>
+            </svg>
+        </div>
+        <h3 class="success-title">Login Successful!</h3>
+        <p class="success-sub">Welcome back to Dnezerlinks</p>
+        <div class="success-bar"><div class="success-bar-fill"></div></div>
+        <!-- particles injected by JS -->
     </div>
 </div>
 
@@ -413,7 +763,7 @@
     document.getElementById('recGender').addEventListener('focus', () => setStatus("Select your preferred identity gender type profile marker."));
     document.getElementById('recPhone').addEventListener('focus', () => setStatus("Provide the structural registered account phone line contact details."));
     document.getElementById('recSuspectedEmail').addEventListener('focus', () => setStatus("Optional: Type in any email variations you might have structured previously."));
-    
+
     ['recFullName', 'recGender', 'recPhone', 'recSuspectedEmail'].forEach(id => {
         document.getElementById(id).addEventListener('blur', () => setStatus("Provide details below to review your missing registration credentials."));
     });
@@ -469,7 +819,7 @@
             return;
         }
 
-        const messageText = 
+        const messageText =
             "Hello Dnezerlinks Support,\n\n" +
             "I need assistance recovering the linked login email address for my account.\n\n" +
             "--- ACCOUNT VERIFICATION INFORMATION ---\n" +
@@ -502,6 +852,34 @@
     }
 
     // Handle Auth logic
+    function playLoginSuccess() {
+        const overlay = document.getElementById('successOverlay');
+        const card = overlay.querySelector('.success-card');
+
+        // Spawn colorful particles around the checkmark
+        const colors = ['#43a047', '#66bb6a', '#f57c00', '#0d47a1', '#5472d3', '#ffb74d'];
+        for (let i = 0; i < 14; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            const angle = (i / 14) * Math.PI * 2;
+            const dist = 70 + Math.random() * 50;
+            p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+            p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+            p.style.background = colors[i % colors.length];
+            p.style.left = '50%';
+            p.style.top = '42%';
+            p.style.animationDelay = (0.3 + Math.random() * 0.25) + 's';
+            card.appendChild(p);
+        }
+
+        overlay.classList.add('show');
+
+        // Redirect after animation completes
+        setTimeout(() => {
+            window.location.href = "home.html";
+        }, 2400);
+    }
+
     async function handleLogin() {
         const email = document.getElementById('lEmail').value.trim();
         const pass = document.getElementById('lPass').value;
@@ -514,7 +892,8 @@
         try {
             await auth.signInWithEmailAndPassword(email, pass);
             localStorage.setItem('userEmail', email);
-            window.location.href = "home.html";
+            document.getElementById('lLoad').style.display = 'none';
+            playLoginSuccess();
         } catch (err) {
             setStatus("Login Failed: " + err.message, true);
             document.getElementById('lLoad').style.display = 'none';

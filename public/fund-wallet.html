@@ -12,46 +12,159 @@
             padding: 0;
         }
 
+        :root {
+            --main: #0d47a1;
+            --main-dark: #002171;
+            --main-light: #5472d3;
+            --main-soft: #e3f2fd;
+            --warn: #f57c00;
+            --success: #2e7d32;
+            --error: #c62828;
+            --text: #1a237e;
+            --muted: #5c6bc0;
+            --border: #bbdefb;
+            --surface: #ffffff;
+            --shadow: 0 12px 40px rgba(13, 71, 161, 0.12);
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(160deg, #e3f2fd 0%, #f0f4ff 40%, #e8eef7 100%);
             padding: 20px;
-            color: #333;
+            color: var(--text);
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            gap: 40px;
+            gap: 36px;
         }
 
         /* COMPONENT 1: CONSTANT FUND WALLET */
         .container {
             width: 100%;
             max-width: 550px;
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            background: var(--surface);
+            padding: 28px 25px;
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(13, 71, 161, 0.08);
+            position: relative;
+            overflow: hidden;
+        }
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--main), var(--main-light), var(--warn));
         }
 
-        h2 { color: #007bff; text-align: center; margin-bottom: 10px; }
-        .balance-box { background: #007bff; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 5px; }
+        .back-btn {
+            border: none;
+            background: none;
+            color: var(--main);
+            cursor: pointer;
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: color 0.2s;
+        }
+        .back-btn:hover { color: var(--main-dark); }
+
+        h2 {
+            color: var(--main);
+            text-align: center;
+            margin-bottom: 14px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+
+        .balance-box {
+            background: linear-gradient(135deg, var(--main) 0%, var(--main-dark) 50%, #1565c0 100%);
+            color: white;
+            padding: 20px 18px;
+            border-radius: 14px;
+            text-align: center;
+            margin-bottom: 8px;
+            box-shadow: 0 6px 20px rgba(13, 71, 161, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .balance-box::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--warn), #ffb74d, var(--warn));
+        }
+        .balance-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .balance-amount {
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-top: 4px;
+            display: block;
+        }
 
         #status-msg {
             text-align: center;
-            font-weight: bold;
-            font-size: 0.95rem;
-            margin-top: 10px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-top: 14px;
             display: none;
+            padding: 12px 14px;
+            border-radius: 10px;
+            line-height: 1.45;
+            transition: background 0.25s, color 0.25s;
+        }
+        #status-msg.status-info {
+            display: block;
+            background: linear-gradient(90deg, #fff8e1, #ffe0b2);
+            color: #e65100;
+        }
+        #status-msg.status-success {
+            display: block;
+            background: linear-gradient(90deg, #e8f5e9, #c8e6c9);
+            color: var(--success);
+        }
+        #status-msg.status-error {
+            display: block;
+            background: linear-gradient(90deg, #ffebee, #ffcdd2);
+            color: var(--error);
+        }
+        #status-msg.status-copy {
+            display: block;
+            background: linear-gradient(90deg, #e3f2fd, #bbdefb);
+            color: var(--main);
         }
 
         /* COMPONENT 2: SWIPEABLE COLOR BOXES */
+        .swipe-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
         .swipe-container {
             display: flex;
-            gap: 20px;
+            gap: 18px;
             width: 90%;
             max-width: 500px;
-            padding: 20px;
+            padding: 12px 8px 20px;
             overflow-x: auto;
             scroll-snap-type: x mandatory;
             scroll-behavior: smooth;
@@ -63,84 +176,143 @@
 
         .card {
             flex: 0 0 100%;
-            height: 180px;
-            border-radius: 16px;
-            padding: 20px;
+            height: 190px;
+            border-radius: 18px;
+            padding: 22px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             color: white;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
             scroll-snap-align: start;
-            transition: transform 0.3s ease;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
         }
-
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -40%;
+            right: -20%;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            pointer-events: none;
+        }
         .card:active { transform: scale(0.98); }
-        .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
-        .card-title { font-size: 1.8rem; font-weight: 700; letter-spacing: 1px; text-transform: capitalize; }
-        
-        .bvn-compulsory-text {
-            font-size: 0.65rem;
-            background: rgba(0, 0, 0, 0.25);
-            padding: 3px 6px;
-            border-radius: 4px;
-            font-weight: 600;
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .card-title {
+            font-size: 1.75rem;
+            font-weight: 800;
             letter-spacing: 0.5px;
-            text-transform: uppercase;
+            text-transform: capitalize;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
         }
 
-        .card-body { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+        .bvn-compulsory-text {
+            font-size: 0.62rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            line-height: 1.3;
+            max-width: 120px;
+            text-align: right;
+        }
+
+        .card-body {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            width: 100%;
+            gap: 12px;
+        }
 
         .account-info-box {
             display: flex;
             flex-direction: column;
-            gap: 1.5px;
+            gap: 3px;
             width: 70%;
             text-align: left;
             display: none;
         }
 
-        .acc-number-text { font-size: 1.0rem; font-weight: bold; letter-spacing: 1px; }
+        .acc-number-text {
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            font-variant-numeric: tabular-nums;
+        }
         .acc-name-text {
             font-size: 0.7rem;
             text-transform: uppercase;
-            opacity: 0.9;
+            opacity: 0.92;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-weight: 500;
         }
 
         .action-btn {
-            background-color: #ffffff;
-            color: #333;
+            background: rgba(255, 255, 255, 0.95);
+            color: #1a237e;
             border: none;
-            padding: 6px 10px;
-            border-radius: 8px;
-            font-size: 0.80rem;
-            font-weight: 500;
+            padding: 9px 14px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
             cursor: pointer;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-            transition: background 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+            transition: background 0.2s ease, transform 0.15s, box-shadow 0.2s;
             white-space: nowrap;
+            font-family: inherit;
+        }
+        .action-btn:hover {
+            background: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+        }
+        .action-btn:active { transform: translateY(0); }
+        .action-btn:disabled {
+            background: rgba(255, 255, 255, 0.55);
+            color: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
         }
 
-        .action-btn:hover { background-color: #f1f5f9; }
-        .action-btn:disabled { background-color: #cccccc; color: #666; cursor: not-allowed; box-shadow: none; }
+        .bg-palm { background: linear-gradient(145deg, #1b5e20, #2e7d32 45%, #66bb6a); }
+        .bg-psb { background: linear-gradient(145deg, #0d47a1, #1565c0 45%, #42a5f5); }
+        .bg-safe { background: linear-gradient(145deg, #e65100, #f57c00 45%, #ffb74d); }
+        .bg-bankly { background: linear-gradient(145deg, #00695c, #00897b 45%, #4db6ac); }
+        .bg-providus { background: linear-gradient(145deg, #4a148c, #7b1fa2 45%, #ba68c8); }
+        .bg-wema { background: linear-gradient(145deg, #b71c1c, #c62828 45%, #ef5350); }
 
-        .bg-palm { background: linear-gradient(135deg, #2e7d32, #4caf50); }
-        .bg-psb { background: linear-gradient(135deg, #1565c0, #2196f3); }
-        .bg-safe { background: linear-gradient(135deg, #ff8f00, #ffc107); }
-        .bg-bankly { background: linear-gradient(135deg, #009688, #4db6ac); }
-        .bg-providus { background: linear-gradient(135deg, #6a1b9a, #9c27b0); }
-        .bg-wema { background: linear-gradient(135deg, #c62828, #f44336); }
-
-        .hint { text-align: center; color: #888; font-size: 0.9rem; margin-top: -20px; margin-bottom: 20px; }
+        .hint {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 4px;
+            margin-bottom: 12px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
 
         /* CUSTOM MODAL OVERLAY STYLES */
         #custom-modal {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(13, 71, 161, 0.4);
+            backdrop-filter: blur(6px);
             display: none;
             justify-content: center;
             align-items: center;
@@ -148,28 +320,67 @@
         }
         .modal-content {
             background: white;
-            padding: 25px;
-            border-radius: 12px;
+            padding: 28px 24px;
+            border-radius: 18px;
             width: 90%;
             max-width: 380px;
             text-align: center;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+            box-shadow: 0 20px 50px rgba(13, 71, 161, 0.25);
+            border: 1px solid rgba(13, 71, 161, 0.08);
+            position: relative;
+            overflow: hidden;
         }
-        .modal-content p { font-size: 1rem; color: #333; margin-bottom: 20px; line-height: 1.5; }
-        .modal-buttons { display: flex; justify-content: center; gap: 15px; }
-        .modal-btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .modal-btn-yes { background-color: #007bff; color: white; }
-        .modal-btn-no { background-color: #e0e0e0; color: #333; }
+        .modal-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--main), var(--main-light), var(--warn));
+        }
+        .modal-content p {
+            font-size: 1rem;
+            color: var(--text);
+            margin-bottom: 22px;
+            line-height: 1.5;
+            font-weight: 500;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+        .modal-btn {
+            padding: 11px 22px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: transform 0.15s, box-shadow 0.2s;
+        }
+        .modal-btn:active { transform: scale(0.97); }
+        .modal-btn-yes {
+            background: linear-gradient(135deg, var(--main), var(--main-dark));
+            color: white;
+            box-shadow: 0 4px 14px rgba(13, 71, 161, 0.35);
+        }
+        .modal-btn-no {
+            background: #e8eaf6;
+            color: var(--text);
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <button onclick="location.href='home.html'" style="border:none; background:none; color:#007bff; cursor:pointer; margin-bottom:10px;">⬅ Back Home</button>
+        <button class="back-btn" onclick="location.href='home.html'">⬅ Back Home</button>
         <h2>Fund Wallet</h2>
         <div class="balance-box">
-            <span style="font-size: 0.9rem;">Wallet Balance</span><br>
-            <span id="wallet-balance" style="font-size: 1.8rem; font-weight: bold;">₦0.00</span>
+            <span class="balance-label">Wallet Balance</span>
+            <span id="wallet-balance" class="balance-amount">₦0.00</span>
         </div>
         <div id="status-msg"></div>
     </div>
@@ -185,7 +396,7 @@
         </div>
     </div>
 
-    <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+    <div class="swipe-section">
         <div class="swipe-container">
 
             <!-- Box 1: Palmpay -->
@@ -296,15 +507,22 @@
         const BANK_KEYS = ["palmpay", "9psb", "safehaven", "bankly", "providus", "wema"];
         let cachedUserData = {};
         let processingBanks = new Set();
+        let statusClearTimer = null;
 
-        function setStatus(text, color = "#333") {
+        function setStatus(text, type = "info") {
             const msgEl = document.getElementById("status-msg");
+            if (statusClearTimer) {
+                clearTimeout(statusClearTimer);
+                statusClearTimer = null;
+            }
+            msgEl.className = "";
             if (!text) {
                 msgEl.style.display = "none";
+                msgEl.innerText = "";
                 return;
             }
             msgEl.innerText = text;
-            msgEl.style.color = color;
+            msgEl.classList.add("status-" + type);
             msgEl.style.display = "block";
         }
 
@@ -361,9 +579,9 @@
             const bvn = cachedUserData.bvn || cachedUserData.BVN;
             const nin = cachedUserData.nin || cachedUserData.NIN;
             const kycStatus = cachedUserData.kyc_status || cachedUserData.kycVerified;
-            
-            return (bvn && String(bvn).trim() !== "") || 
-                   (nin && String(nin).trim() !== "") || 
+
+            return (bvn && String(bvn).trim() !== "") ||
+                   (nin && String(nin).trim() !== "") ||
                    kycStatus === true || kycStatus === "verified";
         }
 
@@ -406,7 +624,7 @@
                 targetBtn.innerText = "Processing...";
             }
 
-            setStatus(`Connecting to reserve your dynamic ${bankKey} account...`, "#E67E22");
+            setStatus(`Connecting to reserve your dynamic ${bankKey} account...`, "info");
 
             const currentUser = firebase.auth().currentUser;
             if (!currentUser) {
@@ -440,11 +658,11 @@
                 processingBanks.delete(bankKey);
 
                 if (result.success) {
-                    setStatus("Your virtual account has been created successfully! You can now fund your wallet by sending money into it and get credited automatically", "#27AE60");
-                    setTimeout(() => setStatus(""), 3000);
+                    setStatus("Your virtual account has been created successfully! You can now fund your wallet by sending money into it and get credited automatically", "success");
+                    statusClearTimer = setTimeout(() => setStatus(""), 4000);
                     updateStaticCards(cachedUserData.virtual_accounts_new);
                 } else {
-                    setStatus(result.error || result.message || "Error encountered while processing your request. Please retry.", "red");
+                    setStatus(result.error || result.message || "Error encountered while processing your request. Please retry.", "error");
                     if (targetBtn) {
                         targetBtn.disabled = false;
                         targetBtn.innerText = "Get Account Number";
@@ -452,7 +670,7 @@
                 }
             } catch (err) {
                 processingBanks.delete(bankKey);
-                setStatus("Network failure. Check your connection properties.", "red");
+                setStatus("Network failure. Check your connection properties.", "error");
                 if (targetBtn) {
                     targetBtn.disabled = false;
                     targetBtn.innerText = "Get Account Number";
@@ -462,7 +680,10 @@
 
         function copyCardNum(text) {
             navigator.clipboard.writeText(text).then(() => {
-                alert("Account Number Copied!");
+                setStatus("Account number copied: " + text, "copy");
+                statusClearTimer = setTimeout(() => setStatus(""), 3000);
+            }).catch(() => {
+                setStatus("Could not copy. Please copy manually: " + text, "error");
             });
         }
 

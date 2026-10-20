@@ -10,7 +10,7 @@
     <style>
         :root { --primary: #0d47a1; --accent: #ffab00; --bg: #f8f9fa; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 90px; }
-        
+
         .header { background: var(--primary); color: white; padding: 35px 20px; border-radius: 0 0 25px 25px; text-align: center; position: relative; }
         .balance-amount { font-size: 32px; font-weight: 800; color: var(--accent); margin: 10px 0; }
 
@@ -21,10 +21,79 @@
         .ticker-text { display: inline-block; padding-left: 100%; font-size: 13px; font-weight: 700; color: var(--primary); animation: ticker 25s linear infinite; }
         @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
 
-        .services-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; }
-        .service-item { background: white; padding: 15px 5px; border-radius: 12px; text-align: center; border: 1px solid #eee; transition: 0.2s; cursor: pointer; }
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px;
+            padding: 20px;
+        }
+        .service-item {
+            grid-column: span 3;
+            background: #0d47a1;
+            padding: 15px 5px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #1565c0;
+            transition: 0.2s;
+            cursor: pointer;
+            color: #ffffff;
+        }
+        .service-item:nth-child(9),
+        .service-item:nth-child(10),
+        .service-item:nth-child(11) {
+            grid-column: span 4;
+        }
         .service-item:active { transform: scale(0.95); }
-        .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: var(--primary); text-transform: uppercase; }
+        .service-item span { display: block; font-size: 9px; font-weight: 700; margin-top: 5px; color: #ffffff; text-transform: uppercase; }
+
+        .support-card {
+            margin: 0 20px 20px;
+            background: linear-gradient(135deg, #0d47a1 0%, #1565c0 50%, #1976d2 100%);
+            border-radius: 16px;
+            padding: 18px 20px;
+            color: white;
+            box-shadow: 0 6px 18px rgba(13, 71, 161, 0.25);
+            position: relative;
+            overflow: hidden;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+        }
+        .support-card::before {
+            content: '';
+            position: absolute;
+            top: -20px; right: -20px;
+            width: 90px; height: 90px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 50%;
+        }
+        .support-icon { font-size: 28px; margin-right: 14px; flex-shrink: 0; }
+        .support-text { font-size: 13.5px; font-weight: 600; line-height: 1.45; transition: opacity 0.4s ease; }
+        .support-text a { color: #ffab00; text-decoration: none; font-weight: 700; }
+        .support-dots { position: absolute; bottom: 8px; right: 14px; display: flex; gap: 5px; }
+        .support-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: background 0.3s; }
+        .support-dots span.active { background: #ffab00; }
+
+        .recent-section {
+            margin: 0 20px 30px;
+            background: linear-gradient(160deg, #e8f5e9 0%, #e3f2fd 50%, #f3e5f5 100%);
+            border-radius: 18px;
+            padding: 18px 16px 12px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        }
+        .recent-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 0 4px; }
+        .recent-header h3 { margin: 0; font-size: 15px; color: var(--primary); font-weight: 800; }
+        .recent-header a { font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 700; }
+        .recent-item {
+            background: white; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04); border-left: 4px solid var(--primary);
+        }
+        .recent-item .left { flex: 1; min-width: 0; }
+        .recent-item .service { font-size: 13px; font-weight: 700; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .recent-item .meta { font-size: 11px; color: #888; margin-top: 3px; }
+        .recent-item .amount { font-size: 14px; font-weight: 800; color: var(--primary); white-space: nowrap; margin-left: 10px; }
+        .recent-empty { text-align: center; padding: 20px 10px; color: #777; font-size: 13px; font-weight: 600; }
 
         .bottom-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #ddd; z-index: 1000; }
         .nav-link { text-align: center; font-size: 10px; color: #888; text-decoration: none; }
@@ -63,9 +132,80 @@
             transition: background 0.2s;
         }
         .toggle-bal-btn:active { background: rgba(255, 255, 255, 0.3); }
+
+        /* Top App Install Banner Styles */
+        .app-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 10px 15px;
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .banner-close {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 22px;
+            cursor: pointer;
+            padding: 0 10px 0 0;
+        }
+        .banner-close:hover { color: #fff; }
+        .banner-info {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+        }
+        .banner-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            margin-right: 12px;
+            object-fit: cover;
+        }
+        .banner-text {
+            display: flex;
+            flex-direction: column;
+        }
+        .banner-text strong { font-size: 14px; }
+        .banner-text span { font-size: 11px; color: #bbb; }
+        .banner-install-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 13px;
+            transition: background 0.2s ease;
+            white-space: nowrap;
+        }
+        .banner-install-btn:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
+
+    <!-- Top App Install Banner -->
+    <div id="app-install-banner" class="app-banner" style="display: none;">
+        <button id="close-banner" class="banner-close" onclick="dismissBanner()">&times;</button>
+        <div class="banner-info">
+            <img src="https://raw.githubusercontent.com/Nezernezer/dnezerlinks-app/main/icon.png" onerror="this.style.display='none'" alt="Dlinks Logo" class="banner-icon">
+            <div class="banner-text">
+                <strong>Dlinks VTU App</strong>
+                <span>Fast, cheap data & utility payments</span>
+            </div>
+        </div>
+        <a href="https://github.com/Nezernezer/dnezerlinks-app/releases/download/Dnezerlinksapkfile/Dlinks.vtu.signed.apk" 
+           class="banner-install-btn" 
+           onclick="onInstallClick()">
+          Install
+        </a>
+    </div>
 
     <div class="header">
         <button class="notif-btn" onclick="openNotif()">🔔<span id="notifBadge" class="notif-badge">0</span></button>
@@ -75,7 +215,7 @@
         <div style="font-size: 11px; opacity: 0.8;">WALLET BALANCE</div>
     </div>
 
-    <div class="news-ticker" id="tickerBar" style="display:none;">
+    <div class="news-ticker" id="tickerBar">
         <div class="ticker-text" id="globalUpdate">Latest information shows here...</div>
     </div>
 
@@ -91,6 +231,27 @@
         <div class="service-item" onclick="location.href='fund-wallet.html'">💰<span>Fund Wallet</span></div>
         <div class="service-item" onclick="location.href='history.html'">📜<span>History</span></div>
         <div class="service-item" onclick="location.href='sendmoney/'">💸<span>Send Money</span></div>
+    </div>
+
+    <div class="support-card" id="supportCard">
+        <div class="support-icon" id="supportIcon">💬</div>
+        <div class="support-text" id="supportText">
+            24/7 customer support via <a href="mailto:dnezerlinks@gmail.com">dnezerlinks@gmail.com</a>
+        </div>
+        <div class="support-dots">
+            <span class="active" id="dot0"></span>
+            <span id="dot1"></span>
+        </div>
+    </div>
+
+    <div class="recent-section">
+        <div class="recent-header">
+            <h3>Recent Transactions</h3>
+            <a href="history.html">See all →</a>
+        </div>
+        <div id="recentList">
+            <div class="recent-empty">Loading recent activity...</div>
+        </div>
     </div>
 
     <div class="bottom-nav">
@@ -112,7 +273,6 @@
         </div>
     </div>
 
-    <!-- Transaction PIN Prompt Modal -->
     <div id="pinPromptModal" class="modal">
         <div class="modal-content" style="text-align: center;">
             <h3 style="color: var(--primary); margin-top: 0;">Transaction PIN Required</h3>
@@ -127,6 +287,43 @@
     </div>
 
     <script>
+        // Banner management logic
+        document.addEventListener("DOMContentLoaded", function () {
+            const banner = document.getElementById("app-install-banner");
+            const isInstalled = localStorage.getItem("dnezer_app_downloaded");
+            const dismissTimestamp = localStorage.getItem("dlinks_banner_dismissed_time");
+            
+            let showBanner = true;
+
+            if (isInstalled === "true") {
+                showBanner = false;
+            } else if (dismissTimestamp) {
+                // If they cancelled before, show it moderately (e.g., after 24 hours / 86400000 ms)
+                const hoursPassed = (Date.now() - parseInt(dismissTimestamp)) / (1000 * 60 * 60);
+                if (hoursPassed < 24) {
+                    showBanner = false;
+                }
+            }
+
+            if (showBanner) {
+                banner.style.display = "flex";
+            }
+        });
+
+        function dismissBanner() {
+            const banner = document.getElementById("app-install-banner");
+            banner.style.display = "none";
+            // Save current timestamp so it shows again moderately later
+            localStorage.setItem("dlinks_banner_dismissed_time", Date.now());
+        }
+
+        function onInstallClick() {
+            localStorage.setItem("dnezer_app_downloaded", "true");
+            setTimeout(() => {
+                document.getElementById("app-install-banner").style.display = "none";
+            }, 1000);
+        }
+
         const firebaseConfig = {
             apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
             authDomain: "dnezerlinks.firebaseapp.com",
@@ -139,19 +336,115 @@
         let currentUser = null;
         const backendDomain = "https://dnezerlinks-backend.onrender.com";
 
-        // Data Engine States for Merging Channels
         let userNotifications = [];
         let globalBroadcast = null;
+
+        const supportMessages = [
+            { icon: "💬", html: '24/7 customer support via <a href="mailto:dnezerlinks@gmail.com">dnezerlinks@gmail.com</a>' },
+            { icon: "🤖", html: 'Messenger chat bot available via <a href="https://facebook.com/Dnezerlinks" target="_blank" rel="noopener">facebook.com/Dnezerlinks</a>' }
+        ];
+        let supportIndex = 0;
+
+        function startSupportRotator() {
+            const textEl = document.getElementById('supportText');
+            const iconEl = document.getElementById('supportIcon');
+            const dots = [document.getElementById('dot0'), document.getElementById('dot1')];
+
+            setInterval(() => {
+                textEl.style.opacity = '0';
+                setTimeout(() => {
+                    supportIndex = (supportIndex + 1) % supportMessages.length;
+                    const msg = supportMessages[supportIndex];
+                    iconEl.textContent = msg.icon;
+                    textEl.innerHTML = msg.html;
+                    dots.forEach((d, i) => d.classList.toggle('active', i === supportIndex));
+                    textEl.style.opacity = '1';
+                }, 350);
+            }, 5000);
+        }
+
+        function loadRecentTransactions(uid) {
+            const list = document.getElementById('recentList');
+            db.ref('transactions/' + uid).limitToLast(20).once('value').then(snap => {
+                if (!snap.exists()) {
+                    list.innerHTML = '<div class="recent-empty">No transactions yet</div>';
+                    return;
+                }
+                const items = [];
+                snap.forEach(c => {
+                    const v = c.val();
+                    if (v) {
+                        items.push({
+                            key: c.key,
+                            ...v,
+                            sortTime: (v.timestamp && !isNaN(v.timestamp)) ? Number(v.timestamp) : 0
+                        });
+                    }
+                });
+                items.sort((a, b) => b.sortTime - a.sortTime);
+                const last5 = items.slice(0, 5);
+
+                if (last5.length === 0) {
+                    list.innerHTML = '<div class="recent-empty">No transactions yet</div>';
+                    return;
+                }
+
+                list.innerHTML = last5.map(tx => {
+                    const service = tx.service || tx.type || 'Transaction';
+                    const network = tx.network || '';
+                    const phone = tx.phone || tx.meter || tx.smartcard || tx.target || '';
+                    const metaParts = [network, phone].filter(Boolean).join(' • ');
+                    const amount = parseFloat(tx.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    const dateStr = tx.timestamp
+                        ? new Date(Number(tx.timestamp)).toLocaleDateString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : (tx.date || '');
+                    return `
+                        <div class="recent-item" onclick="location.href='history.html'">
+                            <div class="left">
+                                <div class="service">${service}</div>
+                                <div class="meta">${metaParts || dateStr}</div>
+                            </div>
+                            <div class="amount">₦${amount}</div>
+                        </div>
+                    `;
+                }).join('');
+            }).catch(() => {
+                list.innerHTML = '<div class="recent-empty">Unable to load transactions</div>';
+            });
+        }
+
+        function showAdminFromCache(uid) {
+            const cached = localStorage.getItem('dnezer_is_admin');
+            const cachedUid = localStorage.getItem('dnezer_admin_uid');
+            if (cached === 'true' && cachedUid === uid) {
+                db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
+                    const count = s.numChildren();
+                    const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
+                    document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>`;
+                });
+            }
+        }
 
         firebase.auth().onAuthStateChanged(async user => {
             if (user) {
                 currentUser = user;
+                showAdminFromCache(user.uid);
+                loadRecentTransactions(user.uid);
+
                 db.ref('users/' + user.uid).on('value', snap => {
                     const d = snap.val() || {};
-                    document.getElementById('balDisplay').innerText = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    const bal = parseFloat(d.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+                    const balEl = document.getElementById('balDisplay');
+
+                    balEl.setAttribute('data-real-bal', bal);
+                    if (localStorage.getItem('dnezer_bal_hidden') === 'true') {
+                        balEl.innerText = '••••••';
+                    } else {
+                        balEl.innerText = bal;
+                    }
+
                     document.getElementById('userName').innerText = "Welcome, " + (d.name || "User");
 
-                    // Check if transaction PIN is set up
                     const hasPin = d.pin || d.transaction_pin;
                     if (!hasPin) {
                         if (!sessionStorage.getItem('pin_prompt_dismissed')) {
@@ -165,30 +458,35 @@
                     }
                 });
 
-                try {
-                    const idToken = await user.getIdToken(true);
-                    const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
-                        method: "GET",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": "Bearer " + idToken
-                        }
-                    });
-
-                    const verifyData = await response.json();
-
-                    if (response.ok && verifyData.isAdmin) {
-                        db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
-                            const count = s.numChildren();
-                            const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
-                            document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>`;
+                (async () => {
+                    try {
+                        const idToken = await user.getIdToken(true);
+                        const response = await fetch(`${backendDomain}/api/admin/verify-status`, {
+                            method: "GET",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": "Bearer " + idToken
+                            }
                         });
+                        const verifyData = await response.json();
+                        if (response.ok && verifyData.isAdmin) {
+                            localStorage.setItem('dnezer_is_admin', 'true');
+                            localStorage.setItem('dnezer_admin_uid', user.uid);
+                            db.ref('users').orderByChild('kyc_status').equalTo('PENDING').on('value', s => {
+                                const count = s.numChildren();
+                                const badge = count > 0 ? `<span class="pending-badge">${count}</span>` : "";
+                                document.getElementById('adminContainer').innerHTML = `<button class="admin-switch" onclick="location.href='admin/index.html'">Admin ⚙️${badge}</button>`;
+                            });
+                        } else {
+                            localStorage.removeItem('dnezer_is_admin');
+                            localStorage.removeItem('dnezer_admin_uid');
+                            document.getElementById('adminContainer').innerHTML = '';
+                        }
+                    } catch (err) {
+                        console.error("Identity clearance failed via API route:", err);
                     }
-                } catch (err) {
-                    console.error("Identity clearance failed via API route:", err);
-                }
+                })();
 
-                // Sync Stream A: User Personal Notifications Realtime Listener
                 db.ref('notifications/' + user.uid).on('value', snap => {
                     userNotifications = [];
                     snap.forEach(child => {
@@ -200,7 +498,6 @@
                     renderCombinedNotifications();
                 });
 
-                // Sync Stream B: Global Broadcast Settings Realtime Listener
                 db.ref('system_settings').on('value', snap => {
                     const settings = snap.val() || {};
                     if (settings.global_broadcast_message && settings.global_broadcast_message.trim() !== "") {
@@ -214,14 +511,13 @@
                     renderCombinedNotifications();
                 });
 
-                document.getElementById('tickerBar').style.display = 'block';
                 loadMarquee();
-            } else { 
-                window.location.href = 'login.html'; 
+                startSupportRotator();
+            } else {
+                window.location.href = 'login.html';
             }
         });
 
-        // Combined Array UI Renderer Function (Sorted newest first)
         function renderCombinedNotifications() {
             if (!currentUser) return;
             const badge = document.getElementById('notifBadge');
@@ -232,7 +528,7 @@
 
             if (globalBroadcast) {
                 const seenBroadcastTime = localStorage.getItem('dnezer_seen_broadcast_time');
-                if (seenBroadcastTime !== globalBroadcast.timestamp.toString()) {
+                if (seenBroadcastTime !== String(globalBroadcast.timestamp)) {
                     unreadCount++;
                 }
             }
@@ -252,10 +548,10 @@
 
                 if (globalBroadcast) {
                     const seenBroadcastTime = localStorage.getItem('dnezer_seen_broadcast_time');
-                    const isUnread = seenBroadcastTime !== globalBroadcast.timestamp.toString();
+                    const isUnread = seenBroadcastTime !== String(globalBroadcast.timestamp);
                     combinedItems.push({
                         id: 'global_broadcast_msg',
-                        message: `📢 ANNOUNCEMENT: ${globalBroadcast.message}`,
+                        message: "📢 ANNOUNCEMENT: " + globalBroadcast.message,
                         timestamp: globalBroadcast.timestamp,
                         read: !isUnread,
                         isGlobal: true
@@ -271,11 +567,13 @@
 
                 combinedItems.forEach(n => {
                     const item = document.createElement('div');
-                    item.className = `notif-item ${n.read ? '' : 'unread'}`;
-                    item.innerHTML = `<div>${n.message}</div><span class="notif-time">${n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>`;
+                    item.className = 'notif-item' + (n.read ? '' : ' unread');
+
+                    const timeStr = n.timestamp ? new Date(n.timestamp).toLocaleString() : '';
+                    item.innerHTML = '<div>' + (n.message || '') + '</div><span class="notif-time">' + timeStr + '</span>';
 
                     if (!n.read && !n.isGlobal) {
-                        db.ref(`notifications/${currentUser.uid}/${n.key}`).update({ read: true });
+                        db.ref('notifications/' + currentUser.uid + '/' + n.key).update({ read: true });
                     }
 
                     container.appendChild(item);
@@ -301,8 +599,8 @@
             renderCombinedNotifications();
         }
 
-        function closeNotif() { 
-            document.getElementById('notifModal').style.display = "none"; 
+        function closeNotif() {
+            document.getElementById('notifModal').style.display = "none";
         }
 
         function closePinModal() {
@@ -314,8 +612,10 @@
             if (event.target == document.getElementById('notifModal')) closeNotif();
             if (event.target == document.getElementById('pinPromptModal')) closePinModal();
         }
+    </script>
 
-        // Cached UI & Balance Hide/Show Controller
+    <!-- Original working IIFE Balance Hide/Show Controller -->
+    <script>
         (function() {
             const cachedName = localStorage.getItem('dnezer_cached_name');
             const cachedBal = localStorage.getItem('dnezer_cached_bal');
@@ -339,7 +639,7 @@
             toggleBtn.addEventListener('click', () => {
                 const currentHidden = localStorage.getItem('dnezer_bal_hidden') === 'true';
                 const realBal = balEl.getAttribute('data-real-bal') || balEl.innerText;
-                
+
                 if (currentHidden) {
                     balEl.innerText = realBal;
                     toggleBtn.innerHTML = 'Hide';

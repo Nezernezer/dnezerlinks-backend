@@ -95,9 +95,15 @@
             border-color: white;
             box-shadow: 0 2px 8px rgba(0,0,0,0.12);
         }
-        .search-wrap {
+        .controls-row {
+            display: flex;
+            gap: 10px;
             margin-top: 12px;
+            align-items: center;
+        }
+        .search-wrap {
             position: relative;
+            flex: 1;
         }
         .search-wrap input {
             width: 100%;
@@ -125,6 +131,18 @@
             font-size: 15px;
             color: #94a3b8;
             pointer-events: none;
+        }
+        .sort-select {
+            padding: 11px 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(255,255,255,0.95);
+            color: var(--text);
+            outline: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
         }
         .content-area {
             padding: 16px 12px 40px;
@@ -276,7 +294,7 @@
             color: var(--muted);
             font-size: 11px;
             font-weight: 600;
-            min-width: 72px;
+            min-width: 85px;
             flex-shrink: 0;
         }
         .detail-row .value {
@@ -384,9 +402,17 @@
         <button class="f-btn" onclick="setFilter('PENDING', this)">Pending KYC</button>
         <button class="f-btn" onclick="setFilter('VERIFIED', this)">Verified</button>
     </div>
-    <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="search" id="searchInput" placeholder="Search by name, email, UID, ID number..." oninput="onSearch()" autocomplete="off">
+    <div class="controls-row">
+        <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="search" id="searchInput" placeholder="Search by name, email, UID, ID number..." oninput="onSearch()" autocomplete="off">
+        </div>
+        <select id="sortSelect" class="sort-select" onchange="onSortChange()">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name_asc">Name (A-Z)</option>
+            <option value="name_desc">Name (Z-A)</option>
+        </select>
     </div>
 </div>
 <div class="content-area">
@@ -405,6 +431,7 @@
     const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
     let currentFilter = 'ALL';
     let searchQuery = '';
+    let currentSort = 'newest';
     let usersData = {};
     let currentAdminRoles = {};
     let currentAdminUid = null;
@@ -446,6 +473,11 @@
 
     function onSearch() {
         searchQuery = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+        render();
+    }
+
+    function onSortChange() {
+        currentSort = document.getElementById('sortSelect').value;
         render();
     }
 
@@ -497,17 +529,45 @@
         return val;
     }
 
+    function formatTimestamp(ts) {
+        if (!ts || isNaN(ts)) return 'N/A';
+        return new Date(Number(ts)).toLocaleString();
+    }
+
     function render() {
         const container = document.getElementById('userTable');
         container.innerHTML = "";
         let count = 0;
-        const uids = Object.keys(usersData);
+        let uids = Object.keys(usersData);
 
         if (uids.length === 0) {
             container.innerHTML = `<div class="empty-state">No customers found.</div>`;
             document.getElementById('stats').innerText = "0 Users Active";
             return;
         }
+
+        uids.sort((a, b) => {
+            const userA = usersData[a] || {};
+            const userB = usersData[b] || {};
+            
+            // Prioritize joined, created_at, timestamp, or joined_at to grab the precise registration time
+            const timeA = Number(userA.joined || userA.created_at || userA.timestamp || userA.joined_at || 0);
+            const timeB = Number(userB.joined || userB.created_at || userB.timestamp || userB.joined_at || 0);
+            
+            const nameA = (userA.name || '').toLowerCase();
+            const nameB = (userB.name || '').toLowerCase();
+
+            if (currentSort === 'newest') {
+                return timeB - timeA;
+            } else if (currentSort === 'oldest') {
+                return timeA - timeB;
+            } else if (currentSort === 'name_asc') {
+                return nameA.localeCompare(nameB);
+            } else if (currentSort === 'name_desc') {
+                return nameB.localeCompare(nameA);
+            }
+            return 0;
+        });
 
         uids.forEach(uid => {
             const u = usersData[uid];
@@ -525,6 +585,9 @@
             const idType = u.id_type || kycPayload.id_type || 'N/A';
             const idNumber = u.id_number || kycPayload.id_number || 'N/A';
             const dob = u.dob || kycPayload.dob || 'N/A';
+            
+            // Format registration / joined time cleanly
+            const registrationTime = formatTimestamp(u.created_at || u.timestamp || u.joined_at || u.joined);
 
             let opsButtons = [];
             if (isMaster || currentAdminRoles.canVerifyKyc) {
@@ -553,19 +616,27 @@
 
             const pinStatus = u.transaction_pin ? 'Set' : 'Not set';
             const lockoutInfo = u.lockout_until
-                ? new Date(u.lockout_until).toLocaleString()
+                ? formatTimestamp(u.lockout_until)
                 : 'None';
             const loginAttempts = u.login_attempts != null ? u.login_attempts : 0;
 
             const knownKeys = new Set([
                 'name', 'email', 'kyc_status', 'id_type', 'id_number', 'dob',
                 'balance', 'account_status', 'transaction_pin', 'lockout_until',
-                'login_attempts', 'kyc_decline_reason', 'verify', 'declined', 'not_submitted'
+                'login_attempts', 'kyc_decline_reason', 'verify', 'declined', 'not_submitted',
+                'created_at', 'timestamp', 'joined_at', 'joined'
             ]);
             let extraRows = '';
             Object.keys(u).forEach(key => {
                 if (!knownKeys.has(key) && u[key] !== null && u[key] !== undefined && u[key] !== '') {
-                    const displayVal = typeof u[key] === 'object' ? JSON.stringify(u[key]) : String(u[key]);
+                    let displayVal = u[key];
+                    if (typeof displayVal === 'object') {
+                        displayVal = JSON.stringify(displayVal);
+                    } else if (!isNaN(displayVal) && String(displayVal).length >= 10 && (key.toLowerCase().includes('time') || key.toLowerCase().includes('date') || key.toLowerCase().includes('at') || key.toLowerCase().includes('joined'))) {
+                        displayVal = formatTimestamp(displayVal);
+                    } else {
+                        displayVal = String(displayVal);
+                    }
                     extraRows += `<div class="detail-row"><span class="label">${key}</span><span class="value">${displayVal}</span></div>`;
                 }
             });
@@ -598,6 +669,7 @@
                             <h4>Wallet & Account</h4>
                             <div class="detail-row"><span class="label">Balance</span><span class="value" style="font-weight:700;color:var(--primary)">₦${Number(u.balance || 0).toLocaleString()}</span></div>
                             <div class="detail-row"><span class="label">Account</span><span class="value"><span class="account-badge ${accountClass}">${accountStatus}</span></span></div>
+                            <div class="detail-row"><span class="label">Registered</span><span class="value">${registrationTime}</span></div>
                             <div class="detail-row"><span class="label">PIN</span><span class="value">${pinStatus}</span></div>
                             <div class="detail-row"><span class="label">Attempts</span><span class="value">${loginAttempts}</span></div>
                             <div class="detail-row"><span class="label">Lockout</span><span class="value">${lockoutInfo}</span></div>
@@ -678,7 +750,7 @@
         btn.disabled = true;
         try {
             const userRef = db.ref(`users/${uid}`);
-            
+
             await userRef.update({
                 kyc_status: 'NOT-SUBMITTED',
                 verify: null,
@@ -688,7 +760,7 @@
                 id_number: null,
                 dob: null
             });
-            
+
             await logAdminAction('REVERT & DELETE FOLDER', uid, `Reverted KYC status to NOT-SUBMITTED and wiped verification folder/identity details for user ${uid}`);
         } catch (e) {
             alert("Error: " + e.message);

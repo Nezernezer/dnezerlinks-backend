@@ -5,64 +5,141 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dnezerlinks | Premium VTU Services</title>
     <style>
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #fff; color: #333; }
-        .hero { background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); color: white; text-align: center; padding: 60px 20px; }
-        .hero h1 { font-size: 3.5rem; margin: 0; font-weight: bold; }
-        .hero p { font-size: 1.15rem; opacity: 0.9; margin: 15px 0 25px; line-height: 1.4; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f8f9fa; color: #333; }
+        
+        /* Reshaped Non-Rectangular Blue Hero Section */
+        .hero { 
+            background: linear-gradient(180deg, #1565C0 0%, #0D47A1 100%); 
+            color: white; 
+            text-align: center; 
+            padding: 45px 20px 75px; 
+            border-radius: 0 0 40px 40px;
+            box-shadow: 0 4px 20px rgba(13, 71, 161, 0.2);
+        }
+        .hero-container { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .hero h1 { font-size: 3rem; margin: 0; font-weight: bold; letter-spacing: -0.5px; }
+        .hero h5 { font-size: 1.1rem; margin: 0; opacity: 0.85; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+        .hero p { font-size: 1.1rem; opacity: 0.95; margin: 0; line-height: 1.5; }
+
+        /* Action Card Section Out of the Blue - Soft Off-White/Light Slate Container */
+        .action-section {
+            max-width: 420px;
+            margin: -40px auto 0;
+            padding: 0 20px;
+            position: relative;
+            z-index: 10;
+        }
+        .action-card {
+            background: #eef4fc;
+            border-radius: 20px;
+            padding: 30px 20px;
+            box-shadow: 0 10px 25px rgba(13, 71, 161, 0.12);
+            border: 1.5px solid #d0e1f9;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
 
         /* Typing Message Style */
         .status-msg {
-            height: 20px;
+            height: 24px;
             font-size: 0.95rem;
-            color: #FFB300;
-            margin-bottom: 20px;
-            font-weight: 600;
+            color: #d97706;
+            margin: 0;
+            font-weight: 700;
         }
         .status-msg::after { content: '|'; animation: blink 0.7s infinite; }
         @keyframes blink { 50% { opacity: 0; } }
+
+        /* Button Group Wrapper */
+        .hero-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 320px;
+        }
 
         /* Animated Get Started Button */
         .btn-get-started {
             background: #FFB300;
             color: #fff;
             text-decoration: none;
-            padding: 16px 55px;
+            padding: 14px 24px;
             border-radius: 40px;
             font-weight: bold;
-            font-size: 1.4rem;
-            display: inline-block;
+            font-size: 1.2rem;
+            display: block;
+            text-align: center;
             transition: 0.3s;
-            box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.7);
+            box-shadow: 0 4px 15px rgba(255, 179, 0, 0.4);
             animation: pulse-animation 2s infinite;
         }
 
         @keyframes pulse-animation {
             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.7); }
-            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 179, 0, 0); }
+            70% { transform: scale(1.03); box-shadow: 0 0 0 12px rgba(255, 179, 0, 0); }
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 179, 0, 0); }
         }
 
         /* Facebook Chatbot Button */
         .btn-facebook {
-            display: inline-block;
-            margin-top: 18px;
             background: #1877F2;
             color: #fff;
             text-decoration: none;
-            padding: 14px 40px;
+            padding: 14px 24px;
             border-radius: 40px;
             font-weight: bold;
-            font-size: 1.15rem;
+            font-size: 1.05rem;
+            display: block;
+            text-align: center;
             transition: 0.3s;
+            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.3);
         }
         .btn-facebook:hover { background: #0d65d9; }
 
-        .features { padding: 50px 20px; text-align: center; background: #fff; padding-bottom: 120px; }
+        /* Fallback Search & Copy Styles */
+        .fb-search-hint {
+            margin-top: 5px;
+            font-size: 0.88rem;
+            color: #475569;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+        .copy-box {
+            display: inline-flex;
+            align-items: center;
+            background: #ffffff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid #cbd5e1;
+            gap: 8px;
+        }
+        .copy-box span { font-weight: bold; color: #0D47A1; }
+        .btn-copy {
+            background: #0D47A1;
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-copy:active { transform: scale(0.95); }
+
+        .features { padding: 50px 20px; text-align: center; background: #f8f9fa; padding-bottom: 120px; }
         .features h2 { font-size: 2.2rem; margin-bottom: 40px; color: #333; font-weight: 700; }
         .card-container { display: flex; flex-direction: column; gap: 20px; max-width: 380px; margin: 0 auto; }
-        .card { background: #fff; padding: 40px 20px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.07); border: 1px solid #f1f1f1; }
-        .card h3 { color: #222; margin: 0 0 15px; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; }
-        .card p { color: #444; margin: 0; font-size: 1.05rem; line-height: 1.5; }
+        .card { background: #fff; padding: 30px 20px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.07); border: 1px solid #f1f1f1; }
+        .card h3 { color: #222; margin: 0 0 10px; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; }
+        .card p { color: #444; margin: 0; font-size: 1rem; line-height: 1.5; }
 
         /* ==================== 📞 FLOATING CONTACT MODULE STYLES ==================== */
         .contact-fab {
@@ -163,15 +240,31 @@
 </head>
 <body>
     <section class="hero">
-        <h1>Dnezerlinks</h1>
-        <h5>Shortened as Dlinks</h5>
-        <p>Premium Data, Airtime & Utility Services at<br>your fingertips.</p>
+        <div class="hero-container">
+            <h1>Dnezerlinks</h1>
+            <h5>Shortened as Dlinks</h5>
+            <p>Premium Data, Airtime & Utility Services at your fingertips.</p>
+        </div>
+    </section>
 
-        <div class="status-msg" id="typeMsg"></div>
+    <!-- Action Section Card with Soft Off-White Blue Container -->
+    <section class="action-section">
+        <div class="action-card">
+            <div class="status-msg" id="typeMsg"></div>
 
-        <a href="login.html" class="btn-get-started">Get Started</a>
-        <br>
-        <a href="https://facebook.com/Dnezerlinks" class="btn-facebook" onclick="openFacebookChatbot(event)">or use Facebook chatbot instead</a>
+            <div class="hero-actions">
+                <a href="login.html" class="btn-get-started">Get Started</a>
+                <a href="https://m.facebook.com/928959540309312" class="btn-facebook" onclick="openFacebookChatbot(event)">Use Facebook Messenger</a>
+            </div>
+
+            <div class="fb-search-hint">
+                Search for Facebook page with name
+                <div class="copy-box">
+                    <span id="pageNameText">Dnezerlinks</span>
+                    <button class="btn-copy" onclick="copyPageName()">Copy</button>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section class="features">
@@ -182,6 +275,16 @@
             <div class="card"><h3>SECURE</h3><p>Safe payment gateway.</p></div>
             <div class="card"><h3>SUPPORT</h3><p>24/7 customer support.</p></div>
             <div class="card"><h3>FACEBOOK CHATBOT</h3><p>or use Facebook chatbot instead</p></div>
+        </div>
+
+        <!-- App Download Button at the bottom of the features page -->
+        <div style="margin-top: 40px; text-align: center;">
+            <a href="https://github.com/Nezernezer/dnezerlinks-app/releases/download/Dnezerlinksapkfile/Dlinks.vtu.signed.apk" 
+               id="downloadAppBtn" 
+               onclick="trackAppDownload(event)" 
+               style="background: #0D47A1; color: #fff; text-decoration: none; padding: 14px 35px; border-radius: 30px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 4px 15px rgba(13, 71, 161, 0.3);">
+                📥 <span id="downloadBtnText">Download Android App (.APK)</span>
+            </a>
         </div>
     </section>
 
@@ -203,7 +306,9 @@
             <div class="contact-channel-item">
                 <label>Whatsapp Connection</label>
                 <div class="contact-channel-value">08117776509</div>
-                <a href="https://wa.me/2348117776509" target="_blank" class="contact-action-btn btn-whatsapp">💬 Chat on WhatsApp</a>
+                <a href="https://m.facebook.com/928959540309312" onclick="openFacebookChatbot(event)">
+                   Follow Us on Facebook and access all our services on messenger via chat
+                </a>
             </div>
 
             <div class="contact-channel-item">
@@ -241,39 +346,44 @@
             setTimeout(type, isDeleting ? 40 : speed);
         }
 
+        // Copy Page Name Function
+        function copyPageName() {
+            const textToCopy = document.getElementById("pageNameText").innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const btn = document.querySelector(".btn-copy");
+                btn.innerText = "Copied!";
+                setTimeout(() => { btn.innerText = "Copy"; }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // Track App Download and Update LocalStorage Impression
+        function trackAppDownload(event) {
+            localStorage.setItem("dnezer_app_downloaded", "true");
+            document.getElementById("downloadBtnText").innerText = "App Downloaded! (Tap to Reinstall)";
+        }
+
         // Check for Facebook / Facebook Lite app → open page inside app, else web
         function openFacebookChatbot(e) {
             e.preventDefault();
-            const pageUrl = 'https://www.facebook.com/Dnezerlinks';
+            const pageId = '928959540309312';
+            const pageUrl = 'https://m.facebook.com/' + pageId;
             const isAndroid = /Android/i.test(navigator.userAgent);
             const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
             if (isAndroid) {
-                // Force Facebook Lite first (most common in Nigeria)
-                // If Lite is not installed, Android will ignore and we fall back
-                window.location.href = 'intent://www.facebook.com/Dnezerlinks#Intent;package=com.facebook.lite;scheme=https;S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
-
-                // After short delay try full Facebook app
-                setTimeout(function () {
-                    window.location.href = 'intent://www.facebook.com/Dnezerlinks#Intent;package=com.facebook.katana;scheme=https;S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
-                }, 700);
-
-                // Final fallback → open in browser
-                setTimeout(function () {
-                    window.location.href = pageUrl;
-                }, 1500);
-
-            } else if (isIOS) {
-                // iOS – try Facebook app
-                window.location.href = 'fb://facewebmodal/f?href=' + encodeURIComponent(pageUrl);
-
-                // Fallback to browser
+                const fbIntentUrl = 'intent://page/' + pageId + '#Intent;scheme=fb;S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
+                window.location.href = fbIntentUrl;
                 setTimeout(function () {
                     window.location.href = pageUrl;
                 }, 1000);
-
+            } else if (isIOS) {
+                window.location.href = 'fb://page/' + pageId;
+                setTimeout(function () {
+                    window.location.href = pageUrl;
+                }, 1000);
             } else {
-                // Desktop
                 window.open(pageUrl, '_blank');
             }
         }
@@ -295,7 +405,13 @@
         window.onload = () => {
             type();
 
-            // Service Worker Registration
+            if (localStorage.getItem("dnezer_app_downloaded") === "true") {
+                const btnTextEl = document.getElementById("downloadBtnText");
+                if (btnTextEl) {
+                    btnTextEl.innerText = "App Downloaded! (Tap to Reinstall)";
+                }
+            }
+
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js')
                     .then(() => console.log('Dnezerlinks: Network guard active.'))

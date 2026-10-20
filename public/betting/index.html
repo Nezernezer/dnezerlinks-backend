@@ -42,14 +42,49 @@
 
         h2 { color: var(--primary); text-align: center; margin: 0 0 20px 0; font-size: 1.5rem; }
 
-        #statusMsg { padding: 12px; margin-bottom: 15px; border-radius: 8px; display: none; font-size: 0.9rem; text-align: center; font-weight: 500; }
+        #statusMsg {
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            display: none;
+            font-size: 0.9rem;
+            text-align: center;
+            font-weight: 500;
+        }
         .error-msg { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
         .success-msg { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 
-        label { font-weight: bold; margin-top: 15px; display: block; color: #444; font-size: 0.9rem; }
-        input, select { padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 1rem; outline: none; }
+        label {
+            font-weight: bold;
+            margin-top: 15px;
+            display: block;
+            color: #444;
+            font-size: 0.9rem;
+        }
+        input, select {
+            padding: 12px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 1rem;
+            outline: none;
+        }
 
-        button { margin-top: 25px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: 0.3s; }
+        button {
+            margin-top: 25px;
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            font-size: 1rem;
+            transition: 0.3s;
+        }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
 
         #verifyBtn {
@@ -59,9 +94,11 @@
             font-size: 0.95rem;
         }
 
+        /* Verified name box — sits ABOVE the Verify button */
         #customerNameBox {
             display: none;
             margin-top: 12px;
+            margin-bottom: 4px;
             padding: 12px;
             background: #e3f2fd;
             border: 1px solid #90caf9;
@@ -124,7 +161,10 @@
             margin: 10px auto;
             display: none;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
         @media (max-width: 360px) {
             .card { padding: 15px; }
@@ -169,11 +209,12 @@
         <input type="text" id="customerId" placeholder="Enter Customer ID" list="recentCustomers" oninput="saveRecentCustomerInput(); resetVerification()">
         <datalist id="recentCustomers"></datalist>
 
-        <button id="verifyBtn" onclick="verifyAccount()">Verify Account</button>
-
+        <!-- Verified name appears ABOVE the Verify button -->
         <div id="customerNameBox">
-            Account Name: <strong id="verifiedName"></strong>
+            ✓ Account Name: <strong id="verifiedName"></strong>
         </div>
+
+        <button id="verifyBtn" onclick="verifyAccount()">Verify Account</button>
 
         <label>Amount (₦)</label>
         <input type="number" id="amount" placeholder="Min 100" min="100">
@@ -252,7 +293,7 @@
     }
 
     function saveRecentCustomerInput() {
-        let customerId = document.getElementById('customerId').value.trim();
+        const customerId = document.getElementById('customerId').value.trim();
         if (customerId.length > 3) {
             localStorage.setItem('last_betting_customer', customerId);
         }
@@ -297,16 +338,24 @@
                 },
                 body: JSON.stringify({
                     providerID: provider,
-                    customerID: customerId
+                    customerID: customerId,
+                    uid: user.uid
                 })
             });
 
             const res = await response.json();
 
-            if (response.ok && res.success && res.customer_name) {
+            if (response.ok && res.success) {
                 isVerified = true;
-                verifiedCustomerName = res.customer_name;
-                document.getElementById('verifiedName').textContent = res.customer_name;
+
+                // Prefer real name; if Pairgate returns the ID itself, show clearer label
+                let displayName = res.customer_name || "";
+                if (!displayName || displayName === customerId) {
+                    displayName = "Verified (name not available)";
+                }
+
+                verifiedCustomerName = displayName;
+                document.getElementById('verifiedName').textContent = displayName;
                 document.getElementById('customerNameBox').style.display = 'block';
                 document.getElementById('fundBtn').disabled = false;
                 showMessage("Account verified successfully!", false);
@@ -392,7 +441,10 @@
         const pinErr = document.getElementById('pinError');
         const spinner = document.getElementById('processingSpinner');
 
-        if (enteredPin.length < 4) { pinErr.textContent = "Enter 4 digits"; return; }
+        if (enteredPin.length < 4) {
+            pinErr.textContent = "Enter 4 digits";
+            return;
+        }
 
         btn.disabled = true;
         btn.innerText = "Processing...";
@@ -414,7 +466,7 @@
                 btn.style.display = 'inline-block';
                 spinner.style.display = 'none';
             }
-        } catch(e) {
+        } catch (e) {
             pinErr.textContent = "Validation error.";
             btn.disabled = false;
             btn.innerText = "Confirm Payment";
@@ -450,7 +502,7 @@
 
             const response = await fetch(`${backendDomain}/api/airtimeswap/fund`, {
                 method: "POST",
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
                     "Authorization": "Bearer " + idToken
                 },

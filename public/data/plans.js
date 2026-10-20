@@ -258,21 +258,25 @@ const processPlans = (data) => {
             processed[network][category] = data[network][category].map(plan => ({
                 ...plan,
                 price: addProfit(plan.price),
-                category: category          // ← keep the group name
+                category: category
             }));
         }
     }
     return processed;
 };
 
-// Global for browser
-window.groupedPlans = processPlans(rawPlans);
-window.extractDuration = extractDuration;
+const groupedPlans = processPlans(rawPlans);
+
+// Browser support
+if (typeof window !== 'undefined') {
+    window.groupedPlans = groupedPlans;
+    window.extractDuration = extractDuration;
+}
 
 // Node.js support
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        groupedPlans: window.groupedPlans,
+        groupedPlans,
         rawPlans,
         addProfit,
         processPlans,
