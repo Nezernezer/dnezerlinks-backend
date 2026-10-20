@@ -8,14 +8,14 @@ let extractDuration = null;
 
 try {
     const plansModule = require('../../public/data/plans');
-    groupedPlans = plansModule.groupedPlans || {};
-    extractDuration = plansModule.extractDuration;
+    groupedPlans = plansModule.groupedPlans || plansModule || {};
+    extractDuration = plansModule.extractDuration || null;
     console.log('✅ Plans loaded successfully. Networks:', Object.keys(groupedPlans));
 } catch (err1) {
     try {
         const plansModule = require(path.join(__dirname, '../../public/data/plans'));
-        groupedPlans = plansModule.groupedPlans || {};
-        extractDuration = plansModule.extractDuration;
+        groupedPlans = plansModule.groupedPlans || plansModule || {};
+        extractDuration = plansModule.extractDuration || null;
         console.log('✅ Plans loaded via fallback path. Networks:', Object.keys(groupedPlans));
     } catch (err2) {
         console.error('❌ CRITICAL: Could not load plans.js');
@@ -25,7 +25,7 @@ try {
     }
 }
 
-// Fallback extractDuration (in case plans.js doesn't export it)
+// Fallback extractDuration
 if (typeof extractDuration !== 'function') {
     extractDuration = function (name) {
         const matches = name.match(/\((\d+\s*Days?)\)/gi);
@@ -131,6 +131,7 @@ async function handleDataFlow(psid, text, session) {
 
             if (!groupedPlans || !groupedPlans[network]) {
                 console.error('No plans found for network:', network);
+                console.error('Available networks:', Object.keys(groupedPlans));
                 clearDataSession(psid);
                 return {
                     text: '❌ Data plans are currently unavailable. Please try again later or contact support.\n\nType "menu" to go back.'
@@ -187,7 +188,7 @@ async function handleDataFlow(psid, text, session) {
             session.data.duration = selectedDuration;
             session.step = 'DATA_PLAN';
 
-            // Collect all plans that match this duration (across all categories)
+            // Collect all plans that match this duration
             let matching = [];
             Object.values(groupedPlans[session.data.network]).forEach(plans => {
                 plans.forEach(plan => {
@@ -210,7 +211,7 @@ async function handleDataFlow(psid, text, session) {
                 const cleanName = (plan.name || '').split(' - ₦')[0].trim();
                 const category = plan.category || '';
                 const finalPrice = Number(plan.price).toLocaleString();
-                // Format: 1.5GB (3 Days) Corporate - ₦1,620
+                // Example: 1.5GB (3 Days) Corporate - ₦1,620
                 msg += (i + 1) + '. ' + cleanName + ' ' + category + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the plan.';
