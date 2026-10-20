@@ -6,27 +6,46 @@ const axios = require('axios');
 let groupedPlans = {};
 let extractDuration = null;
 
+console.log('🔄 Loading plans.js ...');
+
 try {
-    const plansModule = require('../../public/data/plans');
-    groupedPlans = plansModule.groupedPlans || plansModule || {};
-    extractDuration = plansModule.extractDuration || null;
-    console.log('✅ Plans loaded successfully. Networks:', Object.keys(groupedPlans));
-} catch (err1) {
+    // Try relative path first
+    let plansModule;
     try {
-        const plansModule = require(path.join(__dirname, '../../public/data/plans'));
-        groupedPlans = plansModule.groupedPlans || plansModule || {};
-        extractDuration = plansModule.extractDuration || null;
-        console.log('✅ Plans loaded via fallback path. Networks:', Object.keys(groupedPlans));
-    } catch (err2) {
-        console.error('❌ CRITICAL: Could not load plans.js');
-        console.error('Error 1:', err1.message);
-        console.error('Error 2:', err2.message);
-        groupedPlans = {};
+        plansModule = require('../../public/data/plans');
+    } catch (e) {
+        console.log('First path failed, trying absolute path...');
+        plansModule = require(path.join(__dirname, '../../public/data/plans'));
     }
+
+    console.log('📦 Module loaded. Keys:', Object.keys(plansModule || {}));
+
+    // Support different export styles
+    if (plansModule.groupedPlans) {
+        groupedPlans = plansModule.groupedPlans;
+    } else if (plansModule.default && plansModule.default.groupedPlans) {
+        groupedPlans = plansModule.default.groupedPlans;
+    } else {
+        groupedPlans = plansModule;
+    }
+
+    extractDuration = plansModule.extractDuration || (plansModule.default && plansModule.default.extractDuration) || null;
+
+    console.log('✅ Plans loaded successfully');
+    console.log('📡 Networks found:', Object.keys(groupedPlans));
+
+    if (Object.keys(groupedPlans).length === 0) {
+        console.error('❌ groupedPlans is EMPTY after loading!');
+    }
+} catch (err) {
+    console.error('❌ CRITICAL: Failed to load plans.js');
+    console.error(err.message);
+    groupedPlans = {};
 }
 
 // Fallback extractDuration
 if (typeof extractDuration !== 'function') {
+    console.log('⚠️ Using fallback extractDuration function');
     extractDuration = function (name) {
         const matches = name.match(/\((\d+\s*Days?)\)/gi);
         if (matches && matches.length > 0) {
@@ -129,12 +148,14 @@ async function handleDataFlow(psid, text, session) {
                 };
             }
 
+            console.log('🔍 Selected network:', network);
+            console.log('📡 Available networks in memory:', Object.keys(groupedPlans));
+
             if (!groupedPlans || !groupedPlans[network]) {
-                console.error('No plans found for network:', network);
-                console.error('Available networks:', Object.keys(groupedPlans));
+                console.error('❌ No plans found for network:', network);
                 clearDataSession(psid);
                 return {
-                    text: '❌ Data plans are currently unavailable. Please try again later or contact support.\n\nType "menu" to go back.'
+                    text: '❌ Data plans are currently unavailable for ' + network.toUpperCase() + '.\n\nPlease try again later or contact support.\n\nType "menu" to go back.'
                 };
             }
 
@@ -211,7 +232,6 @@ async function handleDataFlow(psid, text, session) {
                 const cleanName = (plan.name || '').split(' - ₦')[0].trim();
                 const category = plan.category || '';
                 const finalPrice = Number(plan.price).toLocaleString();
-                // Example: 1.5GB (3 Days) Corporate - ₦1,620
                 msg += (i + 1) + '. ' + cleanName + ' ' + category + ' - ₦' + finalPrice + '\n';
             });
             msg += '\nReply with the number of the plan.';
@@ -259,9 +279,6 @@ async function handleDataFlow(psid, text, session) {
     }
 }
 
-/**
- * Execute data purchase after PIN is verified
- */
 async function executePurchase(userId, sessionData, pin, APP_URL) {
     const { phone, network, networkID, planId, amount, planName } = sessionData;
     const parsedAmount = parseFloat(amount);
