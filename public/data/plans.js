@@ -150,7 +150,6 @@ const rawPlans = {
             { id: "260", name: "35GB (30 Days) - ₦9820.00", price: 9820 }
         ],
         "SME": [
-           // { id: "110", name: "Airtel SME (0 Days) - ₦10.00", price: 10 },
             { id: "111", name: "150MB (1 Day) - ₦55.00", price: 55 },
             { id: "112", name: "300MB (2 Days) - ₦115.00", price: 115 },
             { id: "114", name: "2GB (2 Days) - ₦640.00", price: 640 },
@@ -232,19 +231,23 @@ const rawPlans = {
     }
 };
 
-
-// This function processes the plans to include the final price
 const addProfit = (price) => Math.ceil(price + (price * 0.11));
 
 const extractDuration = (name) => {
-    const match = name.match(/\((\d+\s*Days?)\)/i);
-    if (match) return match[1].replace(/\s+/g, ' ').trim();
+    // Prefer the LAST occurrence of (X Day / X Days)
+    const matches = name.match(/\((\d+\s*Days?)\)/gi);
+    if (matches && matches.length > 0) {
+        return matches[matches.length - 1]
+            .replace(/[()]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
 
     if (/weekly/i.test(name)) return '7 Days';
     if (/monthly/i.test(name)) return '30 Days';
-    if (/2-Month|60 Days/i.test(name)) return '60 Days';
-    if (/3-Month|90 Days/i.test(name)) return '90 Days';
-    if (/365 Days|1 Year|1TB \(365/i.test(name)) return '365 Days';
+    if (/2-Month/i.test(name)) return '60 Days';
+    if (/3-Month/i.test(name)) return '90 Days';
+    if (/365 Days|1 Year/i.test(name)) return '365 Days';
     if (/120 Days/i.test(name)) return '120 Days';
 
     return 'Other';
@@ -266,4 +269,7 @@ const processPlans = (data) => {
 
 const groupedPlans = processPlans(rawPlans);
 
-module.exports = { groupedPlans, rawPlans, addProfit, processPlans, extractDuration };
+// Safe for both browser and Node
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { groupedPlans, rawPlans, addProfit, processPlans, extractDuration };
+}
