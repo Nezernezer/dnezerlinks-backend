@@ -257,7 +257,8 @@ const processPlans = (data) => {
         for (let category in data[network]) {
             processed[network][category] = data[network][category].map(plan => ({
                 ...plan,
-                price: addProfit(plan.price)
+                price: addProfit(plan.price),
+                category: category          // ← keep the group name
             }));
         }
     }

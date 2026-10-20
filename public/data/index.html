@@ -209,9 +209,9 @@
             matching.sort(function(a, b) { return a.price - b.price; });
 
             matching.forEach(function(plan) {
-                // SAFE string construction (no template literals)
+                // Format: 1.5GB (3 Days) Corporate - ₦1620
                 var cleanName = plan.name.split(' - ₦')[0];
-                var displayName = cleanName + ' - ₦' + plan.price;
+                var displayName = cleanName + ' ' + plan.category + ' - ₦' + plan.price;
                 variationSelect.add(new Option(displayName, JSON.stringify(plan)));
             });
         }
