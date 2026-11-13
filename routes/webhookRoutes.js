@@ -1,5 +1,5 @@
 // =========================================================================
-// BILLSTACK WEBHOOK ROUTE (DEFENSIVE ERROR-PROOFED VERSION)
+// BILLSTACK WEBHOOK ROUTE (DEFENSIVE ERROR-PROOFED VERSION + ₦70 FIRST FUNDING BONUS)
 // =========================================================================
 const express = require('express');
 const router = express.Router();
@@ -105,7 +105,7 @@ router.post('/', async (req, res) => {
             const customerEmail = String(dataObj.customer.email).toLowerCase().trim();
             const usersSnapshot = await db.ref('users').once('value');
             const usersData = usersSnapshot.val() || {};
-            
+
             for (const uid in usersData) {
                 const user = usersData[uid] || {};
                 if (user.email && String(user.email).toLowerCase().trim() === customerEmail) {
@@ -142,14 +142,41 @@ router.post('/', async (req, res) => {
         const feeCharged = amount * 0.015;
         const netAmountToCredit = amount - feeCharged;
 
-        // Credit user balance safely
-        await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
-            return (parseFloat(currentBalance) || 0) + netAmountToCredit;
+        // --- ₦70 FIRST FUNDING BONUS CHECK & LOGIC ---
+        let bonusAmount = 0;
+        const BONUS_THRESHOLD = 1000; // Minimum funding amount required
+        const BONUS_REWARD = 70;      // Exactly ₦70 bonus as requested
+
+        const userBonusRef = db.ref(`users/${targetUid}/hasReceivedFirstBonus`);
+        let awardedBonusThisTx = false;
+
+        await userBonusRef.transaction((hasReceived) => {
+            // If already marked true, skip granting bonus again
+            if (hasReceived === true) {
+                return; 
+            }
+
+            // If not yet rewarded and amount meets or exceeds ₦1,000, grant ₦70 once
+            if (amount >= BONUS_THRESHOLD) {
+                awardedBonusThisTx = true;
+                bonusAmount = BONUS_REWARD;
+                return true; // Permanently lock hasReceivedFirstBonus to true
+            }
+
+            return hasReceived; 
         });
 
-        const txRef = db.ref(`transactions/${targetUid}`).push();
+        const totalCreditAmount = netAmountToCredit + bonusAmount;
+
+        // Credit user balance safely (principal net amount + ₦70 bonus if qualified)
+        await db.ref(`users/${targetUid}/balance`).transaction((currentBalance) => {
+            return (parseFloat(currentBalance) || 0) + totalCreditAmount;
+        });
+
         const timestamp = Date.now();
 
+        // 1. Log main funding transaction
+        const txRef = db.ref(`transactions/${targetUid}`).push();
         await txRef.set({
             id: txRef.key || 'tx_' + timestamp,
             amount: netAmountToCredit,
@@ -161,13 +188,33 @@ router.post('/', async (req, res) => {
             timestamp: timestamp
         });
 
+        // 2. Log separate bonus transaction if awarded
+        if (awardedBonusThisTx && bonusAmount > 0) {
+            const bonusTxRef = db.ref(`transactions/${targetUid}`).push();
+            await bonusTxRef.set({
+                id: bonusTxRef.key || 'tx_bonus_' + timestamp,
+                amount: bonusAmount,
+                reference: 'FIRST_FUNDING_BONUS',
+                transaction_reference: `bonus_${uniqueTxIdentifier}`,
+                type: 'bonus',
+                status: 'success',
+                timestamp: timestamp + 1
+            });
+        }
+
+        // Send notification to user
+        let notificationMessage = `Your account has been successfully credited with ₦${netAmountToCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}.`;
+        if (awardedBonusThisTx && bonusAmount > 0) {
+            notificationMessage += ` Plus a ₦${bonusAmount} welcome bonus for your first funding!`;
+        }
+
         await db.ref(`notifications/${targetUid}/${uniqueTxIdentifier}`).set({
-            message: `Your account has been successfully credited with ₦${netAmountToCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}.`,
+            message: notificationMessage,
             read: false,
             timestamp: timestamp
         });
 
-        console.log(`🎉 SUCCESSFULLY CREDITED user ${targetUid} with ₦${netAmountToCredit}`);
+        console.log(`🎉 SUCCESSFULLY CREDITED user ${targetUid} with ₦${netAmountToCredit} ${awardedBonusThisTx ? `+ ₦${bonusAmount} welcome bonus` : ''}`);
         return res.status(200).send("Processed");
 
     } catch (e) {
