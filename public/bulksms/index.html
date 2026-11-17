@@ -15,7 +15,7 @@
         .card { background: #fff; border-radius: 15px; padding: 20px; margin: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
-        input, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; font-family: inherit; outline: none; }
+        input, textarea, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; font-family: inherit; outline: none; background: #fff; }
         .char-count { font-size: 11px; color: #888; text-align: right; margin-top: 5px; }
         .buy-btn { width: 100%; background: var(--primary); color: #fff; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
         .bottom-nav { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; justify-content: space-around; border-top: 1px solid #ddd; padding: 12px 0; }
@@ -38,10 +38,50 @@
 
 <div class="card">
     <div id="globalMsg"></div>
-    <div class="form-group">
-        <label>Sender ID (Max 11 Chars)</label>
-        <input type="text" id="senderId" placeholder="e.g., JOHNDOE" maxlength="11">
+
+    <!-- Button to Show Purchase Sub-Form -->
+    <button type="button" id="togglePurchaseBtn" onclick="togglePurchaseForm()" style="background: #6c757d; color: #fff; border: none; padding: 10px; border-radius: 8px; width: 100%; font-weight: bold; font-size: 14px; cursor: pointer; margin-bottom: 15px;">
+        + Register New Sender ID
+    </button>
+
+    <!-- Hidden Sub-Form for Purchasing Sender ID (Contains Explanation + PIN Field) -->
+    <div id="purchaseFormContainer" style="display: none; background: #fafafa; border: 1px solid #ddd; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+        <h4 style="margin: 0 0 8px 0; font-size: 15px; color: var(--primary);">Register New Sender ID</h4>
+        
+        <!-- Sender ID Explanation -->
+        <div style="background: #f8f9fa; padding: 10px; border-left: 4px solid var(--primary); margin-bottom: 12px; border-radius: 4px;">
+            <strong style="color: var(--primary); font-size: 12px;">What is a Sender ID?</strong>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #555; line-height: 1.3;">
+                A Sender ID is the alphanumeric name (up to 11 characters) that appears as the sender on your recipients' phones when they receive your bulk SMS. Your <strong>first Sender ID is FREE</strong>, while additional ones cost <strong>₦200</strong> each.
+            </p>
+        </div>
+
+        <p id="senderIdPricingNote" style="font-size: 12px; color: #666; margin-bottom: 10px;"></p>
+
+        <div class="form-group" style="margin-bottom: 10px;">
+            <label for="newSenderIdInput">New Sender ID</label>
+            <input type="text" id="newSenderIdInput" placeholder="e.g. MYBRAND" maxlength="11" style="text-transform: uppercase;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label for="subFormPinInput">Transaction PIN</label>
+            <input type="password" id="subFormPinInput" placeholder="Enter 4-digit PIN" maxlength="4" inputmode="numeric">
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <button type="button" id="subFormSubmitBtn" onclick="submitNewSenderId()" style="background: var(--primary); color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer;">Submit & Pay</button>
+            <button type="button" onclick="togglePurchaseForm()" style="background: #f44336; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; width: 80px; cursor: pointer;">Cancel</button>
+        </div>
     </div>
+
+    <!-- Sender ID Dropdown Menu -->
+    <div class="form-group">
+        <label>Sender ID</label>
+        <select id="senderId">
+            <option value="">-- Loading Sender IDs --</option>
+        </select>
+    </div>
+
     <div class="form-group">
         <label>Recipients (Comma separated)</label>
         <textarea id="recipients" rows="3" placeholder="080123456789,07012356789" oninput="updateCount()"></textarea>
@@ -115,7 +155,95 @@
         } catch (e) {
             console.error("Error checking PIN on load", e);
         }
+
+        // Real-time listener for user's sender IDs
+        database.ref('users/' + user.uid).on('value', snapshot => {
+            const data = snapshot.val() || {};
+            const senderIds = Array.isArray(data.smsSenderIds) ? data.smsSenderIds : [];
+            const dropdown = document.getElementById('senderId');
+            const pricingNote = document.getElementById('senderIdPricingNote');
+
+            dropdown.innerHTML = '';
+            if (senderIds.length === 0) {
+                dropdown.innerHTML = '<option value="">-- No Sender ID registered yet --</option>';
+                pricingNote.innerHTML = '🎉 This will be your <strong>first</strong> Sender ID and is <strong>FREE</strong>!';
+            } else {
+                senderIds.forEach(id => {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = id;
+                    dropdown.appendChild(opt);
+                });
+                pricingNote.innerHTML = '💰 You already have a free Sender ID. Additional Sender IDs cost <strong>₦200</strong>.';
+            }
+        });
     });
+
+    function togglePurchaseForm() {
+        const form = document.getElementById('purchaseFormContainer');
+        const btn = document.getElementById('togglePurchaseBtn');
+        if (form.style.display === 'none') {
+            form.style.display = 'block';
+            btn.style.display = 'none';
+        } else {
+            form.style.display = 'none';
+            btn.style.display = 'block';
+            document.getElementById('newSenderIdInput').value = '';
+            document.getElementById('subFormPinInput').value = '';
+        }
+    }
+
+    async function submitNewSenderId() {
+        const input = document.getElementById('newSenderIdInput');
+        const pinInput = document.getElementById('subFormPinInput');
+        const submitBtn = document.getElementById('subFormSubmitBtn');
+
+        const senderIdVal = input.value.trim().toUpperCase();
+        const pinVal = pinInput.value.trim();
+
+        if (!senderIdVal) {
+            showGlobalMessage("Please enter a valid Sender ID.");
+            return;
+        }
+        if (pinVal.length < 4) {
+            showGlobalMessage("Please enter your 4-digit Transaction PIN.");
+            return;
+        }
+
+        try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Processing...";
+
+            const user = auth.currentUser;
+            const token = await user.getIdToken();
+            const res = await fetch(`${API_BASE_URL}/api/customname/register-sender-id`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    uid: user.uid,
+                    pin: pinVal,
+                    senderId: senderIdVal
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || data.message || "Failed to register Sender ID.");
+            }
+
+            showGlobalMessage(data.message, false);
+            input.value = '';
+            pinInput.value = '';
+            togglePurchaseForm(); // Closes sub-form and returns view to bulk SMS interface
+        } catch (err) {
+            showGlobalMessage(err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Submit & Pay";
+        }
+    }
 
     function showGlobalMessage(text, isError = true) {
         const msgDiv = document.getElementById('globalMsg');
@@ -212,14 +340,14 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userId: user.uid,
-                    pin: enteredPin, // <--- Correctly passing PIN to backend
+                    pin: enteredPin,
                     recipient: document.getElementById('recipients').value,
                     message: document.getElementById('message').value,
                     senderName: document.getElementById('senderId').value
                 })
             });
             const result = await response.json();
-            
+
             if (!response.ok || !result.success) {
                 throw new Error(result.error || "Transaction failed.");
             }
