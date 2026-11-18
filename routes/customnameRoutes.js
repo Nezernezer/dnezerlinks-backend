@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
-const db = require('../config/firebase'); // Matches your airtimeRoutes database import style
+const db = require('../config/firebase');
 
-// Fee configurations
+// Fee configuration: ₦500 for each custom brand name purchase
 const BRAND_NAME_FEE = 500;
 const ADDITIONAL_SENDER_ID_FEE = 200;
 
@@ -14,7 +14,7 @@ const getUserId = (req) => {
 };
 
 /**
- * 1. Unlock / Set Recharge Card Brand Name (Fee: ₦500)
+ * 1. Purchase / Set Recharge Card Brand Name (Fee: ₦500 per purchase)
  */
 router.post('/set-brand-name', async (req, res) => {
     const userId = getUserId(req);
@@ -28,14 +28,13 @@ router.post('/set-brand-name', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Please provide a valid brand name (at least 2 characters).' });
     }
 
-    const cleanBrandName = brandName.trim();
-    const userRef = db.ref(`users/${userId}/balance`);
+    const cleanBrandName = brandName.trim().toUpperCase();
+    const userDocRef = admin.database().ref(`users/${userId}`);
 
     try {
         let errorMsg = '';
-        let costCharged = 0;
+        const cost = BRAND_NAME_FEE;
 
-        const userDocRef = admin.database().ref(`users/${userId}`);
         const result = await userDocRef.transaction((userData) => {
             if (!userData) {
                 errorMsg = 'User profile not found.';
@@ -43,20 +42,14 @@ router.post('/set-brand-name', async (req, res) => {
             }
 
             const currentBalance = Number(userData.balance || 0);
-            const isAlreadyUnlocked = userData.isBrandNameUnlocked === true;
-            const cost = isAlreadyUnlocked ? 0 : BRAND_NAME_FEE;
 
             if (currentBalance < cost) {
-                errorMsg = `Insufficient balance. ₦${BRAND_NAME_FEE} is required to set a custom brand name.`;
+                errorMsg = `Insufficient balance. ₦${cost} is required to purchase a custom brand name.`;
                 return; // Abort transaction
             }
 
-            if (!isAlreadyUnlocked) {
-                userData.balance = currentBalance - cost;
-                userData.isBrandNameUnlocked = true;
-                costCharged = cost;
-            }
-
+            // Deduct ₦500 for each purchase/update
+            userData.balance = currentBalance - cost;
             userData.rechargeBrandName = cleanBrandName;
             userData.brandNameUpdatedAt = Date.now();
 
@@ -67,23 +60,21 @@ router.post('/set-brand-name', async (req, res) => {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to update brand name.' });
         }
 
-        // Log transaction history matching airtimeRoutes format under transactions/${userId}
-        if (costCharged > 0) {
-            const txRef = db.ref(`transactions/${userId}`).push();
-            await txRef.set({
-                service: "Recharge Card Brand Name",
-                amount: costCharged,
-                type: "debit",
-                status: "successful",
-                timestamp: Date.now(),
-                reference: txRef.key,
-                description: `Custom Recharge Brand Name set to "${cleanBrandName}"`
-            });
-        }
+        // Log transaction history to transactions/${userId}
+        const txRef = db.ref(`transactions/${userId}`).push();
+        await txRef.set({
+            service: "Recharge Card Brand Name",
+            amount: cost,
+            type: "debit",
+            status: "successful",
+            timestamp: Date.now(),
+            reference: txRef.key,
+            description: `Custom Recharge Brand Name purchased: "${cleanBrandName}"`
+        });
 
         return res.json({
             success: true,
-            message: `Brand name "${cleanBrandName}" successfully updated!`,
+            message: `Brand name "${cleanBrandName}" successfully purchased! (₦${cost} deducted)`,
             brandName: cleanBrandName
         });
 
@@ -127,10 +118,9 @@ router.post('/register-sender-id', async (req, res) => {
 
             const existingIds = Array.isArray(userData.smsSenderIds) ? userData.smsSenderIds : [];
 
-            // Check if Sender ID already exists for this user
             if (existingIds.some(id => String(id).toUpperCase() === cleanSenderId)) {
                 errorMsg = 'You have already registered this Sender ID.';
-                return; // Abort transaction
+                return;
             }
 
             const isFirst = existingIds.length === 0;
@@ -139,7 +129,7 @@ router.post('/register-sender-id', async (req, res) => {
 
             if (currentBalance < cost) {
                 errorMsg = `Insufficient balance. ₦${ADDITIONAL_SENDER_ID_FEE} is required for additional Sender IDs.`;
-                return; // Abort transaction
+                return;
             }
 
             if (cost > 0) {
@@ -157,7 +147,6 @@ router.post('/register-sender-id', async (req, res) => {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to register Sender ID.' });
         }
 
-        // Log transaction history matching airtimeRoutes format under transactions/${userId}
         const txRef = db.ref(`transactions/${userId}`).push();
         await txRef.set({
             service: "Bulk SMS Sender ID",
