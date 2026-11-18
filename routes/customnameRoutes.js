@@ -32,6 +32,8 @@ router.post('/set-brand-name', async (req, res) => {
 
     try {
         let errorMsg = '';
+        let costCharged = 0;
+
         const result = await userRef.transaction((userData) => {
             if (!userData) {
                 errorMsg = 'User profile not found.';
@@ -50,6 +52,7 @@ router.post('/set-brand-name', async (req, res) => {
             if (!isAlreadyUnlocked) {
                 userData.balance = currentBalance - cost;
                 userData.isBrandNameUnlocked = true;
+                costCharged = cost;
             }
 
             userData.rechargeBrandName = cleanBrandName;
@@ -60,6 +63,19 @@ router.post('/set-brand-name', async (req, res) => {
 
         if (!result.committed) {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to update brand name.' });
+        }
+
+        // Log transaction history if a fee was charged
+        if (costCharged > 0) {
+            const txRef = admin.database().ref(`users/${userId}/transactions`).push();
+            await txRef.set({
+                type: 'Recharge Card Brand Name',
+                amount: costCharged,
+                description: `Custom Recharge Brand Name set to "${cleanBrandName}"`,
+                status: 'Successful',
+                date: new Date().toISOString(),
+                timestamp: Date.now()
+            });
         }
 
         return res.json({
@@ -137,6 +153,19 @@ router.post('/register-sender-id', async (req, res) => {
         if (!result.committed) {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to register Sender ID.' });
         }
+
+        // Log transaction history to Firebase so it shows up in history logs
+        const txRef = admin.database().ref(`users/${userId}/transactions`).push();
+        await txRef.set({
+            type: 'Bulk SMS Sender ID',
+            amount: feeCharged,
+            description: feeCharged === 0 
+                ? `Free First Sender ID registration: "${cleanSenderId}"` 
+                : `Additional Sender ID registration: "${cleanSenderId}"`,
+            status: 'Successful',
+            date: new Date().toISOString(),
+            timestamp: Date.now()
+        });
 
         return res.json({
             success: true,
