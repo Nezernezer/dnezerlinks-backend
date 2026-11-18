@@ -38,17 +38,17 @@ router.post('/set-brand-name', async (req, res) => {
                 return userData;
             }
 
-            const currentBalance = Number(userData.walletBalance || 0);
+            const currentBalance = Number(userData.balance || 0);
             const isAlreadyUnlocked = userData.isBrandNameUnlocked === true;
             const cost = isAlreadyUnlocked ? 0 : BRAND_NAME_FEE;
 
             if (currentBalance < cost) {
-                errorMsg = `Insufficient wallet balance. ₦${BRAND_NAME_FEE} is required to set a custom brand name.`;
+                errorMsg = `Insufficient balance. ₦${BRAND_NAME_FEE} is required to set a custom brand name.`;
                 return; // Abort transaction
             }
 
             if (!isAlreadyUnlocked) {
-                userData.walletBalance = currentBalance - cost;
+                userData.balance = currentBalance - cost;
                 userData.isBrandNameUnlocked = true;
             }
 
@@ -116,14 +116,17 @@ router.post('/register-sender-id', async (req, res) => {
 
             const isFirst = existingIds.length === 0;
             const cost = isFirst ? 0 : ADDITIONAL_SENDER_ID_FEE;
-            const currentBalance = Number(userData.walletBalance || 0);
+            const currentBalance = Number(userData.balance || 0);
 
             if (currentBalance < cost) {
                 errorMsg = `Insufficient balance. ₦${ADDITIONAL_SENDER_ID_FEE} is required for additional Sender IDs.`;
                 return; // Abort transaction
             }
 
-            userData.walletBalance = currentBalance - cost;
+            if (cost > 0) {
+                userData.balance = currentBalance - cost;
+            }
+
             existingIds.push(cleanSenderId);
             userData.smsSenderIds = existingIds;
             feeCharged = cost;
