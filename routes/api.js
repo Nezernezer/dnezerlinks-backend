@@ -14,6 +14,6 @@ router.use('/airtimeswap', require('./bettingRoutes'));
 router.use('/sendmoney', require('./sendmoneyRoutes'));
 router.use('/admin', require('./adminRoutes'));
 router.use('/balance', require('./balanceRoutes'));
-router.use('/updateaccount', require('./updateaccount'));
+router.use('/updateaccount', require('./customname'));
 
 module.exports = router;
