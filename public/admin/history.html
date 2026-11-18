@@ -3,36 +3,347 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Audit History | Dnezerlinks</title>
+    <title>User Activity | Dnezerlinks</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     <style>
-        :root { --primary: #0d47a1; --accent: #ffab00; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-        .header-top { background: var(--primary); color: white; padding: 20px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .nav-links a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; }
-        .header-top h2 { margin: 0; font-size: 1.4rem; }
-        .status-bar { font-size: 10px; color: #4caf50; font-weight: bold; }
-        .content-area { padding: 15px; }
-        .log-card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #eee; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .log-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
-        .amt-FUND { color: #2e7d32; font-weight: bold; }
-        .amt-DEBIT { color: #d32f2f; font-weight: bold; }
-        .date { font-size: 10px; color: #888; }
-        .footer-info { text-align: center; padding: 20px; color: #888; font-size: 12px; }
+        :root {
+            --primary: #0d47a1;
+            --accent: #ffab00;
+            --success: #2e7d32;
+            --danger: #c62828;
+            --warning: #f57c00;
+            --info: #1565c0;
+            --text: #1a1a1a;
+            --muted: #6b7280;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --border: #e5e7eb;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        .header-top {
+            background: var(--primary);
+            color: white;
+            padding: 16px 16px 14px;
+            box-shadow: 0 2px 12px rgba(13, 71, 161, 0.28);
+            position: sticky;
+            top: 0;
+            z-index: 30;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .status-bar {
+            font-size: 11px;
+            color: #a5d6a7;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            background: #4caf50;
+            border-radius: 50%;
+        }
+
+        .header-top h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .search-box {
+            width: 100%;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.28);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-box::placeholder { color: rgba(255,255,255,0.6); }
+
+        .content-area {
+            padding: 14px 12px 50px;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .user-card {
+            background: var(--card);
+            border-radius: 14px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            overflow: hidden;
+            transition: box-shadow 0.2s ease;
+        }
+
+        .user-card.expanded {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+            border-color: #c5cae9;
+        }
+
+        .user-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 15px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .user-header:active { background: #f8f9fb; }
+
+        .avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #1565c0, #0d47a1);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-weight: 650;
+            font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chevron {
+            width: 20px;
+            height: 20px;
+            color: #9ca3af;
+            transition: transform 0.25s ease;
+            flex-shrink: 0;
+        }
+
+        .user-card.expanded .chevron {
+            transform: rotate(180deg);
+            color: var(--primary);
+        }
+
+        .activity-panel {
+            display: none;
+            border-top: 1px solid var(--border);
+            background: #fafbfc;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        .user-card.expanded .activity-panel {
+            display: block;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f1f3;
+            align-items: flex-start;
+        }
+
+        .activity-item:last-child { border-bottom: none; }
+
+        .act-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .icon-FUND, .icon-CREDIT { background: #e8f5e9; color: #2e7d32; }
+        .icon-DEBIT { background: #ffebee; color: #c62828; }
+        .icon-LOGIN { background: #e3f2fd; color: #1565c0; }
+        .icon-LOGOUT { background: #eceff1; color: #546e7a; }
+        .icon-FAILED_PIN, .icon-WRONG_PIN { background: #fff3e0; color: #e65100; }
+        .icon-SERVICE { background: #f3e5f5; color: #7b1fa2; }
+        .icon-ADJUSTMENT { background: #e0f7fa; color: #00838f; }
+        .icon-DEFAULT { background: #f5f5f5; color: #616161; }
+
+        .act-body { flex: 1; min-width: 0; }
+
+        .act-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            line-height: 1.3;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .act-amount {
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .amt-positive { color: var(--success); }
+        .amt-negative { color: var(--danger); }
+
+        .act-desc {
+            font-size: 12px;
+            color: #555;
+            margin-top: 2px;
+            line-height: 1.35;
+        }
+
+        .act-time {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        .act-badge {
+            display: inline-block;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 1px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .badge-FUND { background: #e8f5e9; color: #2e7d32; }
+        .badge-DEBIT { background: #ffebee; color: #c62828; }
+        .badge-LOGIN { background: #e3f2fd; color: #1565c0; }
+        .badge-FAILED_PIN, .badge-WRONG_PIN { background: #fff3e0; color: #e65100; }
+        .badge-SERVICE { background: #f3e5f5; color: #7b1fa2; }
+        .badge-DEFAULT { background: #eeeeee; color: #616161; }
+
+        .loading-state, .empty-state, .error-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--muted);
+        }
+
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #e0e0e0;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer-info {
+            text-align: center;
+            padding: 20px 16px 36px;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+
+        .no-activity {
+            padding: 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
     <div class="header-top">
         <div class="nav-links">
             <a href="index.html">← ADMIN HUB</a>
-            <span id="authStatus" class="status-bar">Verifying Access...</span>
+            <span id="authStatus" class="status-bar">
+                <span class="status-dot" style="background:#ffc107"></span>
+                Verifying…
+            </span>
         </div>
-        <h2>Audit History</h2>
+        <h2>User Activity Log</h2>
+        <input type="search" id="searchInput" class="search-box" placeholder="Search users by name…" autocomplete="off">
     </div>
-    <div class="content-area" id="logs">Loading all transactions...</div>
+
+    <div class="content-area">
+        <div class="meta-row">
+            <span id="countLabel">Loading…</span>
+            <span id="lastUpdated"></span>
+        </div>
+        <div id="userList">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <div>Loading user activity…</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-info">Dnezerlinks Business Manager v2.0</div>
 
     <script>
         const config = {
@@ -41,65 +352,387 @@
             databaseURL: "https://dnezerlinks-default-rtdb.firebaseio.com",
             projectId: "dnezerlinks"
         };
+
         firebase.initializeApp(config);
         const db = firebase.database();
         const auth = firebase.auth();
         const MASTER_UID = "VCSNLSzYV2WsNG93mPE2ZtwdTna2";
 
-        auth.onAuthStateChanged(user => {
-            if (!user) { window.location.href = "../login.html"; return; }
+        let usersMap = {};
+        let searchQuery = "";
+        let expandedKey = null;
 
-            // Direct database verification
-            db.ref(`admin_roles/${user.uid}`).once('value').then(snap => {
-                const roles = snap.val() || {};
-                const isMaster = (user.uid === MASTER_UID);
-                
-                // Allow if master or has explicit audit role
-                if (isMaster || roles.canViewHistory === true) {
-                    document.getElementById('authStatus').innerText = "Session Active ●";
-                    startAuditSync();
-                } else {
-                    window.location.href = "index.html";
-                }
-            }).catch(() => {
-                window.location.href = "index.html";
-            });
-        });
+        function escapeHtml(str) {
+            if (str == null) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
-        function startAuditSync() {
-            db.ref('transactions').on('value', snap => {
-                const div = document.getElementById('logs');
-                div.innerHTML = "";
-                let allLogs = [];
-                
-                snap.forEach(userFolder => {
-                    userFolder.forEach(transaction => {
-                        allLogs.push(transaction.val());
-                    });
-                });
-                
-                allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        function getInitials(name) {
+            if (!name) return "?";
+            const parts = name.trim().split(/\s+/);
+            if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+            return name.slice(0, 2).toUpperCase();
+        }
 
-                if (allLogs.length === 0) {
-                    div.innerHTML = "<div style='text-align:center; color:#888; margin-top:50px;'>No transactions found.</div>";
-                    return;
-                }
-
-                allLogs.slice(0, 100).forEach(t => {
-                    const formattedAmt = Number(t.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-                    div.innerHTML += `
-                        <div class="log-card">
-                            <div class="log-header">
-                                <b>${t.userName || 'System'}</b>
-                                <span class="amt-${t.type || 'DEBIT'}">${t.type === 'FUND' ? '+' : '-'}${formattedAmt}</span>
-                            </div>
-                            <div class="date">${new Date(t.timestamp).toLocaleString()}</div>
-                            <div style="font-size:11px; margin-top:5px; color:#555;">${t.description || 'Manual Adjustment'}</div>
-                        </div>`;
-                });
+        function formatAmount(n) {
+            return Number(n || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             });
         }
+
+        function formatDateTime(ts) {
+            if (!ts) return "—";
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return "Invalid date";
+            return d.toLocaleString(undefined, {
+                month: "short", day: "numeric", year: "numeric",
+                hour: "2-digit", minute: "2-digit"
+            });
+        }
+
+        function relativeTime(ts) {
+            if (!ts) return "";
+            const diff = Date.now() - ts;
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return "Just now";
+            if (mins < 60) return mins + "m ago";
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + "h ago";
+            const days = Math.floor(hrs / 24);
+            if (days < 7) return days + "d ago";
+            return formatDateTime(ts);
+        }
+
+        function normalizeType(raw) {
+            if (!raw) return "DEFAULT";
+            const t = String(raw).toUpperCase().replace(/\s+/g, "_");
+            if (["FUND", "CREDIT", "TOPUP", "TOP_UP"].includes(t)) return "FUND";
+            if (["DEBIT", "WITHDRAW", "CHARGE"].includes(t)) return "DEBIT";
+            if (["LOGIN", "SIGN_IN", "AUTH"].includes(t)) return "LOGIN";
+            if (["LOGOUT", "SIGN_OUT"].includes(t)) return "LOGOUT";
+            if (["FAILED_PIN", "WRONG_PIN", "PIN_FAIL", "INVALID_PIN"].includes(t)) return "FAILED_PIN";
+            if (["SERVICE", "PURCHASE", "VTU", "DATA", "AIRTIME"].includes(t)) return "SERVICE";
+            if (["ADJUSTMENT", "MANUAL", "ADMIN"].includes(t)) return "ADJUSTMENT";
+            return t;
+        }
+
+        function getIcon(type) {
+            const map = {
+                FUND: "↑", DEBIT: "↓", LOGIN: "→", LOGOUT: "←",
+                FAILED_PIN: "!", SERVICE: "⚡", ADJUSTMENT: "✎", DEFAULT: "•"
+            };
+            return map[type] || map.DEFAULT;
+        }
+
+        function getIconClass(type) {
+            return "icon-" + (["FUND","DEBIT","LOGIN","LOGOUT","FAILED_PIN","SERVICE","ADJUSTMENT"].includes(type) ? type : "DEFAULT");
+        }
+
+        function getBadgeClass(type) {
+            return "badge-" + (["FUND","DEBIT","LOGIN","FAILED_PIN","SERVICE"].includes(type) ? type : "DEFAULT");
+        }
+
+        function renderUserList() {
+            const container = document.getElementById("userList");
+            const countLabel = document.getElementById("countLabel");
+
+            let list = Object.values(usersMap);
+
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                list = list.filter(u => (u.name || "").toLowerCase().includes(q));
+            }
+
+            list.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+
+            countLabel.textContent = list.length === 0
+                ? "No users found"
+                : list.length + " user" + (list.length !== 1 ? "s" : "");
+
+            if (list.length === 0) {
+                container.innerHTML = '<div class="empty-state">No user activity to display.</div>';
+                return;
+            }
+
+            container.innerHTML = list.map(user => {
+                const isExpanded = expandedKey === user.key;
+                const actCount = user.activities.length;
+                const lastLogin = user.lastLoginTs ? relativeTime(user.lastLoginTs) : null;
+
+                let activitiesHtml = "";
+                if (actCount === 0) {
+                    activitiesHtml = '<div class="no-activity">No detailed activity recorded.</div>';
+                } else {
+                    activitiesHtml = user.activities.map(act => {
+                        const type = normalizeType(act.type);
+                        const hasAmount = act.amount != null && act.amount !== "";
+                        const isPositive = type === "FUND" || type === "CREDIT";
+                        const amountHtml = hasAmount
+                            ? '<span class="act-amount ' + (isPositive ? "amt-positive" : "amt-negative") + '">' +
+                                (isPositive ? "+" : "-") + formatAmount(Math.abs(act.amount)) +
+                               '</span>'
+                            : "";
+
+                        return (
+                            '<div class="activity-item">' +
+                                '<div class="act-icon ' + getIconClass(type) + '">' + getIcon(type) + '</div>' +
+                                '<div class="act-body">' +
+                                    '<div class="act-title">' +
+                                        '<span>' +
+                                            escapeHtml(act.title || type) +
+                                            '<span class="act-badge ' + getBadgeClass(type) + '">' + escapeHtml(type.replace(/_/g, " ")) + '</span>' +
+                                        '</span>' +
+                                        amountHtml +
+                                    '</div>' +
+                                    (act.description ? '<div class="act-desc">' + escapeHtml(act.description) + '</div>' : "") +
+                                    '<div class="act-time">' + formatDateTime(act.timestamp) + '</div>' +
+                                '</div>' +
+                            '</div>'
+                        );
+                    }).join("");
+                }
+
+                return (
+                    '<div class="user-card ' + (isExpanded ? "expanded" : "") + '" data-key="' + escapeHtml(user.key) + '">' +
+                        '<div class="user-header" onclick="toggleUser(\'' + escapeHtml(user.key) + '\')">' +
+                            '<div class="avatar">' + getInitials(user.name) + '</div>' +
+                            '<div class="user-info">' +
+                                '<div class="user-name">' + escapeHtml(user.name || "Unknown User") + '</div>' +
+                                '<div class="user-meta">' +
+                                    '<span>' + actCount + ' activit' + (actCount === 1 ? "y" : "ies") + '</span>' +
+                                    (lastLogin ? '<span>• Last login ' + lastLogin + '</span>' : "") +
+                                    (user.lastTs ? '<span>• ' + relativeTime(user.lastTs) + '</span>' : "") +
+                                '</div>' +
+                            '</div>' +
+                            '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">' +
+                                '<path d="M6 9l6 6 6-6"/>' +
+                            '</svg>' +
+                        '</div>' +
+                        '<div class="activity-panel">' + activitiesHtml + '</div>' +
+                    '</div>'
+                );
+            }).join("");
+        }
+
+        window.toggleUser = function(key) {
+            expandedKey = (expandedKey === key) ? null : key;
+            renderUserList();
+        };
+
+        function processSnapshot(transactionsSnap, usersSnap, activitySnap) {
+            usersMap = {};
+
+            if (usersSnap && usersSnap.exists()) {
+                usersSnap.forEach(child => {
+                    const uid = child.key;
+                    const data = child.val() || {};
+                    usersMap[uid] = {
+                        key: uid,
+                        name: data.name || data.fullName || data.displayName || data.phone || "User " + uid.slice(0, 6),
+                        lastLoginTs: data.lastLogin || data.lastLoginAt || data.lastSeen || null,
+                        lastTs: data.lastLogin || data.lastLoginAt || data.lastSeen || 0,
+                        activities: []
+                    };
+                });
+            }
+
+            if (transactionsSnap && transactionsSnap.exists()) {
+                transactionsSnap.forEach(userFolder => {
+                    const folderKey = userFolder.key;
+                    userFolder.forEach(txSnap => {
+                        const tx = txSnap.val();
+                        if (!tx || typeof tx !== "object") return;
+
+                        const name = tx.userName || tx.name || null;
+                        const uid = tx.userId || tx.uid || folderKey;
+                        const key = uid || (name ? "name:" + name : "unknown");
+
+                        if (!usersMap[key]) {
+                            usersMap[key] = {
+                                key: key,
+                                name: name || "User " + String(key).slice(0, 8),
+                                lastLoginTs: null,
+                                lastTs: 0,
+                                activities: []
+                            };
+                        }
+
+                        if (name && usersMap[key].name.startsWith("User ")) {
+                            usersMap[key].name = name;
+                        }
+
+                        const type = normalizeType(tx.type);
+                        const activity = {
+                            type: type,
+                            title: type === "FUND" ? "Wallet Funded" :
+                                   type === "DEBIT" ? "Debit / Charge" :
+                                   type === "SERVICE" ? "Service Purchase" :
+                                   type === "ADJUSTMENT" ? "Manual Adjustment" :
+                                   (tx.title || type),
+                            description: tx.description || tx.note || tx.remark || null,
+                            amount: tx.amount,
+                            timestamp: tx.timestamp || tx.createdAt || tx.time || 0,
+                            raw: tx
+                        };
+
+                        usersMap[key].activities.push(activity);
+                        if (activity.timestamp > (usersMap[key].lastTs || 0)) {
+                            usersMap[key].lastTs = activity.timestamp;
+                        }
+                    });
+                });
+            }
+
+            if (activitySnap && activitySnap.exists()) {
+                activitySnap.forEach(child => {
+                    const val = child.val();
+                    if (!val) return;
+
+                    if (typeof val === "object" && !val.type && !val.action) {
+                        child.forEach(evtSnap => {
+                            ingestActivityEvent(child.key, evtSnap.val());
+                        });
+                    } else {
+                        const uid = val.userId || val.uid || val.user || child.key;
+                        ingestActivityEvent(uid, val);
+                    }
+                });
+            }
+
+            Object.values(usersMap).forEach(u => {
+                u.activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                if (u.activities.length > 80) u.activities = u.activities.slice(0, 80);
+            });
+
+            document.getElementById("lastUpdated").textContent =
+                "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+            renderUserList();
+        }
+
+        function ingestActivityEvent(uid, evt) {
+            if (!evt || typeof evt !== "object") return;
+            const key = uid || "unknown";
+            if (!usersMap[key]) {
+                usersMap[key] = {
+                    key: key,
+                    name: evt.userName || evt.name || "User " + String(key).slice(0, 8),
+                    lastLoginTs: null,
+                    lastTs: 0,
+                    activities: []
+                };
+            }
+
+            const type = normalizeType(evt.type || evt.action || evt.event || "DEFAULT");
+            const ts = evt.timestamp || evt.createdAt || evt.time || evt.date || 0;
+
+            if (type === "LOGIN" && ts > (usersMap[key].lastLoginTs || 0)) {
+                usersMap[key].lastLoginTs = ts;
+            }
+
+            usersMap[key].activities.push({
+                type: type,
+                title: evt.title || evt.message || type.replace(/_/g, " "),
+                description: evt.description || evt.details || evt.note || evt.reason || null,
+                amount: evt.amount,
+                timestamp: ts,
+                raw: evt
+            });
+
+            if (ts > (usersMap[key].lastTs || 0)) {
+                usersMap[key].lastTs = ts;
+            }
+        }
+
+        function startSync() {
+            document.getElementById("authStatus").innerHTML =
+                '<span class="status-dot"></span> Session Active';
+
+            const txRef = db.ref("transactions");
+            const usersRef = db.ref("users");
+            const activityRef = db.ref("activity");
+
+            let txData = null;
+            let usersData = null;
+            let activityData = null;
+            let loaded = 0;
+            const TOTAL = 3;
+
+            function tryRender() {
+                loaded++;
+                if (loaded >= TOTAL) {
+                    processSnapshot(txData, usersData, activityData);
+                }
+            }
+
+            txRef.on("value", snap => {
+                txData = snap;
+                if (loaded < TOTAL) tryRender();
+                else processSnapshot(txData, usersData, activityData);
+            }, err => {
+                console.warn("transactions error", err);
+                tryRender();
+            });
+
+            usersRef.once("value").then(snap => {
+                usersData = snap;
+                tryRender();
+            }).catch(() => tryRender());
+
+            activityRef.once("value").then(snap => {
+                activityData = snap;
+                tryRender();
+            }).catch(() => tryRender());
+
+            ["activityLogs", "loginHistory", "pinAttempts", "auditLogs"].forEach(path => {
+                db.ref(path).once("value").then(snap => {
+                    if (snap.exists()) {
+                        snap.forEach(child => {
+                            const val = child.val();
+                            if (!val) return;
+                            if (typeof val === "object" && !val.type && !val.action) {
+                                child.forEach(e => ingestActivityEvent(child.key, e.val()));
+                            } else {
+                                ingestActivityEvent(val.userId || val.uid || child.key, val);
+                            }
+                        });
+                        Object.values(usersMap).forEach(u => {
+                            u.activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                        });
+                        renderUserList();
+                    }
+                }).catch(() => {});
+            });
+        }
+
+        auth.onAuthStateChanged(user => {
+            if (!user) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            db.ref("admin_roles/" + user.uid).once("value")
+                .then(snap => {
+                    const roles = snap.val() || {};
+                    if (user.uid === MASTER_UID || roles.canViewHistory === true) {
+                        startSync();
+                    } else {
+                        window.location.href = "index.html";
+                    }
+                })
+                .catch(() => window.location.href = "index.html");
+        });
+
+        document.getElementById("searchInput").addEventListener("input", e => {
+            searchQuery = e.target.value.trim();
+            renderUserList();
+        });
     </script>
-    <div class="footer-info">Dnezerlinks Business Manager v2.0</div>
 </body>
 </html>

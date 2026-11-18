@@ -43,7 +43,6 @@
             color: var(--text);
         }
 
-        /* Persistent Top Brand Header Banner */
         .top-banner {
             width: 100%;
             background: linear-gradient(135deg, var(--main) 0%, var(--main-dark) 50%, #1565c0 100%);
@@ -274,7 +273,6 @@
             100% { transform: translateX(100%); }
         }
 
-        /* ==================== 📞 FLOATING CONTACT MODULE STYLES ==================== */
         .contact-fab {
             position: fixed;
             bottom: 25px;
@@ -415,7 +413,6 @@
             color: #e65100;
         }
 
-        /* ==================== LOGIN SUCCESS ANIMATION ==================== */
         .success-overlay {
             display: none;
             position: fixed;
@@ -529,7 +526,6 @@
         @keyframes fillBar {
             to { width: 100%; }
         }
-        /* Floating particles */
         .particle {
             position: absolute;
             width: 8px;
@@ -556,10 +552,10 @@
     <div class="card" id="loginBox">
         <h2>Dnezerlinks</h2>
         <div class="status-msg" id="loginStatus"></div>
-        <input type="email" id="lEmail" placeholder="Email">
+        <input type="email" id="lEmail" placeholder="Email" autocomplete="username" autocapitalize="none" required>
         <div class="password-wrapper">
             <div class="password-container">
-                <input type="password" id="lPass" placeholder="Password">
+                <input type="password" id="lPass" placeholder="Password" autocomplete="current-password" required>
                 <label class="show-label"><input type="checkbox" onchange="togglePassword('lPass', this)"> Show</label>
             </div>
         </div>
@@ -575,13 +571,13 @@
         <h2>Dnezerlinks</h2>
         <h3>Join Us</h3>
         <div class="status-msg" id="regStatus"></div>
-        <input type="text" id="rName" placeholder="Full Name">
-        <input type="tel" id="rPhone" placeholder="Phone Number">
-        <input type="text" id="rAddress" placeholder="Home Address">
-        <input type="email" id="rEmail" placeholder="Email">
+        <input type="text" id="rName" placeholder="Full Name" autocomplete="name">
+        <input type="tel" id="rPhone" placeholder="Phone Number" autocomplete="tel">
+        <input type="text" id="rAddress" placeholder="Home Address" autocomplete="street-address">
+        <input type="email" id="rEmail" placeholder="Email" autocomplete="email" autocapitalize="none">
         <div class="password-wrapper">
             <div class="password-container">
-                <input type="password" id="rPass" placeholder="Password (min 6 chars)">
+                <input type="password" id="rPass" placeholder="Password (min 6 chars)" autocomplete="new-password">
                 <label class="show-label"><input type="checkbox" onchange="togglePassword('rPass', this)"> Show</label>
             </div>
         </div>
@@ -593,7 +589,7 @@
     <!-- FORGOT PASSWORD BOX -->
     <div class="card hidden" id="forgotBox">
         <h2>Reset</h2>
-        <input type="email" id="fEmail" placeholder="Your Email">
+        <input type="email" id="fEmail" placeholder="Your Email" autocomplete="email">
         <div class="loading" id="fLoad"><div class="bar"></div></div>
         <button onclick="handleReset()">Send Reset Link</button>
         <div class="link" onclick="toggle('loginBox')">Back</div>
@@ -603,14 +599,14 @@
     <div class="card hidden" id="recoverEmailBox">
         <h2>Recover Email</h2>
         <div class="status-msg" id="recoverEmailStatus"></div>
-        <input type="text" id="recFullName" placeholder="Full Name on Account">
+        <input type="text" id="recFullName" placeholder="Full Name on Account" autocomplete="name">
         <select id="recGender">
             <option value="" disabled selected>Select Gender</option>
             <option value="Male">Male</option>
             <option value="Female">Female</option>
         </select>
-        <input type="tel" id="recPhone" placeholder="Phone Number">
-        <input type="email" id="recSuspectedEmail" placeholder="Suspected Email (Optional)">
+        <input type="tel" id="recPhone" placeholder="Phone Number" autocomplete="tel">
+        <input type="email" id="recSuspectedEmail" placeholder="Suspected Email (Optional)" autocomplete="email">
         <button onclick="handleRecoverEmailSubmit()">Submit Review Request</button>
         <div class="link" onclick="toggle('loginBox')">Back to Login</div>
     </div>
@@ -645,7 +641,6 @@
     </div>
 </div>
 
-<!-- Login Success Overlay -->
 <div class="success-overlay" id="successOverlay">
     <div class="success-card">
         <div class="checkmark-circle">
@@ -656,11 +651,50 @@
         <h3 class="success-title">Login Successful!</h3>
         <p class="success-sub">Welcome back to Dnezerlinks</p>
         <div class="success-bar"><div class="success-bar-fill"></div></div>
-        <!-- particles injected by JS -->
     </div>
 </div>
 
 <script>
+    function showNativeToast(message) {
+        if (window.AndroidNative && typeof window.AndroidNative.showToast === 'function') {
+            window.AndroidNative.showToast(message);
+        } else {
+            showCustomBadge(message);
+        }
+    }
+
+    function showCustomBadge(message) {
+        let badge = document.getElementById('customToastBadge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'customToastBadge';
+            badge.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+                'background:rgba(13,71,161,0.95);color:#fff;padding:12px 24px;border-radius:25px;' +
+                'font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.25);' +
+                'transition:opacity 0.3s ease;opacity:0;pointer-events:none;text-align:center;';
+            document.body.appendChild(badge);
+        }
+        badge.innerText = message;
+        badge.style.opacity = '1';
+        setTimeout(() => { badge.style.opacity = '0'; }, 3000);
+    }
+
+    // --- Aggressively trigger biometric ONLY IF credentials exist (Subsequent visits) ---
+    function checkAndTriggerBiometric() {
+        const savedEmail = localStorage.getItem('dnezer_saved_email');
+        const savedPass = localStorage.getItem('dnezer_saved_pass');
+        
+        if (savedEmail && savedPass) {
+            if (window.AndroidNative && typeof window.AndroidNative.triggerBiometric === 'function') {
+                window.AndroidNative.triggerBiometric();
+            }
+        }
+    }
+
+    window.addEventListener("load", function() {
+        setTimeout(checkAndTriggerBiometric, 400);
+    });
+
     const config = {
         apiKey: "AIzaSyAXWh3ls4yEANmGy4g7xZ8jlBN0KoFC5yc",
         authDomain: "dnezerlinks.firebaseapp.com",
@@ -671,7 +705,6 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
-    // --- Dynamic Typing Logic ---
     let currentText = "Please login with your details below";
     let displayedText = "";
     let charIdx = 0;
@@ -740,25 +773,21 @@
         isDeleting = false;
     }
 
-    // Input Focus Listeners (Login)
     document.getElementById('lEmail').addEventListener('focus', () => setStatus("Please enter your email address here e.g. Dnezerlinks@mail.com"));
     document.getElementById('lPass').addEventListener('focus', () => setStatus("Please enter your password here. Do not share the password."));
     document.getElementById('lEmail').addEventListener('blur', () => setStatus("Please login with your details below"));
     document.getElementById('lPass').addEventListener('blur', () => setStatus("Please login with your details below"));
 
-    // Input Focus Listeners (Register)
     document.getElementById('rName').addEventListener('focus', () => setStatus("Enter your full name. Separate names with space here. Eg John Doe Meg."));
     document.getElementById('rPhone').addEventListener('focus', () => setStatus("Enter your active phone number here."));
     document.getElementById('rAddress').addEventListener('focus', () => setStatus("Please enter your house address in full."));
     document.getElementById('rEmail').addEventListener('focus', () => setStatus("Please enter an active email as it will be used to retrieve password if forgotten. Eg johndoe@dnezer.com "));
     document.getElementById('rPass').addEventListener('focus', () => setStatus("Please create a strong password eg Abcq19@ "));
 
-    // Reset to welcome when blur on register fields
     ['rName', 'rPhone', 'rAddress', 'rEmail', 'rPass'].forEach(id => {
         document.getElementById(id).addEventListener('blur', () => setStatus("Welcome, please touch any field below for me to guide you."));
     });
 
-    // Input Focus Listeners (Email Recovery Form)
     document.getElementById('recFullName').addEventListener('focus', () => setStatus("Provide the legal Full Name matching your Dnezerlinks profile records."));
     document.getElementById('recGender').addEventListener('focus', () => setStatus("Select your preferred identity gender type profile marker."));
     document.getElementById('recPhone').addEventListener('focus', () => setStatus("Provide the structural registered account phone line contact details."));
@@ -770,7 +799,6 @@
 
     runTyping();
 
-    // Floating Modal Interactive Scripts
     function openContactModal() {
         document.getElementById('contactModal').style.display = "block";
     }
@@ -807,7 +835,6 @@
         input.type = checkbox.checked ? "text" : "password";
     }
 
-    // Handle Email Recovery Submission with smart WhatsApp fallback
     function handleRecoverEmailSubmit() {
         const fullName = document.getElementById('recFullName').value.trim();
         const gender = document.getElementById('recGender').value;
@@ -834,14 +861,11 @@
 
         let emailAppOpened = false;
 
-        // Listen for window blur event to see if an email app handles it
         const checkBlur = () => { emailAppOpened = true; };
         window.addEventListener('blur', checkBlur);
 
-        // Attempt opening native email application
         window.location.href = "mailto:dnezerlinks@gmail.com?subject=" + subject + "&body=" + body;
 
-        // Trigger WhatsApp routing fallback if the window is still focused after 1500ms
         setTimeout(() => {
             window.removeEventListener('blur', checkBlur);
             if (!emailAppOpened) {
@@ -851,12 +875,10 @@
         }, 1500);
     }
 
-    // Handle Auth logic
     function playLoginSuccess() {
         const overlay = document.getElementById('successOverlay');
         const card = overlay.querySelector('.success-card');
 
-        // Spawn colorful particles around the checkmark
         const colors = ['#43a047', '#66bb6a', '#f57c00', '#0d47a1', '#5472d3', '#ffb74d'];
         for (let i = 0; i < 14; i++) {
             const p = document.createElement('div');
@@ -874,7 +896,6 @@
 
         overlay.classList.add('show');
 
-        // Redirect after animation completes
         setTimeout(() => {
             window.location.href = "home.html";
         }, 2400);
@@ -884,20 +905,53 @@
         const email = document.getElementById('lEmail').value.trim();
         const pass = document.getElementById('lPass').value;
         if(!email || !pass) {
-            setStatus("Error: All calculation input fields must be completely filled!", true);
+            setStatus("Error: All fields must be completely filled!", true);
             return;
         }
         document.getElementById('lLoad').style.display = 'block';
         document.getElementById('lBtn').disabled = true;
         try {
             await auth.signInWithEmailAndPassword(email, pass);
+            
+            const isFirstLogin = !localStorage.getItem('dnezer_saved_email');
+            
+            localStorage.setItem('dnezer_saved_email', email);
+            localStorage.setItem('dnezer_saved_pass', pass);
             localStorage.setItem('userEmail', email);
+
+            if (isFirstLogin) {
+                showNativeToast("Biometric authentication enabled!");
+            }
+
             document.getElementById('lLoad').style.display = 'none';
             playLoginSuccess();
         } catch (err) {
             setStatus("Login Failed: " + err.message, true);
             document.getElementById('lLoad').style.display = 'none';
             document.getElementById('lBtn').disabled = false;
+        }
+    }
+
+    // --- Automatically called by Android onResult when biometric passes ---
+    async function autoLoginWithSavedCredentials() {
+        const savedEmail = localStorage.getItem('dnezer_saved_email');
+        const savedPass = localStorage.getItem('dnezer_saved_pass');
+
+        if (savedEmail && savedPass) {
+            document.getElementById('lEmail').value = savedEmail;
+            document.getElementById('lPass').value = savedPass;
+            
+            const loadEl = document.getElementById('lLoad');
+            if (loadEl) loadEl.style.display = 'block';
+
+            try {
+                await auth.signInWithEmailAndPassword(savedEmail, savedPass);
+                if (loadEl) loadEl.style.display = 'none';
+                playLoginSuccess();
+            } catch (err) {
+                if (loadEl) loadEl.style.display = 'none';
+                setStatus("Biometric Auth Failed: Please enter credentials manually.", true);
+            }
         }
     }
 
@@ -922,6 +976,13 @@
                 name, email, phone, address,
                 balance: 0, account_status: "active", joined: Date.now()
             });
+            
+            localStorage.setItem('dnezer_saved_email', email);
+            localStorage.setItem('dnezer_saved_pass', pass);
+            localStorage.setItem('userEmail', email);
+
+            showNativeToast("Biometric authentication enabled!");
+
             window.location.href = "home.html";
         } catch (e) {
             setStatus("Registration Failed: " + e.message, true);
