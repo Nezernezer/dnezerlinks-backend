@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
+const db = require('../config/firebase'); // Matches your airtimeRoutes database import style
 
 // Fee configurations
 const BRAND_NAME_FEE = 500;
@@ -28,13 +29,14 @@ router.post('/set-brand-name', async (req, res) => {
     }
 
     const cleanBrandName = brandName.trim();
-    const userRef = admin.database().ref(`users/${userId}`);
+    const userRef = db.ref(`users/${userId}/balance`);
 
     try {
         let errorMsg = '';
         let costCharged = 0;
 
-        const result = await userRef.transaction((userData) => {
+        const userDocRef = admin.database().ref(`users/${userId}`);
+        const result = await userDocRef.transaction((userData) => {
             if (!userData) {
                 errorMsg = 'User profile not found.';
                 return userData;
@@ -65,16 +67,17 @@ router.post('/set-brand-name', async (req, res) => {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to update brand name.' });
         }
 
-        // Log transaction history if a fee was charged
+        // Log transaction history matching airtimeRoutes format under transactions/${userId}
         if (costCharged > 0) {
-            const txRef = admin.database().ref(`users/${userId}/transactions`).push();
+            const txRef = db.ref(`transactions/${userId}`).push();
             await txRef.set({
-                type: 'Recharge Card Brand Name',
+                service: "Recharge Card Brand Name",
                 amount: costCharged,
-                description: `Custom Recharge Brand Name set to "${cleanBrandName}"`,
-                status: 'Successful',
-                date: new Date().toISOString(),
-                timestamp: Date.now()
+                type: "debit",
+                status: "successful",
+                timestamp: Date.now(),
+                reference: txRef.key,
+                description: `Custom Recharge Brand Name set to "${cleanBrandName}"`
             });
         }
 
@@ -110,13 +113,13 @@ router.post('/register-sender-id', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Sender ID must be 3 to 11 alphanumeric characters.' });
     }
 
-    const userRef = admin.database().ref(`users/${userId}`);
+    const userDocRef = admin.database().ref(`users/${userId}`);
 
     try {
         let errorMsg = '';
         let feeCharged = 0;
 
-        const result = await userRef.transaction((userData) => {
+        const result = await userDocRef.transaction((userData) => {
             if (!userData) {
                 errorMsg = 'User profile not found.';
                 return userData;
@@ -154,17 +157,18 @@ router.post('/register-sender-id', async (req, res) => {
             return res.status(400).json({ success: false, error: errorMsg || 'Failed to register Sender ID.' });
         }
 
-        // Log transaction history to Firebase so it shows up in history logs
-        const txRef = admin.database().ref(`users/${userId}/transactions`).push();
+        // Log transaction history matching airtimeRoutes format under transactions/${userId}
+        const txRef = db.ref(`transactions/${userId}`).push();
         await txRef.set({
-            type: 'Bulk SMS Sender ID',
+            service: "Bulk SMS Sender ID",
             amount: feeCharged,
+            type: "debit",
+            status: "successful",
+            timestamp: Date.now(),
+            reference: txRef.key,
             description: feeCharged === 0 
                 ? `Free First Sender ID registration: "${cleanSenderId}"` 
-                : `Additional Sender ID registration: "${cleanSenderId}"`,
-            status: 'Successful',
-            date: new Date().toISOString(),
-            timestamp: Date.now()
+                : `Additional Sender ID registration: "${cleanSenderId}"`
         });
 
         return res.json({
