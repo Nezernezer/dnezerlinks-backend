@@ -3,7 +3,7 @@ const router = express.Router();
 const admin = require('firebase-admin');
 const db = require('../config/firebase');
 
-// Fee configuration: ₦500 for each custom brand name purchase
+// Fee configurations
 const BRAND_NAME_FEE = 500;
 const ADDITIONAL_SENDER_ID_FEE = 200;
 
@@ -14,7 +14,7 @@ const getUserId = (req) => {
 };
 
 /**
- * 1. Purchase / Set Recharge Card Brand Name (Fee: ₦500 per purchase)
+ * 1. Purchase / Register Recharge Card Brand Name (Fee: ₦500 per purchase)
  */
 router.post('/set-brand-name', async (req, res) => {
     const userId = getUserId(req);
@@ -29,6 +29,10 @@ router.post('/set-brand-name', async (req, res) => {
     }
 
     const cleanBrandName = brandName.trim().toUpperCase();
+    if (cleanBrandName === 'DNEZERLINKS') {
+        return res.status(400).json({ success: false, error: 'DNEZERLINKS is already available as the default brand name.' });
+    }
+
     const userDocRef = admin.database().ref(`users/${userId}`);
 
     try {
@@ -41,15 +45,26 @@ router.post('/set-brand-name', async (req, res) => {
                 return userData;
             }
 
-            const currentBalance = Number(userData.balance || 0);
+            const existingBrands = Array.isArray(userData.rechargeBrandNames) ? userData.rechargeBrandNames : [];
+            if (userData.rechargeBrandName && !existingBrands.includes(String(userData.rechargeBrandName).toUpperCase())) {
+                existingBrands.push(String(userData.rechargeBrandName).toUpperCase());
+            }
 
-            if (currentBalance < cost) {
-                errorMsg = `Insufficient balance. ₦${cost} is required to purchase a custom brand name.`;
+            if (existingBrands.some(b => String(b).toUpperCase() === cleanBrandName)) {
+                errorMsg = 'You have already registered this Brand Name.';
                 return; // Abort transaction
             }
 
-            // Deduct ₦500 for each purchase/update
+            const currentBalance = Number(userData.balance || 0);
+            if (currentBalance < cost) {
+                errorMsg = `Insufficient balance. ₦${cost} is required to register a custom brand name.`;
+                return; // Abort transaction
+            }
+
+            // Deduct ₦500 and save brand name to list
             userData.balance = currentBalance - cost;
+            existingBrands.push(cleanBrandName);
+            userData.rechargeBrandNames = existingBrands;
             userData.rechargeBrandName = cleanBrandName;
             userData.brandNameUpdatedAt = Date.now();
 
@@ -57,7 +72,7 @@ router.post('/set-brand-name', async (req, res) => {
         });
 
         if (!result.committed) {
-            return res.status(400).json({ success: false, error: errorMsg || 'Failed to update brand name.' });
+            return res.status(400).json({ success: false, error: errorMsg || 'Failed to register brand name.' });
         }
 
         // Log transaction history to transactions/${userId}
@@ -69,18 +84,18 @@ router.post('/set-brand-name', async (req, res) => {
             status: "successful",
             timestamp: Date.now(),
             reference: txRef.key,
-            description: `Custom Recharge Brand Name purchased: "${cleanBrandName}"`
+            description: `Custom Recharge Brand Name registered: "${cleanBrandName}"`
         });
 
         return res.json({
             success: true,
-            message: `Brand name "${cleanBrandName}" successfully purchased! (₦${cost} deducted)`,
+            message: `Brand name "${cleanBrandName}" registered successfully! (₦${cost} deducted)`,
             brandName: cleanBrandName
         });
 
     } catch (error) {
         console.error('Brand name update error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error while updating brand name.' });
+        return res.status(500).json({ success: false, error: 'Internal server error while registering brand name.' });
     }
 });
 
